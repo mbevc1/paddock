@@ -70,8 +70,8 @@ func (s *Server) gate() AdminGate {
 	return s.Gate
 }
 
-// Listen creates the socket at path, replacing a stale socket, with owner root, group gid,
-// and mode 0660.
+// Listen creates the socket at path, replacing a stale socket, with group gid and mode 0660.
+// The owner is the calling user, root for the agent.
 func Listen(path string, gid int) (*net.UnixListener, error) {
 	if fi, err := os.Lstat(path); err == nil {
 		if fi.Mode()&fs.ModeSocket == 0 {
@@ -86,7 +86,7 @@ func Listen(path string, gid int) (*net.UnixListener, error) {
 		return nil, err
 	}
 	l.SetUnlinkOnClose(true)
-	if err := os.Chown(path, 0, gid); err != nil {
+	if err := os.Chown(path, -1, gid); err != nil {
 		_ = l.Close()
 		return nil, err
 	}
