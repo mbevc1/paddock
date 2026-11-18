@@ -1,0 +1,123 @@
+# Installing Paddock
+
+Paddock installs on a fresh AlmaLinux server with one script, `bootstrap.sh`, which prepares the host, installs the `paddock` RPM from the project's dnf repository, and creates the first admin.
+
+Packages are not signed yet (planned as task T2.9), so install Paddock on disposable test machines only.
+
+## Requirements
+
+- **Operating system:** AlmaLinux 9.4 or later, x86_64 or aarch64, freshly installed, with root access.
+- **SELinux:** enforcing (the AlmaLinux default).
+- **Disk for sites:** a spare disk or partition for `/srv/www`. Bootstrap creates an XFS file system on it with project quotas, which enforce each vhost's disk limit. A `/srv/www` that is already XFS and mounted with `prjquota` works too.
+- **Free ports:** 80 and 443 for sites, 8443 for the panel and 8080 for its redirect, and 81 on loopback for internal use. Only Apache or Paddock may hold them.
+- **Panel hostname:** a DNS name that resolves to the server. With a public name, the panel obtains a Let's Encrypt certificate on its own; otherwise it keeps a self-signed one.
+- **Network:** outbound HTTPS to GitHub, the AlmaLinux mirrors, EPEL and Remi's repository.
+
+## Install
+
+Pick a release from the [Releases page](https://github.com/mbevc1/paddock/releases), then fetch its bootstrap script, check it and run it:
+
+```bash
+VER=v0.0.1
+BASE=https://github.com/mbevc1/paddock/releases/download/$VER
+curl -fsSLO $BASE/bootstrap.sh
+curl -fsSLO $BASE/SHA256SUMS
+sha256sum -c --ignore-missing SHA256SUMS
+sudo bash bootstrap.sh --hostname panel.example.com --www-device /dev/vdb --format
+```
+
+At the end it prints the first admin's username, password and TOTP URI, the panel URL and the panel certificate's fingerprint. The password and TOTP URI are shown only once, so store them before closing the terminal.
+
+### Options
+
+| Option | Meaning |
+| --- | --- |
+| `--hostname NAME` | Panel hostname (required). |
+| `--www-device DEV` | Block device for `/srv/www`; needed until `/srv/www` is mounted. |
+| `--format` | Create XFS on `--www-device` when it is empty. A device holding a file system is never formatted. |
+| `--email ADDR` | Contact address for Let's Encrypt certificates (optional). |
+| `--admin NAME` | Username of the first admin (default `admin`). |
+| `--rpm FILE` | Install a local `paddock` RPM instead of the one from the repository. |
+
+### What bootstrap changes
+
+1. Checks the OS, SELinux and root, and that no subordinate ID range overlaps the vhost IDs.
+2. Adds EPEL, Remi's repository (its signing key is pinned in the script) and Paddock's repository, enables MariaDB 10.11, and installs `paddock` and `firewalld`.
+3. Checks that the ports above are free.
+4. Prepares `/srv/www` with project quotas and `/srv/jail` for SFTP and shell accounts.
+5. Installs host configuration: sshd, sysctl, nftables, fail2ban, MariaDB and front Apache settings. Files containing the line `# paddock: keep` are left alone.
+6. Starts MariaDB, opens the firewall ports, and enables `httpd`, `mariadb`, `fail2ban` and the loopback firewall rule.
+7. Runs `paddock setup`, which creates Paddock's databases and the first admin, then starts `paddock-agent` and `paddock-web`.
+
+Bootstrap is safe to rerun: it changes only what differs and prints no secrets again.
+
+## First steps
+
+1. **Open the panel** at `https://<hostname>:8443/`. Until the panel has a trusted certificate, compare the certificate's SHA-256 fingerprint with the one bootstrap printed.
+2. **Log in as the admin** with the printed password. Add the printed TOTP URI to an authenticator app: admin actions ask for a code from it.
+3. **Install PHP** under Admin → PHP, for example 8.3 and 8.4. New vhosts default to 8.3.
+4. **Create an owner** under Admin → Owners. The panel shows the owner's password once; pass it on securely. Set the owner's limits there, and require two-factor sign-in if you want it.
+5. **As the owner,** change the password and set up two-factor sign-in under Security, then create a vhost under Vhosts with its domain, PHP version and, optionally, an empty database.
+6. **Point the domain's DNS** at the server. The front Apache obtains a Let's Encrypt certificate for it once the name resolves.
+7. **Upload the site** through an SFTP account added on the vhost's page, into `public/`.
+
+## Upgrade
+
+```bash
+sudo dnf upgrade paddock
+```
+
+The upgrade restarts `paddock-agent` and `paddock-web`, and database migrations run at start. To apply changed host configuration from a new release, rerun the bootstrap script of that release.
+
+## Uninstall
+
+```bash
+sudo dnf remove paddock
+```
+
+This stops and removes Paddock's services but keeps vhosts, their files under `/srv/www`, the databases, `/var/lib/paddock` and the host configuration. Delete vhosts in the panel first if they should go too. A `paddock teardown` command that removes everything is planned but not available yet.
+
+## Administration
+
+Run these as root on the server:
+
+| Command | Purpose |
+| --- | --- |
+| `paddock admin add NAME` | Add another admin; prints a password and TOTP URI once. |
+| `paddock admin totp-reset NAME` | Give an admin a new TOTP secret, for example after losing the phone. |
+| `paddock admin reset-password NAME` | Set a new password for a panel user and end their sessions. |
+| `paddock reconcile -all` | Re-render and re-apply every vhost from Paddock's state. |
+| `paddock version` | Print the installed version. |
+
+## Troubleshooting
+
+**Subordinate ID ranges overlap vhost IDs.** Bootstrap stops if a user holds a subordinate UID or GID range overlapping 100001 to 165535, because that user could map vhost IDs inside a user namespace. On many images the first login user (for example `vagrant`) holds `100000:65536`. The message lists the entries; move each above 200000 and rerun bootstrap:
+
+```bash
+sudo usermod --del-subuids 100000-165535 --del-subgids 100000-165535 vagrant
+```
+
+```bash
+sudo usermod --add-subuids 200000-265535 --add-subgids 200000-265535 vagrant
+```
+
+**A port is in use.** Bootstrap names the port and the program holding it. Stop or reconfigure that program, then rerun bootstrap.
+
+**Logs:**
+
+- Paddock's agent and panel: `journalctl -u paddock-agent -u paddock-web`
+- Front Apache: `journalctl -u httpd` and `/var/log/httpd/`
+- One vhost's Apache and PHP: `/srv/www/<vhost>/logs/`
+- SELinux denials: `ausearch -m avc -ts recent`
+
+## Installing a local build
+
+To install a package built from source instead of a release, build it on an AlmaLinux 9 machine with Go 1.27 and `rpm-build`, then pass it to bootstrap:
+
+```bash
+make rpm RPM_VERSION=0.0.1
+```
+
+```bash
+sudo bash packaging/bootstrap.sh --hostname panel.example.com --www-device /dev/vdb --format --rpm dist/paddock-0.0.1-1.el9.x86_64.rpm
+```
