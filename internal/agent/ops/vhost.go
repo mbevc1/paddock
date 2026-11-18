@@ -51,6 +51,7 @@ type VhostResult struct {
 func RegisterVhosts(r *agent.Registry, store *state.Store, h *Host) {
 	registerVhostState(r, store, h)
 	registerCerts(r, store, h)
+	registerDatabases(r, store, h)
 	r.Register(agent.Op{Name: "vhost.create", Class: agent.ClassOwner, Long: true,
 		Handler: func(ctx context.Context, c *agent.Call) (any, error) {
 			args, err := agent.DecodeArgs[VhostCreateArgs](c)
@@ -254,6 +255,10 @@ func createVhost(ctx context.Context, store *state.Store, h *Host, actor *api.Ac
 		undo.run(ctx)
 		return "", err
 	}
+	if err := createPrimaryDBUser(ctx, h, undo, sv.ID, limits.MaxUserConnections); err != nil {
+		undo.run(ctx)
+		return "", err
+	}
 	if err := store.SetVhostStatus(ctx, sv.N, state.VhostActive); err != nil {
 		undo.run(ctx)
 		return "", err
@@ -429,7 +434,7 @@ func deleteVhost(ctx context.Context, store *state.Store, h *Host, actor *api.Ac
 	if err := store.SetVhostStatus(ctx, sv.N, state.VhostDeleting); err != nil {
 		return err
 	}
-	if err := teardownVhost(ctx, h, sv, v); err != nil {
+	if err := teardownVhost(ctx, store, h, sv, v); err != nil {
 		if serr := store.SetVhostStatus(ctx, sv.N, state.VhostFailed); serr != nil {
 			h.logger().Error("recording the failed delete", "err", serr)
 		}
@@ -452,7 +457,7 @@ func (h *Host) stopUnit(ctx context.Context, unit string) error {
 	return h.applyFailed("stopping "+unit, err)
 }
 
-func teardownVhost(ctx context.Context, h *Host, sv state.Vhost, v render.Vhost) error {
+func teardownVhost(ctx context.Context, store *state.Store, h *Host, sv state.Vhost, v render.Vhost) error {
 	id, uid := sv.ID, strconv.Itoa(sv.UID)
 	mount := render.MountUnitName(BaseJail + "/" + id + "/site")
 	for _, unit := range []string{v.HTTPDUnit(), v.FPMUnit(), mount} {
@@ -500,6 +505,9 @@ func teardownVhost(ctx context.Context, h *Host, sv state.Vhost, v render.Vhost)
 	}
 	if err := h.FS.RemoveTree(BaseFPMRun, id); err != nil {
 		return h.applyFailed("removing the FPM socket directory", err)
+	}
+	if err := dropVhostDatabases(ctx, store, h, sv); err != nil {
+		return err
 	}
 	if err := h.run(ctx, userdel, id); err != nil && exitCode(err) != userdelNoSuchUser {
 		return h.applyFailed("removing user "+id, err)

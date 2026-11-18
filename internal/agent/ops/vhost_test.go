@@ -76,7 +76,10 @@ var wantCreateCommands = []string{
 	"/usr/bin/systemctl enable --now paddock-httpd@v00001.service",
 	"/usr/sbin/apachectl configtest",
 	"/usr/bin/systemctl reload httpd.service",
+	mariadbClient,
 }
+
+const mariadbClient = "/usr/bin/mariadb --protocol=socket --batch --skip-column-names"
 
 var wantVhostFiles = []string{
 	"etc/httpd/conf.d/paddock-v00001.conf",
@@ -275,6 +278,7 @@ var wantDeleteCommands = []string{
 	"/usr/bin/tar --create --gzip --numeric-owner --xattrs --selinux --acls --file /var/lib/paddock/agent/archive/v00001-20261117T120000Z.tar.gz --directory /srv/www v00001",
 	"/usr/sbin/xfs_quota -x -c limit -p bhard=0 1 /srv/www",
 	"/usr/sbin/xfs_quota -x -c project -C -p /srv/www/v00001 1 /srv/www",
+	mariadbClient,
 	"/usr/sbin/userdel v00001",
 	"/usr/sbin/groupdel v00001",
 }

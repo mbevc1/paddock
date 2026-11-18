@@ -83,3 +83,51 @@ func TestQuotas(t *testing.T) {
 		t.Errorf("after raising the limit: %v", err)
 	}
 }
+
+func TestDatabaseAccessors(t *testing.T) {
+	ctx := context.Background()
+	s, _ := openTemp(t)
+	if err := s.AddPHPVersion(ctx, "8.3"); err != nil {
+		t.Fatal(err)
+	}
+	o, err := s.CreateOwner(ctx, "acme", DefaultLimits())
+	if err != nil {
+		t.Fatal(err)
+	}
+	v, err := s.CreateVhost(ctx, o.ID, "8.3", "a.example.com", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, db := range []string{"v00001_wp", "v00001_app"} {
+		if err := s.CreateDatabase(ctx, v.N, db); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if dbs, err := s.ListDatabases(ctx, v.N); err != nil || len(dbs) != 2 || dbs[0] != "v00001_app" {
+		t.Errorf("ListDatabases = %q, %v", dbs, err)
+	}
+	if n, err := s.DatabaseVhost(ctx, "v00001_wp"); err != nil || n != v.N {
+		t.Errorf("DatabaseVhost = %d, %v", n, err)
+	}
+	if err := s.DeleteDatabase(ctx, "v00001_wp"); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.DeleteDatabase(ctx, "v00001_wp"); !errors.Is(err, ErrNotFound) {
+		t.Errorf("second delete: %v", err)
+	}
+	if err := s.CreateDBUser(ctx, v.N, "v00001_ro", "read"); err != nil {
+		t.Fatal(err)
+	}
+	if u, err := s.GetDBUser(ctx, "v00001_ro"); err != nil || u.Grants != "read" || u.VhostN != v.N {
+		t.Errorf("GetDBUser = %+v, %v", u, err)
+	}
+	if users, err := s.ListDBUsers(ctx, v.N); err != nil || len(users) != 1 {
+		t.Errorf("ListDBUsers = %+v, %v", users, err)
+	}
+	if err := s.DeleteDBUser(ctx, "v00001_ro"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.GetDBUser(ctx, "v00001_ro"); !errors.Is(err, ErrNotFound) {
+		t.Errorf("deleted user: %v", err)
+	}
+}

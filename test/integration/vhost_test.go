@@ -22,9 +22,20 @@ import (
 	"github.com/mbevc1/paddock/internal/state"
 )
 
-// frontGet fetches / from the front Apache over HTTPS on this host. mod_md serves a
-// temporary self-signed certificate for test domains, so verification is off.
+// frontGetPath fetches a path from the front Apache over HTTPS on this host.
+func frontGetPath(t *testing.T, domain, path string) (int, string) {
+	t.Helper()
+	return fetchFront(t, domain, path)
+}
+
 func frontGet(t *testing.T, domain string) (int, string) {
+	t.Helper()
+	return fetchFront(t, domain, "/")
+}
+
+// fetchFront fetches a path from the front Apache over HTTPS on this host. mod_md serves a
+// temporary self-signed certificate for test domains, so verification is off.
+func fetchFront(t *testing.T, domain, path string) (int, string) {
 	t.Helper()
 	client := &http.Client{
 		Timeout: 30 * time.Second,
@@ -36,13 +47,13 @@ func frontGet(t *testing.T, domain string) (int, string) {
 			},
 		},
 	}
-	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, "https://"+domain+"/", nil)
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, "https://"+domain+path, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	resp, err := client.Do(req)
 	if err != nil {
-		t.Fatalf("GET https://%s/: %v", domain, err)
+		t.Fatalf("GET https://%s%s: %v", domain, path, err)
 	}
 	defer resp.Body.Close()
 	body, err := io.ReadAll(resp.Body)
@@ -214,5 +225,50 @@ func TestVhostPHPSwitchSuspendResume(t *testing.T) {
 	}
 	if status, body := frontGet(t, domain); status != http.StatusOK || body != "8.4" {
 		t.Errorf("after resume: %d %q", status, body)
+	}
+}
+
+// servePHP writes code to public/name in a vhost and returns what the front answers for it.
+func servePHP(t *testing.T, id, domain, name, code string) string {
+	t.Helper()
+	u, err := user.Lookup(id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join("/srv/www", id, "public", name)
+	if err := os.WriteFile(path, []byte("<?php\n"+code+"\n"), 0o640); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chown(path, atoi(t, u.Uid), atoi(t, u.Gid)); err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove(path)
+	_, body := frontGetPath(t, domain, "/"+name)
+	return body
+}
+
+func TestDatabaseIsolation(t *testing.T) {
+	h := newAgent(t)
+	ctx := context.Background()
+	a, aDomain := newVhost(t, h, "8.3")
+	b, _ := newVhost(t, h, "8.3")
+	for _, id := range []string{a, b} {
+		if err := h.client.Call(ctx, "db.create", h.admin, "", ops.DBArgs{VhostID: id, Suffix: "wp"}, nil); err != nil {
+			t.Fatalf("db.create %s: %v", id, err)
+		}
+	}
+	connect := func(user, db string) string {
+		return servePHP(t, a, aDomain, "db.php", "mysqli_report(MYSQLI_REPORT_OFF);\n"+
+			"$m = @new mysqli('localhost', '"+user+"', '', '"+db+"');\n"+
+			"echo $m->connect_errno ? 'ERR' : 'OK';")
+	}
+	if got := connect(a, a+"_wp"); got != "OK" {
+		t.Errorf("A to its own database: %q", got)
+	}
+	if got := connect(b, b+"_wp"); got != "ERR" {
+		t.Errorf("A logged in as B: %q", got)
+	}
+	if got := connect(a, b+"_wp"); got != "ERR" {
+		t.Errorf("A opened B's database: %q", got)
 	}
 }
