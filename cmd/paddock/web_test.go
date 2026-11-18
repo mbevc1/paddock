@@ -26,7 +26,8 @@ func TestACMESocketMatchesPackaging(t *testing.T) {
 		{"deploy/etc/httpd/conf.d/paddock-01-panel.conf", `"unix:` + defaultACMESck + `|`},
 		{"deploy/tmpfiles.d/paddock.conf", "d " + dir + " 0755 paddock paddock -\n"},
 		{"deploy/systemd/paddock-web.service", "ReadWritePaths=/var/lib/paddock/web " + dir + "\n"},
-		{"deploy/selinux/paddock.cil", `(filecon "` + dir + `(/.*)?" any (system_u object_r httpd_var_run_t `},
+		// EL 9 looks file labels up under /var/run, the policy's canonical spelling of /run.
+		{"deploy/selinux/paddock.cil", `(filecon "/var` + dir + `(/.*)?" any (system_u object_r httpd_var_run_t `},
 		{"deploy/selinux/paddock.cil", "(allow httpd_t unconfined_service_t (unix_stream_socket (connectto)))"},
 		{"packaging/paddock.spec", "semodule -i %{_datadir}/selinux/packages/paddock.cil"},
 		{"packaging/paddock.spec", "restorecon -R " + dir},
