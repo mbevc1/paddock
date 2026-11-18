@@ -49,6 +49,32 @@ func (p Platform) PHPPackages(version string) ([]string, error) {
 	return pkgs, nil
 }
 
+// dnf is the package manager on every supported release.
+const dnf = "/usr/bin/dnf"
+
+// InstallArgv returns the argv that installs packages.
+func (p Platform) InstallArgv(pkgs []string) []string {
+	return append([]string{dnf, "-y", "install"}, pkgs...)
+}
+
+// RemoveArgv returns the argv that removes packages.
+func (p Platform) RemoveArgv(pkgs []string) []string {
+	return append([]string{dnf, "-y", "remove"}, pkgs...)
+}
+
+// InstalledArgv returns the argv that exits zero only when every package is installed.
+func (p Platform) InstalledArgv(pkgs []string) []string {
+	return append([]string{"/usr/bin/rpm", "-q", "--quiet"}, pkgs...)
+}
+
+// PHPFPMBinary returns the Remi php-fpm binary for a version such as "8.3".
+func (p Platform) PHPFPMBinary(version string) (string, error) {
+	if !supportedPHP[version] {
+		return "", fmt.Errorf("unsupported PHP version %q", version)
+	}
+	return "/opt/remi/php" + strings.ReplaceAll(version, ".", "") + "/root/usr/sbin/php-fpm", nil
+}
+
 // ForMajor returns the platform for an EL major version.
 func ForMajor(major int) (Platform, error) {
 	switch major {

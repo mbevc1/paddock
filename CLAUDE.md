@@ -62,7 +62,7 @@ Never break these. If a task seems to require breaking one, stop and ask.
 
 - **Never run the agent, `paddock setup`, or `bootstrap.sh` on the development machine.** Host-changing code runs only on a disposable AlmaLinux 9.4+ VM.
 - **Unit tests use the fake Runner** and render into a temp directory via the `Root` field on the renderer, so they run anywhere as a normal user.
-- **Integration tests** in `test/integration/` carry the build tag `integration` and run on the VM.
+- **Integration tests** in `test/integration/` carry the build tag `integration`, skip unless `PADDOCK_INTEGRATION=1` is set and they run as root, and run on the VM only.
 - **Before finishing a task:** `gofmt -l .` prints nothing, `go vet ./...` passes, `go test ./...` passes.
 - **Comments:** only where they explain something the code cannot; keep them short.
 - **Plan tracking:** tick the task's checkbox in `docs/plan.md` when its acceptance criteria pass, and note anything deferred under the task.
@@ -83,7 +83,7 @@ Never break these. If a task seems to require breaking one, stop and ask.
 ```
 go build ./cmd/paddock          build
 go test ./...                   unit tests
-go test -tags integration ./test/integration/...   on the VM only
+PADDOCK_INTEGRATION=1 go test -tags integration ./test/integration/...   as root, on the VM only
 scripts/build-rpm.sh            on the AlmaLinux build VM only
 gofmt -l . && go vet ./...      checks
 ```

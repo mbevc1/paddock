@@ -84,12 +84,44 @@ func (w Writer) Write(f File) (*Change, error) {
 	return c, nil
 }
 
-// Restore puts back the file as it was before the write, removing it if it did not exist.
+// Remove deletes the file at a host path; a missing file is not an error. The returned
+// Change restores it.
+func (w Writer) Remove(hostPath string) (*Change, error) {
+	full, err := w.resolve(hostPath)
+	if err != nil {
+		return nil, err
+	}
+	c := &Change{path: full}
+	fi, err := os.Lstat(full)
+	if errors.Is(err, fs.ErrNotExist) {
+		return c, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	if !fi.Mode().IsRegular() {
+		return nil, fmt.Errorf("%w: %s is not a regular file", validate.ErrInvalid, full)
+	}
+	if c.prev, err = os.ReadFile(full); err != nil { // #nosec G304 -- full is contained in the writer root.
+		return nil, err
+	}
+	c.existed, c.prevMode = true, fi.Mode().Perm()
+	if err := os.Remove(full); err != nil {
+		return nil, err
+	}
+	c.changed = true
+	return c, syncDir(filepath.Dir(full))
+}
+
+// Restore puts back the file as it was before the change, removing it if it did not exist.
 func (c *Change) Restore() error {
 	if c == nil || !c.changed {
 		return nil
 	}
 	if c.existed {
+		if err := os.MkdirAll(filepath.Dir(c.path), dirMode); err != nil {
+			return err
+		}
 		if err := atomicWrite(c.path, c.prev, c.prevMode); err != nil {
 			return err
 		}

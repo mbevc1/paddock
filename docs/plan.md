@@ -662,6 +662,7 @@ Throwaway shell scripts in `poc/`, run as root on a disposable AlmaLinux 9.4+ VM
     - Deferred: the `vhost.create`, `db.create`, and `access.create` operations arrive with T1.10, T1.13, and T1.14 and use these store methods. Applying changed limits to owner slices and FPM pools on the host comes with T1.10 and T1.16.
 - [ ] **T1.9 PHP versions.** `php.version.install` and `php.version.remove` via dnf (Remi packages), render the FPM unit template per version, refuse removal while vhosts use the version.
     - Acceptance: fake-runner tests for both paths; integration test installs 8.4 on the VM.
+    - Status: fake-runner tests pass for install, remove, refusal while in use, and rollback after a failure at each step. `test/integration/php_test.go` installs and removes 8.4 through an in-process agent; it has not run on a VM yet, so the task stays open.
 - [ ] **T1.10 Vhost create and delete.** Full lifecycle from §8 with step-by-step rollback.
     - Acceptance: fake-runner tests inject a failure at each step and assert complete rollback; integration test creates a vhost, serves `phpinfo()` through the front, deletes it, and leaves no user, unit, mount, or config behind.
 - [ ] **T1.11 PHP switch, suspend, resume.** §8.

@@ -95,3 +95,32 @@ func TestWriterRefusesSymlinksAndEscapes(t *testing.T) {
 		t.Errorf("files written outside the root: %v", entries)
 	}
 }
+
+func TestWriterRemove(t *testing.T) {
+	root := t.TempDir()
+	w := Writer{Root: root}
+	full := filepath.Join(root, "etc", "x.conf")
+	if _, err := w.Write(File{Path: "/etc/x.conf", Data: []byte("keep\n"), Mode: 0o640}); err != nil {
+		t.Fatal(err)
+	}
+	c, err := w.Remove("/etc/x.conf")
+	if err != nil || !c.Changed() {
+		t.Fatalf("Remove: %v", err)
+	}
+	if _, err := os.Stat(full); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("file still present: %v", err)
+	}
+	if err := c.Restore(); err != nil {
+		t.Fatal(err)
+	}
+	if readFile(t, full) != "keep\n" {
+		t.Error("restore lost the content")
+	}
+	if fi, _ := os.Stat(full); fi.Mode().Perm() != 0o640 {
+		t.Errorf("restored mode = %v", fi.Mode().Perm())
+	}
+	missing, err := w.Remove("/etc/missing.conf")
+	if err != nil || missing.Changed() {
+		t.Errorf("removing a missing file: %v", err)
+	}
+}

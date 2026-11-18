@@ -188,6 +188,13 @@ func (s *Store) CountVhosts(ctx context.Context, ownerID int64) (int, error) {
 	return n, err
 }
 
+// CountVhostsUsingPHP returns how many vhosts run a PHP version.
+func (s *Store) CountVhostsUsingPHP(ctx context.Context, version string) (int, error) {
+	var n int
+	err := s.db.QueryRowContext(ctx, `SELECT count(*) FROM vhosts WHERE php_version = ?`, version).Scan(&n)
+	return n, err
+}
+
 // SetVhostStatus records a lifecycle change.
 func (s *Store) SetVhostStatus(ctx context.Context, n int, status VhostStatus) error {
 	res, err := s.db.ExecContext(ctx, `UPDATE vhosts SET status = ? WHERE n = ?`, status, n)

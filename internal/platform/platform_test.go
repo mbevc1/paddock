@@ -74,6 +74,21 @@ func TestEL9(t *testing.T) {
 	if !slices.Contains(pkgs, "php83-php-fpm") {
 		t.Errorf("PHPPackages(8.3) = %q, want php83-php-fpm", pkgs)
 	}
+	if got := p.InstallArgv([]string{"a", "b"}); !slices.Equal(got, []string{"/usr/bin/dnf", "-y", "install", "a", "b"}) {
+		t.Errorf("InstallArgv = %q", got)
+	}
+	if got := p.RemoveArgv([]string{"a"}); !slices.Equal(got, []string{"/usr/bin/dnf", "-y", "remove", "a"}) {
+		t.Errorf("RemoveArgv = %q", got)
+	}
+	if got := p.InstalledArgv([]string{"a"}); !slices.Equal(got, []string{"/usr/bin/rpm", "-q", "--quiet", "a"}) {
+		t.Errorf("InstalledArgv = %q", got)
+	}
+	if bin, err := p.PHPFPMBinary("8.4"); err != nil || bin != "/opt/remi/php84/root/usr/sbin/php-fpm" {
+		t.Errorf("PHPFPMBinary = %q, %v", bin, err)
+	}
+	if _, err := p.PHPFPMBinary("7.4"); err == nil {
+		t.Error("PHPFPMBinary(7.4) succeeded")
+	}
 	if _, err := p.PHPPackages("7.4"); err == nil {
 		t.Error("PHPPackages(7.4) succeeded")
 	}

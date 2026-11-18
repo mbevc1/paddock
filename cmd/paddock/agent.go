@@ -13,7 +13,10 @@ import (
 
 	"github.com/mbevc1/paddock/internal/agent"
 	"github.com/mbevc1/paddock/internal/agent/ops"
+	"github.com/mbevc1/paddock/internal/platform"
+	"github.com/mbevc1/paddock/internal/render"
 	"github.com/mbevc1/paddock/internal/state"
+	"github.com/mbevc1/paddock/internal/system"
 )
 
 const defaultStatePath = "/var/lib/paddock/agent/state.db"
@@ -38,6 +41,11 @@ func runAgent(ctx context.Context, args []string, _, stderr io.Writer) error {
 		return err
 	}
 
+	plat, err := detectPlatform()
+	if err != nil {
+		return err
+	}
+
 	log := slog.New(slog.NewJSONHandler(stderr, nil))
 	store, err := state.Open(ctx, *statePath)
 	if err != nil {
@@ -50,6 +58,8 @@ func runAgent(ctx context.Context, args []string, _, stderr io.Writer) error {
 	srv.RegisterJobGet()
 	ops.RegisterAdmin(srv.Registry, store, gate)
 	ops.RegisterOwners(srv.Registry, store)
+	host := &ops.Host{Run: system.Exec{}, Files: render.Writer{}, Platform: plat, Log: log}
+	ops.RegisterPHP(srv.Registry, store, host)
 
 	l, err := agent.Listen(*socket, gid)
 	if err != nil {
@@ -73,4 +83,13 @@ func lookupUser(name string) (uid uint32, gid int, err error) {
 		return 0, 0, fmt.Errorf("user %s: bad GID %q", name, u.Gid)
 	}
 	return uint32(uid64), gid, nil
+}
+
+func detectPlatform() (platform.Platform, error) {
+	f, err := os.Open("/etc/os-release")
+	if err != nil {
+		return platform.Platform{}, err
+	}
+	defer f.Close()
+	return platform.Detect(f)
 }

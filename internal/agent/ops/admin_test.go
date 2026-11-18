@@ -17,7 +17,10 @@ import (
 	"github.com/mbevc1/paddock/internal/agent"
 	"github.com/mbevc1/paddock/internal/api"
 	"github.com/mbevc1/paddock/internal/auth"
+	"github.com/mbevc1/paddock/internal/platform"
+	"github.com/mbevc1/paddock/internal/render"
 	"github.com/mbevc1/paddock/internal/state"
+	"github.com/mbevc1/paddock/internal/system"
 )
 
 const webUID = 990
@@ -28,6 +31,8 @@ type env struct {
 	now   time.Time
 	reg   *agent.Registry
 	gate  *agent.TOTPGate
+	run   *system.Fake
+	root  string
 }
 
 func newEnv(t *testing.T) *env {
@@ -40,8 +45,16 @@ func newEnv(t *testing.T) *env {
 	e := &env{t: t, store: store, now: time.Date(2026, 11, 17, 12, 0, 0, 0, time.UTC)}
 	e.gate = &agent.TOTPGate{Store: store, Now: func() time.Time { return e.now }}
 	e.reg = agent.NewRegistry()
+	(&agent.Server{Registry: e.reg, Store: store}).RegisterJobGet()
 	RegisterAdmin(e.reg, store, e.gate)
 	RegisterOwners(e.reg, store)
+	plat, err := platform.ForMajor(9)
+	if err != nil {
+		t.Fatal(err)
+	}
+	e.run = &system.Fake{}
+	e.root = t.TempDir()
+	RegisterPHP(e.reg, store, &Host{Run: e.run, Files: render.Writer{Root: e.root}, Platform: plat})
 	return e
 }
 
