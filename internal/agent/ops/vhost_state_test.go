@@ -49,7 +49,7 @@ const (
 
 var wantSwitchCommands = []string{
 	"/usr/bin/systemctl daemon-reload",
-	"/usr/bin/setpriv --reuid=100001 --regid=100001 --clear-groups -- /opt/remi/php84/root/usr/sbin/php-fpm -t --fpm-config /etc/paddock/fpm/v00001.conf",
+	"/usr/bin/setpriv --reuid=1000000001 --regid=1000000001 --clear-groups -- /opt/remi/php84/root/usr/sbin/php-fpm -t --fpm-config /etc/paddock/fpm/v00001.conf",
 	"/usr/bin/systemctl enable --now paddock-php84-fpm@v00001.service",
 	"/usr/bin/systemctl disable --now paddock-php83-fpm@v00001.service",
 	"/usr/bin/systemctl daemon-reload",

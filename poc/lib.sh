@@ -94,7 +94,7 @@ finish() {
 
 # Identifiers from §5.
 vh_id() { printf 'v%05d' "$1"; }
-vh_uid() { echo $((100000 + $1)); }
+vh_uid() { echo $((1000000000 + $1)); }
 vh_addr() { echo "127.64.$(($1 >> 8)).$(($1 & 255))"; }
 php_tag() { echo "${1/./}"; }
 fpm_unit() { echo "paddock-php$(php_tag "$2")-fpm@$(vh_id "$1").service"; }
@@ -361,7 +361,7 @@ vh_create() {
 	CREATED_VHOSTS+=("$n")
 
 	getent group "$id" >/dev/null || groupadd -g "$uid" "$id"
-	# Subordinate ID ranges would overlap vhost UIDs (both start at 100000).
+	# Vhost users get no subordinate ID ranges of their own.
 	getent passwd "$id" >/dev/null ||
 		useradd -u "$uid" -g "$uid" -M -d "$WWW/$id" -s /sbin/nologin \
 			-K SUB_UID_COUNT=0 -K SUB_GID_COUNT=0 "$id"

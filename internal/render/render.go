@@ -126,7 +126,7 @@ func (v Vhost) valid() error {
 func (v Vhost) ID() string { return v.id }
 
 // UID returns the vhost user's UID and GID.
-func (v Vhost) UID() int { return 100000 + v.n }
+func (v Vhost) UID() int { return validate.VhostUIDBase + v.n }
 
 // Address returns the backend loopback address without port.
 func (v Vhost) Address() string { return fmt.Sprintf("127.64.%d.%d", v.n>>8, v.n&255) }

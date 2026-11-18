@@ -18,6 +18,7 @@ import (
 	"github.com/mbevc1/paddock/internal/agent/ops"
 	"github.com/mbevc1/paddock/internal/state"
 	"github.com/mbevc1/paddock/internal/system"
+	"github.com/mbevc1/paddock/internal/validate"
 )
 
 // TestRedTeam makes every attempt from §7.7 as vhost A against vhost B, both created through
@@ -220,7 +221,7 @@ func TestRedTeam(t *testing.T) {
 			t.Error("A's PHP created a user namespace")
 		}
 		for _, f := range []string{"/etc/subuid", "/etc/subgid"} {
-			if overlaps := subIDOverlaps(t, f, 100001, 165535); len(overlaps) > 0 {
+			if overlaps := subIDOverlaps(t, f, state.UIDBase+1, state.UIDBase+validate.MaxVhostNumber); len(overlaps) > 0 {
 				t.Errorf("%s ranges cover vhost IDs: %q", f, overlaps)
 			}
 		}

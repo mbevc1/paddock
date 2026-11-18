@@ -19,6 +19,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/mbevc1/paddock/internal/state"
 	"github.com/mbevc1/paddock/internal/system"
 )
 
@@ -65,8 +66,11 @@ func atoi(t *testing.T, s string) int {
 // vhostN returns N from a vhost ID such as v00012.
 func vhostN(t *testing.T, id string) int { t.Helper(); return atoi(t, strings.TrimPrefix(id, "v")) }
 
-// uidOf returns the vhost's UID, 100000 + N.
-func uidOf(t *testing.T, id string) string { t.Helper(); return strconv.Itoa(100000 + vhostN(t, id)) }
+// uidOf returns the vhost's UID, state.UIDBase + N.
+func uidOf(t *testing.T, id string) string {
+	t.Helper()
+	return strconv.Itoa(state.UIDBase + vhostN(t, id))
+}
 
 // backendAddr returns the vhost's loopback address, 127.64.N/256.N%256.
 func backendAddr(t *testing.T, id string) string {

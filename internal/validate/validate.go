@@ -23,6 +23,10 @@ func invalid(format string, args ...any) error {
 const (
 	// MaxVhostNumber is the largest vhost number; the backend address has 16 bits for it.
 	MaxVhostNumber = 65535
+	// VhostUIDBase plus the vhost number is the vhost user's UID and GID. It lies above
+	// SUB_UID_MAX and SUB_GID_MAX (600100000 by default), so useradd never hands out a
+	// subordinate ID range that could map vhost IDs in a user namespace.
+	VhostUIDBase = 1_000_000_000
 	// MaxDatabaseName is the longest database name Paddock creates.
 	MaxDatabaseName = 32
 )
