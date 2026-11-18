@@ -86,7 +86,7 @@ The upgrade restarts `paddock-agent` and `paddock-web`, and database migrations 
 sudo dnf remove paddock
 ```
 
-This stops and removes Paddock's services but keeps vhosts, their files under `/srv/www`, the databases, `/var/lib/paddock` and the host configuration. Delete vhosts in the panel first if they should go too. A `paddock teardown` command that removes everything is planned but not available yet.
+This stops and removes Paddock's services and its SELinux module but keeps vhosts, their files under `/srv/www`, the databases, `/var/lib/paddock` and the host configuration. Delete vhosts in the panel first if they should go too. A `paddock teardown` command that removes everything is planned but not available yet.
 
 ## Administration
 

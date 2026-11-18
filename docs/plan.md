@@ -37,7 +37,7 @@ Work through the tasks in part 2 in order. Tick a task's checkbox when every acc
 | Process | User | Listens on | Purpose |
 | --- | --- | --- | --- |
 | `paddock agent` | root | `/run/paddock/agent.sock` (`root:paddock`, `0660`) | all host changes |
-| `paddock web` | `paddock` | `:8443` TLS, `:8080` redirect, `/run/paddock/acme.sock` | panel, API, ACME challenge responses |
+| `paddock web` | `paddock` | `:8443` TLS, `:8080` redirect, `/run/paddock/acme/acme.sock` | panel, API, ACME challenge responses |
 | front `httpd` | `apache` | `:80`, `:443`, `127.0.0.1:81` (root only) | TLS for vhosts, proxy to backends; `md-status` for the agent on port 81 |
 | `paddock-httpd@vNNNNN` | vhost user | `127.64.X.Y:81` | static files, `.htaccess`, PHP via FastCGI |
 | `paddock-phpNN-fpm@vNNNNN` | vhost user | `/run/paddock/fpm/vNNNNN/php.sock` (`0600`) | PHP |
@@ -125,6 +125,8 @@ Usernames are never derived from domains.
   public/  private/  logs/  tmp/  sessions/              all v00012:v00012 0700 (public 0750)
 /srv/jail/v00012/               root:root        0755   SFTP/SSH chroot
   site/                         bind mount of /srv/www/v00012
+/run/paddock/                   root:root        0755   agent.sock
+/run/paddock/acme/              paddock:paddock  0755   acme.sock (panel ACME challenges)
 /run/paddock/fpm/v00012/        v00012:v00012    0700
 /etc/paddock/httpd/v00012.conf  root:root        0644   backend Apache config
 /etc/paddock/fpm/v00012.conf    root:root        0644   FPM config
@@ -135,7 +137,7 @@ Usernames are never derived from domains.
 /var/backups/paddock/           root:root        0700   backups (phase 2)
 ```
 
-SELinux: `semanage fcontext -a -t httpd_sys_rw_content_t '/srv/www(/.*)?'`, then `restorecon`.
+SELinux: `semanage fcontext -a -t httpd_sys_rw_content_t '/srv/www(/.*)?'`, then `restorecon`. The `paddock` module (`deploy/selinux/paddock.cil`) labels `/run/paddock/acme` `httpd_var_run_t` and lets `httpd_t` connect to the challenge socket.
 
 ## 7. Rendered files
 
@@ -316,7 +318,7 @@ Panel hostname on port 80:
 ```apache
 <VirtualHost *:80>
     ServerName panel.example.com
-    ProxyPass /.well-known/acme-challenge/ "unix:/run/paddock/acme.sock|http://panel/.well-known/acme-challenge/"
+    ProxyPass /.well-known/acme-challenge/ "unix:/run/paddock/acme/acme.sock|http://panel/.well-known/acme-challenge/"
     RedirectMatch 301 ^/(?!\.well-known/acme-challenge/)(.*)$ https://panel.example.com:8443/$1
 </VirtualHost>
 ```
@@ -430,7 +432,7 @@ Known limits: a kernel exploit crosses every boundary; SELinux confines Apache a
 ## 10. TLS
 
 - **Vhosts:** `mod_md` in the front Apache. `MDNotifyCmd` calls the agent, which runs `apachectl configtest` and a graceful reload. The agent reads `md-status` for expiry notifications from a front listener on `127.0.0.1:81`, which the §7.6 rule keeps to root: the page lists every managed domain, so tenants must not read it.
-- **Panel:** at install, a self-signed ECDSA P-256 certificate for the hostname and server IP; the SHA-256 fingerprint is printed. The web process then obtains a Let's Encrypt certificate with `golang.org/x/crypto/acme` using HTTP-01 only, served through `/run/paddock/acme.sock`. `GetCertificate` returns the Let's Encrypt certificate for SNI matches and the self-signed one otherwise. HSTS once a trusted certificate is active.
+- **Panel:** at install, a self-signed ECDSA P-256 certificate for the hostname and server IP; the SHA-256 fingerprint is printed. The web process then obtains a Let's Encrypt certificate with `golang.org/x/crypto/acme` using HTTP-01 only, served through `/run/paddock/acme/acme.sock`, which the front Apache reaches through the `paddock` SELinux module (`deploy/selinux/paddock.cil`). `GetCertificate` returns the Let's Encrypt certificate for SNI matches and the self-signed one otherwise. HSTS once a trusted certificate is active.
 
 ## 11. Panel
 
@@ -517,13 +519,14 @@ Everything is hosted in the GitHub repository `github.com/<owner>/paddock`: sour
 | `/usr/lib/systemd/system/paddock-agent.service`, `paddock-web.service`, `paddock-nft.service` | Paddock services |
 | `/usr/lib/systemd/system/paddock-httpd@.service` | backend Apache template |
 | `/usr/lib/sysusers.d/paddock.conf` | user `paddock`, groups `paddock-sftp`, `paddock-shell` |
-| `/usr/lib/tmpfiles.d/paddock.conf` | `/run/paddock` and `/run/paddock/fpm` |
+| `/usr/lib/tmpfiles.d/paddock.conf` | `/run/paddock`, `/run/paddock/acme` and `/run/paddock/fpm` |
+| `/usr/share/selinux/packages/paddock.cil` | SELinux module, installed by `%post`: labels `/run/paddock/acme` and lets the front Apache connect to the challenge socket |
 | `/usr/share/paddock/etc/` | default configs that `bootstrap.sh` installs into `/etc` at the same relative paths: sshd drop-in, sysctl, nftables, fail2ban jail, MariaDB, front Apache global config, panel port 80 vhost |
 | `/var/lib/paddock/`, `agent/`, `web/` | state directories with the owners and modes from §6 (`%dir`) |
 
 Per-version FPM unit templates (`paddock-phpNN-fpm@.service`) are written by the agent when a PHP version is installed, since the set of versions differs per server.
 
-RPM dependencies: `httpd mod_ssl mod_md mariadb-server fail2ban nftables xfsprogs policycoreutils-python-utils openssh-server`. Scriptlets use `%sysusers_create_compat`, `%systemd_post`, `%systemd_preun`, and `%systemd_postun_with_restart` for `paddock-agent` and `paddock-web`. The RPM never changes sshd, sysctl, firewall, or Apache settings itself; `bootstrap.sh` does that explicitly.
+RPM dependencies: `httpd mod_ssl mod_md mariadb-server fail2ban nftables xfsprogs policycoreutils-python-utils openssh-server`, plus `policycoreutils` and `selinux-policy-targeted` for the scriptlets. Scriptlets use `%sysusers_create_compat`, `%systemd_post`, `%systemd_preun`, and `%systemd_postun_with_restart` for `paddock-agent` and `paddock-web`; `%post` loads the `paddock` SELinux module with `semodule`, and erasing the package removes it. The RPM never changes sshd, sysctl, firewall, or Apache settings itself; `bootstrap.sh` does that explicitly.
 
 ### 14.3 Bootstrap script
 
@@ -707,9 +710,9 @@ Throwaway shell scripts in `poc/`, run as root on a disposable AlmaLinux 9.4+ VM
 - [x] **T1.19 Sessions, CSRF, step-up.** §11.3.
     - Acceptance: tests for cookie attributes, idle and absolute expiry per role, token rotation, Origin check, CSRF token check, step-up enforcement on each listed action.
     - Done: tokens rotate on login, after the second factor, and when impersonation starts or stops; a password change ends the user's other sessions. Step-up covers password and second-factor changes, SSH keys, access accounts, and deletions; email and API tokens get it when they exist (T2.7, T2.8). An owner whose admin requires TOTP can only reach the security page until enrolled.
-- [ ] **T1.20 Panel certificate.** `internal/acme` HTTP-01 client over `/run/paddock/acme.sock`, renewal 30 days before expiry, `GetCertificate` fallback to self-signed, HSTS once trusted.
+- [ ] **T1.20 Panel certificate.** `internal/acme` HTTP-01 client over `/run/paddock/acme/acme.sock`, renewal 30 days before expiry, `GetCertificate` fallback to self-signed, HSTS once trusted.
     - Acceptance: test against Let's Encrypt staging on the VM with a real hostname.
-    - Status: `internal/acme` wraps `x/crypto/acme/autocert` (HTTP-01 only, panel hostname only, renewal 30 days ahead) and serves challenges on `/run/paddock/acme.sock`. No handshake waits for the CA: the self-signed certificate is served while one background fetch runs. `paddock web -acme-directory` takes the staging URL for the acceptance test, which needs the VM.
+    - Status: `internal/acme` wraps `x/crypto/acme/autocert` (HTTP-01 only, panel hostname only, renewal 30 days ahead) and serves challenges on `/run/paddock/acme/acme.sock`. No handshake waits for the CA: the self-signed certificate is served while one background fetch runs. `paddock web -acme-directory` takes the staging URL for the acceptance test, which needs the VM.
     - Choice to confirm: the challenge socket is mode `0666` so Apache can connect; it only answers public challenge tokens.
 - [x] **T1.21 Owner UI.** Pages from §11.4 for owners: dashboard, vhosts, PHP switch, databases, DB users, access accounts and keys, certificates, profile, security. Owner-scoped queries everywhere.
     - Acceptance: handler tests prove another owner's IDs return 404; templates use `.Can` for every action.
@@ -728,7 +731,7 @@ Throwaway shell scripts in `poc/`, run as root on a disposable AlmaLinux 9.4+ VM
 - [ ] **T1.25 RPM and GitHub release pipeline.** `packaging/paddock.spec` per §14.2, sysusers and tmpfiles files, systemd units in `deploy/`, `.github/workflows/release.yaml` per §14.1 (build in `almalinux:9`, publish the Release with `SHA256SUMS`, deploy the dnf repository to Pages), `scripts/build-rpm.sh` for local builds on the build VM.
     - Acceptance: `rpmlint` reports no errors; pushing a test tag produces a Release and an updated Pages repository; on a fresh VM, `dnf install paddock` from the Pages URL succeeds; `dnf remove` leaves vhosts and data intact.
     - Status: the spec installs the binary, units, sysusers and tmpfiles files, `deploy/etc/` under `/usr/share/paddock/etc/`, and the state directories with their §6 modes. `release.yaml` builds both architectures in `almalinux:9`, runs `rpmlint`, publishes the Release with the RPMs, `bootstrap.sh`, and `SHA256SUMS`, then calls `pages.yaml`, which rebuilds the Pages site: a landing page from `pages/index.html` with the latest release filled in, and the repository at `el9/<arch>/` from the last five releases (empty metadata before the first release). `pages.yaml` also runs when the landing page changes on `main`, or on demand. CI builds the x86_64 RPM and runs `rpmlint` on every PR. `paddock-httpd@.service` in `deploy/` is tested against the renderer. Release `v0.0.1` (2026-11-18) ran the pipeline end to end: RPMs built and linted, the Release published, and the dnf repository deployed to Pages. Open: install and removal on a VM.
-    - Choices to confirm: `paddock-nft` also gets `%systemd_post` and `%systemd_preun` but is not restarted on upgrade; `rpmlint` filters for deliberate findings (private state directories, the static binary, no signature until T2.9) live in `packaging/paddock.rpmlintrc`; `/run/paddock` is `1775 root:paddock`, so the web user can create its sockets there but cannot replace `agent.sock`.
+    - Choices to confirm: `paddock-nft` also gets `%systemd_post` and `%systemd_preun` but is not restarted on upgrade; `rpmlint` filters for deliberate findings (private state directories, the static binary, no signature until T2.9) live in `packaging/paddock.rpmlintrc`; `/run/paddock` is `0755 root:root`; the web user creates its challenge socket in `/run/paddock/acme` (`paddock:paddock`, labelled `httpd_var_run_t` by the `paddock` SELinux module), so it cannot replace `agent.sock`.
 - [ ] **T1.26 Bootstrap.** `packaging/bootstrap.sh` per §14.3 with the pinned Remi key fingerprint.
     - Acceptance: on a fresh VM, bootstrap completes, prints credentials, and the panel creates a vhost serving a PHP application; rerunning bootstrap changes nothing; a tampered Remi key fingerprint aborts the run.
     - Status: `packaging/bootstrap.sh` runs §14.3 steps 1 to 12 and ends with `paddock setup`, which prints the first admin's credentials. It writes a config only when its content differs, so a rerun changes nothing and restarts only services whose config changed. The release workflow fills in the repository owner; a copy without one needs `--rpm`. Remi trust: the script imports only keys inside `remi-release-9` whose primary fingerprint is pinned, then requires `rpm --checksig` to pass. `packaging/bootstrap_test.sh` sources the script and tests the validators, the port parser, the config writer (content, idempotence, keep marker), the subordinate ID overlap check and the `login.defs` reader, and the fingerprint check against a generated key; it runs in `scripts/check.sh` and CI.
@@ -759,5 +762,6 @@ Throwaway shell scripts in `poc/`, run as root on a disposable AlmaLinux 9.4+ VM
 - [ ] **T3.2 Collaborators.** Invited users restricted to selected vhosts.
 - [ ] **T3.3 Egress rules.** Per-vhost nftables `meta skuid` allowlists and mail port blocks.
 - [ ] **T3.4 SELinux module for Paddock.** Confine agent and web instead of `unconfined_service_t`.
+    - Starting point: `deploy/selinux/paddock.cil` already lets `httpd_t` connect to any `unconfined_service_t` Unix socket, for the ACME challenge socket. Narrow that rule to the web domain.
 - [ ] **T3.5 AlmaLinux 10.** EL 10 platform implementation, el10 RPMs, phase 0 checks repeated on EL 10, `paddock os-upgrade prepare` and `finish` per §16.1, rehearsal on a snapshot.
     - Acceptance: a fresh EL 10 install passes the integration suite; an EL 9 test server with three vhosts on different PHP versions upgrades in place and passes the red-team checks afterwards.
