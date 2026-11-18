@@ -1,0 +1,36 @@
+name: PR title
+
+# Squash merges use the pull request title as the commit subject, so it must follow Conventional
+# Commits like every commit (CLAUDE.md).
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+
+permissions: {}
+
+concurrency:
+  group: pr-title-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  conventional:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check the title
+        env:
+          TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          types='feat|fix|docs|test|refactor|perf|build|ci|chore|revert'
+          if [[ ! $TITLE =~ ^($types)(\([a-z0-9._/-]+\))?!?:\ [^[:space:]] ]]; then
+            echo "::error title=PR title::'$TITLE' is not 'type(scope): summary' with type one of ${types//|/, }."
+            exit 1
+          fi
+          summary=${TITLE#*: }
+          if [[ ${summary:0:1} =~ [[:upper:]] ]]; then
+            echo "::error title=PR title::start the summary in lowercase: '$summary'."
+            exit 1
+          fi
+          if ((${#TITLE} >= 72)); then
+            echo "::warning title=PR title::the title has ${#TITLE} characters; commit subjects stay under 72."
+          fi
+          echo "PR title follows Conventional Commits."
