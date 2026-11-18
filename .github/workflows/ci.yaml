@@ -79,9 +79,11 @@ jobs:
       - run: rpmlint -f packaging/paddock.rpmlintrc dist/*.rpm
       - run: rpm -qp --scripts dist/*.rpm
       # Builds the module against the targeted policy store without loading it, which catches
-      # unknown types and syntax errors.
+      # unknown types and syntax errors, then looks up the label the socket directory gets.
       - name: Check the SELinux module
         run: |
-          dnf -y install selinux-policy-targeted policycoreutils
+          dnf -y install selinux-policy-targeted policycoreutils libselinux-utils
           semodule -n -i deploy/selinux/paddock.cil
           semodule -n -l | grep -qx paddock
+          matchpathcon /run/paddock/acme
+          matchpathcon /run/paddock/acme | grep -q ':httpd_var_run_t:'
