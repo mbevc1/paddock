@@ -46,10 +46,11 @@ type VhostResult struct {
 	VhostID string `json:"vhost_id"`
 }
 
-// RegisterVhosts adds vhost.create, vhost.delete, vhost.php.switch, vhost.suspend, and
-// vhost.resume. All run as jobs.
+// RegisterVhosts adds the vhost lifecycle operations (create, delete, PHP switch, suspend,
+// resume), which run as jobs, and the certificate operations.
 func RegisterVhosts(r *agent.Registry, store *state.Store, h *Host) {
 	registerVhostState(r, store, h)
+	registerCerts(r, store, h)
 	r.Register(agent.Op{Name: "vhost.create", Class: agent.ClassOwner, Long: true,
 		Handler: func(ctx context.Context, c *agent.Call) (any, error) {
 			args, err := agent.DecodeArgs[VhostCreateArgs](c)
@@ -372,7 +373,7 @@ func applyVhost(ctx context.Context, h *Host, undo *rollback, sv state.Vhost, v 
 		}
 	}
 
-	return applyFront(ctx, h, undo, v, frontOptions(false))
+	return applyFront(ctx, h, undo, v, render.FrontOptions{TLS: render.TLSACME})
 }
 
 // applyFront writes the front vhost, checks the whole front config, and reloads Apache. A
@@ -478,7 +479,8 @@ func teardownVhost(ctx context.Context, h *Host, sv state.Vhost, v render.Vhost)
 		}
 	}
 
-	for _, f := range ownFiles(v) {
+	chain, key := render.CertPaths(v)
+	for _, f := range append(ownFiles(v), chain, key) {
 		if _, err := h.Files.Remove(f); err != nil {
 			return h.applyFailed("removing "+f, err)
 		}

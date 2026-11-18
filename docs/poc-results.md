@@ -56,3 +56,5 @@ Raised while writing the scripts; each needs a VM result before part 1 changes.
 8. **nftables restarts (§7.6).** `nft -f` on the §7.6 file appends a second rule on every restart. The PoC unit deletes the table first.
 9. **Shell jail `php` (§7.5).** The jail's `/usr` is a read-only bind, so the `php` and `wp` links live in `/opt/paddock/bin` inside the jail, with `PATH` set in the jail's `/etc/profile`. T0.8 shows whether Remi's `php` runs from there without the SCL `enable` script.
 10. **Long WordPress updates behind two proxies.** Front and backend Apache both default to a 60 s proxy timeout. A slow core update can exceed it while PHP keeps running.
+11. **`MDNotifyCmd` user (§10, T1.12).** `front.md-renewed` accepts only root. If mod_md runs `MDNotifyCmd` as `apache`, the agent must also accept the `apache` UID for that one operation.
+12. **`md-status` layout and exposure (§10, T1.12).** The reader looks fields up leniently because the JSON layout varies between mod_md releases; record the VM's actual output. `Require local` also lets tenant PHP read `md-status` on loopback, which lists every managed domain on the server.

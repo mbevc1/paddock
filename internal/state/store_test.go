@@ -280,3 +280,39 @@ func TestAuditAndJobs(t *testing.T) {
 		t.Errorf("missing job: %v", err)
 	}
 }
+
+func TestCerts(t *testing.T) {
+	ctx := context.Background()
+	s, _ := openTemp(t)
+	o, err := s.CreateOwner(ctx, "acme", DefaultLimits())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.AddPHPVersion(ctx, "8.3"); err != nil {
+		t.Fatal(err)
+	}
+	v, err := s.CreateVhost(ctx, o.ID, "8.3", "a.example.com", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c, err := s.GetCert(ctx, v.N); err != nil || c.Source != CertACME {
+		t.Errorf("default cert = %+v, %v", c, err)
+	}
+	until := time.Date(2027, 2, 1, 0, 0, 0, 0, time.UTC)
+	if err := s.SetCert(ctx, v.N, Cert{Source: CertUpload, NotAfter: until, Fingerprint: "ab:cd"}); err != nil {
+		t.Fatal(err)
+	}
+	c, err := s.GetCert(ctx, v.N)
+	if err != nil || c.Source != CertUpload || !c.NotAfter.Equal(until) || c.Fingerprint != "ab:cd" {
+		t.Errorf("GetCert = %+v, %v", c, err)
+	}
+	if err := s.SetCert(ctx, v.N, Cert{Source: "self"}); !errors.Is(err, ErrConflict) {
+		t.Errorf("bad source: %v", err)
+	}
+	if err := s.DeleteCert(ctx, v.N); err != nil {
+		t.Fatal(err)
+	}
+	if c, _ := s.GetCert(ctx, v.N); c.Source != CertACME {
+		t.Errorf("after delete = %+v", c)
+	}
+}

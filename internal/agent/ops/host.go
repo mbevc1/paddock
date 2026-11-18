@@ -41,6 +41,8 @@ type Host struct {
 	Now func() time.Time
 	// WaitSocket waits for a vhost's FPM socket; nil polls the file system.
 	WaitSocket func(ctx context.Context, vhostID string) error
+	// MDStatus reports mod_md's managed domains; nil reads md-status from the front Apache.
+	MDStatus func(ctx context.Context) ([]MDDomain, error)
 
 	// mu serializes host changes, so two operations never interleave edits and reloads of
 	// shared services such as the front Apache.

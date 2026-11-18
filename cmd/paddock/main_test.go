@@ -24,6 +24,8 @@ func TestRun(t *testing.T) {
 		{name: "admin add without username", args: []string{"admin", "add", "-user-id", "1"}, wantCode: 1, wantStderr: "usage: paddock admin"},
 		{name: "admin unknown subcommand", args: []string{"admin", "remove", "-user-id", "1"}, wantCode: 1, wantStderr: "usage: paddock admin"},
 		{name: "admin without agent", args: []string{"admin", "totp-reset", "-user-id", "1", "-socket", "/nonexistent/agent.sock"}, wantCode: 1, wantStderr: "connect to agent"},
+		{name: "agent-notify without event", args: []string{"agent-notify"}, wantCode: 1, wantStderr: "usage: paddock agent-notify"},
+		{name: "agent-notify without domains", args: []string{"agent-notify", "md-renewed"}, wantCode: 1, wantStderr: "usage: paddock agent-notify"},
 		{name: "agent with stray argument", args: []string{"agent", "extra"}, wantCode: 1, wantStderr: "unexpected arguments"},
 	}
 	for _, tt := range tests {

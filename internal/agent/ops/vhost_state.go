@@ -58,11 +58,6 @@ func registerVhostState(r *agent.Registry, store *state.Store, h *Host) {
 	}
 }
 
-// frontOptions returns how the vhost's front config gets its certificate.
-func frontOptions(suspended bool) render.FrontOptions {
-	return render.FrontOptions{TLS: render.TLSACME, Suspended: suspended}
-}
-
 // lockedVhost takes the host lock and rereads the vhost, so its status cannot change
 // between the check and the work. The caller must unlock.
 func lockedVhost(ctx context.Context, store *state.Store, h *Host, n int) (state.Vhost, error) {
@@ -211,8 +206,12 @@ func suspendVhost(ctx context.Context, store *state.Store, h *Host, sv state.Vho
 	if err != nil {
 		return err
 	}
+	opts, err := frontOptions(ctx, store, sv.N, true)
+	if err != nil {
+		return err
+	}
 	undo := &rollback{h: h}
-	if err := applyFront(ctx, h, undo, v, frontOptions(true)); err != nil {
+	if err := applyFront(ctx, h, undo, v, opts); err != nil {
 		return err
 	}
 	for _, unit := range []string{v.HTTPDUnit(), v.FPMUnit()} {
@@ -262,7 +261,12 @@ func resumeVhost(ctx context.Context, store *state.Store, h *Host, sv state.Vhos
 		undo.run(ctx)
 		return h.applyFailed("starting "+v.HTTPDUnit(), err)
 	}
-	if err := applyFront(ctx, h, undo, v, frontOptions(false)); err != nil {
+	opts, err := frontOptions(ctx, store, sv.N, false)
+	if err != nil {
+		undo.run(ctx)
+		return err
+	}
+	if err := applyFront(ctx, h, undo, v, opts); err != nil {
 		undo.run(ctx)
 		return err
 	}

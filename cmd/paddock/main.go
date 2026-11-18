@@ -31,7 +31,7 @@ func commands() []command {
 		{"teardown", "remove all vhosts and Paddock's host configuration", notImplemented},
 		{"reconcile", "re-render and re-apply everything from state.db", notImplemented},
 		{"admin", "add an admin or reset an admin's TOTP secret (root)", runAdmin},
-		{"agent-notify", "notify the agent of an external event", notImplemented},
+		{"agent-notify", "tell the agent mod_md renewed certificates (MDNotifyCmd)", runAgentNotify},
 		{"version", "print the version", printVersion},
 	}
 }
