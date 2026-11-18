@@ -83,35 +83,8 @@ jobs:
 
   pages:
     needs: release
-    runs-on: ubuntu-latest
     permissions:
       contents: read
       pages: write
       id-token: write
-    environment:
-      name: github-pages
-      url: ${{ steps.deploy.outputs.page_url }}
-    steps:
-      - run: sudo apt-get update && sudo apt-get install -y createrepo-c
-      # Pages sites are limited to 1 GB, so the repository keeps the last five releases (§14.1).
-      - name: Build the dnf repository
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          mkdir rpms
-          gh release list --repo "$GITHUB_REPOSITORY" --limit 5 --exclude-drafts \
-            --exclude-pre-releases --json tagName --jq '.[].tagName' |
-            while read -r tag; do
-              gh release download "$tag" --repo "$GITHUB_REPOSITORY" --pattern '*.rpm' --dir rpms
-            done
-          for arch in x86_64 aarch64; do
-            mkdir -p "site/el9/$arch"
-            mv rpms/*.el9."$arch".rpm "site/el9/$arch/"
-            createrepo_c "site/el9/$arch"
-          done
-      - uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
-      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
-        with:
-          path: site
-      - id: deploy
-        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1
+    uses: ./.github/workflows/pages.yaml

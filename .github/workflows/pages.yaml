@@ -1,0 +1,78 @@
+name: Pages
+
+# A Pages deployment replaces the whole site, so every run publishes the landing page and the
+# dnf repository together. release.yaml calls this after each release.
+on:
+  push:
+    branches: [main]
+    paths:
+      - pages/**
+      - .github/workflows/pages.yaml
+  workflow_dispatch:
+  workflow_call:
+
+permissions: {}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: sudo apt-get update && sudo apt-get install -y createrepo-c
+      # Pages sites are limited to 1 GB, so the repository keeps the last five releases (§14.1).
+      - name: Build the dnf repository
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          shopt -s nullglob
+          mkdir -p rpms _site
+          tags=$(gh release list --repo "$GITHUB_REPOSITORY" --limit 5 --exclude-drafts \
+            --exclude-pre-releases --json tagName --jq '.[].tagName')
+          for tag in $tags; do
+            gh release download "$tag" --repo "$GITHUB_REPOSITORY" --pattern '*.rpm' --dir rpms
+          done
+          for arch in x86_64 aarch64; do
+            mkdir -p "_site/el9/$arch"
+            packages=(rpms/*.el9."$arch".rpm)
+            if ((${#packages[@]})); then mv "${packages[@]}" "_site/el9/$arch/"; fi
+            createrepo_c -q "_site/el9/$arch"
+          done
+          echo "LATEST_TAG=$(head -n1 <<<"$tags")" >>"$GITHUB_ENV"
+      - name: Build the landing page
+        run: |
+          owner=${GITHUB_REPOSITORY%%/*}
+          name=${GITHUB_REPOSITORY#*/}
+          [[ $owner =~ ^[A-Za-z0-9-]+$ && $name =~ ^[A-Za-z0-9._-]+$ ]] || { echo "unexpected repository name" >&2; exit 1; }
+          if [[ $LATEST_TAG =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            version=$LATEST_TAG
+            latest="<a href=\"https://github.com/$GITHUB_REPOSITORY/releases/tag/$LATEST_TAG\">$LATEST_TAG</a>"
+          else
+            version=vX.Y.Z
+            latest="none yet"
+          fi
+          sed -e "s|@REPOSITORY@|$GITHUB_REPOSITORY|g" \
+            -e "s|@PAGES_URL@|https://${owner,,}.github.io/$name/|g" \
+            -e "s|@VERSION@|$version|g" \
+            -e "s|@LATEST@|$latest|g" pages/index.html >_site/index.html
+          if grep -o '@[A-Z_]*@' _site/index.html; then
+            echo "unfilled placeholders" >&2
+            exit 1
+          fi
+      - uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: _site
+      - id: deploy
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1

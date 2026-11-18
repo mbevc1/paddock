@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Paddock</title>
+<meta name="description" content="Paddock is a hosting panel for AlmaLinux that runs PHP sites in isolated vhosts.">
+<style>
+:root {
+  --bg: #f7f7f4;
+  --fg: #1d2421;
+  --muted: #5b6661;
+  --card: #ffffff;
+  --border: #dde2dc;
+  --accent: #2f6f4f;
+  --accent-fg: #ffffff;
+  --code-bg: #eef1ec;
+  --warn-bg: #fff6df;
+  --warn-border: #e8c46a;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #121614;
+    --fg: #e4e9e5;
+    --muted: #9aa69f;
+    --card: #1a201d;
+    --border: #2c3530;
+    --accent: #6cc196;
+    --accent-fg: #0d1210;
+    --code-bg: #0d1110;
+    --warn-bg: #2a2416;
+    --warn-border: #7a6430;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font: 16px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+main { max-width: 52rem; margin: 0 auto; padding: 3rem 1rem 2rem; }
+header h1 { font-size: 2.6rem; margin: 0; letter-spacing: -0.02em; }
+header .tagline { font-size: 1.25rem; color: var(--muted); margin: 0.25rem 0 1.25rem; }
+.lead { font-size: 1.1rem; max-width: 42rem; }
+.actions { display: flex; flex-wrap: wrap; gap: 0.75rem; margin: 1.5rem 0; }
+.button {
+  display: inline-block;
+  padding: 0.55rem 1.1rem;
+  border-radius: 0.5rem;
+  border: 1px solid var(--accent);
+  color: var(--accent);
+  text-decoration: none;
+  font-weight: 600;
+}
+.button.primary { background: var(--accent); color: var(--accent-fg); }
+.notice {
+  background: var(--warn-bg);
+  border: 1px solid var(--warn-border);
+  border-radius: 0.5rem;
+  padding: 0.75rem 1rem;
+  margin: 1.5rem 0;
+}
+h2 { margin-top: 2.5rem; font-size: 1.4rem; }
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr)); gap: 1rem; }
+.card { background: var(--card); border: 1px solid var(--border); border-radius: 0.6rem; padding: 1rem 1.1rem; }
+.card h3 { margin: 0 0 0.35rem; font-size: 1.05rem; }
+.card p { margin: 0; color: var(--muted); }
+pre {
+  background: var(--code-bg);
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  padding: 0.9rem 1rem;
+  overflow-x: auto;
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+p code { background: var(--code-bg); padding: 0.1rem 0.3rem; border-radius: 0.25rem; }
+a { color: var(--accent); }
+footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--border); color: var(--muted); font-size: 0.9rem; }
+</style>
+</head>
+<body>
+<main>
+<header>
+  <h1>Paddock</h1>
+  <p class="tagline">Isolated PHP hosting for AlmaLinux</p>
+</header>
+
+<p class="lead">Paddock is a hosting panel for AlmaLinux 9.4+ that runs PHP sites in vhosts that cannot see or touch each other's files or processes. Owners manage several vhosts within limits set by an admin.</p>
+
+<div class="actions">
+  <a class="button primary" href="https://github.com/@REPOSITORY@/releases">Releases</a>
+  <a class="button" href="https://github.com/@REPOSITORY@">Source</a>
+  <a class="button" href="https://github.com/@REPOSITORY@/blob/main/docs/plan.md">Specification</a>
+</div>
+
+<div class="notice"><strong>Early development.</strong> Packages are not signed yet, so install Paddock on disposable test machines only. Latest release: @LATEST@.</div>
+
+<h2>How vhosts are kept apart</h2>
+<div class="grid">
+  <div class="card"><h3>One user per vhost</h3><p>Each vhost runs as its own Linux user, with its own sandboxed Apache and PHP-FPM under systemd.</p></div>
+  <div class="card"><h3>Private files</h3><p>A vhost sees only its own tree; other vhosts' files, sockets and processes are hidden from it.</p></div>
+  <div class="card"><h3>Firewalled backends</h3><p>Only the front Apache may reach a vhost's backend; tenants cannot connect to each other.</p></div>
+  <div class="card"><h3>Fair limits</h3><p>Owner and vhost slices cap CPU, memory and tasks; XFS project quotas cap disk.</p></div>
+  <div class="card"><h3>Jailed access</h3><p>SFTP and shell accounts land in a chroot holding only their own vhost.</p></div>
+  <div class="card"><h3>Guarded admin</h3><p>A root agent makes every host change and requires a fresh TOTP code for admin actions.</p></div>
+</div>
+
+<h2>Install</h2>
+<p>On a fresh AlmaLinux 9.4+ server with SELinux enforcing and a spare disk for <code>/srv/www</code>, fetch the bootstrap script of a release, check it, and run it:</p>
+<pre><code>VER=@VERSION@
+BASE=https://github.com/@REPOSITORY@/releases/download/$VER
+curl -fsSLO $BASE/bootstrap.sh
+curl -fsSLO $BASE/SHA256SUMS
+sha256sum -c --ignore-missing SHA256SUMS
+sudo bash bootstrap.sh --hostname panel.example.com --www-device /dev/vdb --format</code></pre>
+<p>The script prepares the host, installs the <code>paddock</code> RPM from the repository below, and prints the first admin's credentials once. The panel then listens on port 8443.</p>
+
+<h2>dnf repository</h2>
+<p>Bootstrap sets this up for you. Packages of the last five releases are served here; older ones stay on the Releases page.</p>
+<pre><code>[paddock]
+name=Paddock
+baseurl=@PAGES_URL@el$releasever/$basearch/
+enabled=1
+gpgcheck=0
+repo_gpgcheck=0</code></pre>
+<p>Browse: <a href="el9/x86_64/repodata/repomd.xml">el9/x86_64</a> · <a href="el9/aarch64/repodata/repomd.xml">el9/aarch64</a></p>
+
+<footer>Paddock is licensed under the <a href="https://github.com/@REPOSITORY@/blob/main/LICENSE">Mozilla Public License 2.0</a>.</footer>
+</main>
+</body>
+</html>
