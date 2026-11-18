@@ -79,7 +79,7 @@ jobs:
         run: |
           gh release create "$GITHUB_REF_NAME" dist/* \
             --repo "$GITHUB_REPOSITORY" --verify-tag --generate-notes \
-            --title "Paddock $GITHUB_REF_NAME"
+            --title "$GITHUB_REF_NAME"
 
   pages:
     needs: release
