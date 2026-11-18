@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/user"
 	"strconv"
+	"time"
 
 	"github.com/mbevc1/paddock/internal/agent"
 	"github.com/mbevc1/paddock/internal/agent/ops"
@@ -19,7 +20,10 @@ import (
 	"github.com/mbevc1/paddock/internal/system"
 )
 
-const defaultStatePath = "/var/lib/paddock/agent/state.db"
+const (
+	defaultStatePath = "/var/lib/paddock/agent/state.db"
+	usageInterval    = 10 * time.Minute
+)
 
 func runAgent(ctx context.Context, args []string, _, stderr io.Writer) error {
 	fs := flag.NewFlagSet("agent", flag.ContinueOnError)
@@ -61,6 +65,7 @@ func runAgent(ctx context.Context, args []string, _, stderr io.Writer) error {
 	host := &ops.Host{Run: system.Exec{}, Files: render.Writer{}, FS: &ops.HostFS{}, Platform: plat, Log: log}
 	ops.RegisterPHP(srv.Registry, store, host)
 	ops.RegisterVhosts(srv.Registry, store, host)
+	go ops.UsageLoop(ctx, store, host, usageInterval, log)
 
 	l, err := agent.Listen(*socket, gid)
 	if err != nil {

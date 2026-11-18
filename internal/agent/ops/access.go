@@ -179,6 +179,11 @@ func createAccess(ctx context.Context, store *state.Store, h *Host, actor *api.A
 			return fail(err)
 		}
 	}
+	defer func() {
+		for _, k := range keys {
+			keyAddedEvent(ctx, store, h, sv, k.fp)
+		}
+	}()
 	change, err := writeAuthorizedKeys(ctx, store, h, v)
 	if err != nil {
 		return fail(err)
@@ -403,5 +408,19 @@ func changeKeys(ctx context.Context, store *state.Store, h *Host, actor *api.Act
 		}
 		return nil, err
 	}
+	if add {
+		keyAddedEvent(ctx, store, h, sv, fp)
+	}
 	return AccessKeyResult{Fingerprint: fp}, nil
+}
+
+// keyAddedEvent tells the owner a key can now log in (§11.5); only a stored account counts.
+func keyAddedEvent(ctx context.Context, store *state.Store, h *Host, sv state.Vhost, fp string) {
+	if _, err := store.AccessAccountOf(ctx, sv.N); err != nil {
+		return
+	}
+	if _, err := store.AppendEvent(ctx, state.Event{Kind: state.EventSSHKeyAdded, OwnerID: sv.OwnerID, VhostN: sv.N,
+		Message: "SSH key " + fp + " added to " + sv.ID}); err != nil {
+		h.logger().Error("event write failed", "err", err)
+	}
 }

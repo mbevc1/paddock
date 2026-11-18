@@ -35,6 +35,7 @@ type agentHarness struct {
 	client *agent.Client
 	admin  *api.Actor
 	secret []byte
+	host   *ops.Host
 }
 
 func newAgent(t *testing.T) *agentHarness {
@@ -94,7 +95,7 @@ func newAgent(t *testing.T) *agentHarness {
 		<-done
 	})
 
-	h := &agentHarness{t: t, store: store, client: agent.NewClient(client), admin: &api.Actor{UserID: 1, Role: api.RoleAdmin}}
+	h := &agentHarness{t: t, store: store, client: agent.NewClient(client), admin: &api.Actor{UserID: 1, Role: api.RoleAdmin}, host: host}
 	var enrolled ops.TOTPEnrollment
 	if err := h.client.Call(ctx, "admin.add", nil, "", ops.AdminAddArgs{UserID: 1, Username: "itest"}, &enrolled); err != nil {
 		t.Fatal(err)

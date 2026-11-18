@@ -43,6 +43,15 @@ func TestFake(t *testing.T) {
 		t.Errorf("OnFunc rule matched the wrong command: %v", err)
 	}
 
+	byStdin := &Fake{}
+	byStdin.OnCall(func(c Call) bool { return string(c.Stdin) == "SELECT 1;" }).Return(Result{Stdout: []byte("1\n")}, nil)
+	if res, err := byStdin.Run(ctx, []string{"/usr/bin/mariadb"}, Opts{Stdin: strings.NewReader("SELECT 1;")}); err != nil || string(res.Stdout) != "1\n" {
+		t.Errorf("OnCall by stdin = %q, %v", res.Stdout, err)
+	}
+	if res, _ := byStdin.Run(ctx, []string{"/usr/bin/mariadb"}, Opts{Stdin: strings.NewReader("SELECT 2;")}); len(res.Stdout) != 0 {
+		t.Error("OnCall matched other stdin")
+	}
+
 	strict := &Fake{Strict: true}
 	if _, err := strict.Run(ctx, []string{"/usr/bin/true"}, Opts{}); err == nil {
 		t.Error("strict fake accepted an unscripted command")

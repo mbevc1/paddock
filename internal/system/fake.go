@@ -21,6 +21,7 @@ type Call struct {
 type Rule struct {
 	prefix    []string
 	match     func(argv []string) bool
+	matchCall func(Call) bool
 	result    Result
 	err       error
 	remaining int
@@ -74,11 +75,23 @@ func (f *Fake) OnFunc(match func(argv []string) bool) *Rule {
 	return r
 }
 
-func (r *Rule) matches(argv []string) bool {
-	if r.match != nil {
-		return r.match(argv)
+// OnCall adds a rule for calls that match reports true for, stdin included. Earlier rules win.
+func (f *Fake) OnCall(match func(Call) bool) *Rule {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	r := &Rule{matchCall: match}
+	f.rules = append(f.rules, r)
+	return r
+}
+
+func (r *Rule) matches(c Call) bool {
+	switch {
+	case r.matchCall != nil:
+		return r.matchCall(c)
+	case r.match != nil:
+		return r.match(c.Argv)
 	}
-	return hasPrefix(argv, r.prefix)
+	return hasPrefix(c.Argv, r.prefix)
 }
 
 // Run records the call and returns the first matching rule's result.
@@ -102,7 +115,7 @@ func (f *Fake) Run(ctx context.Context, argv []string, opts Opts) (Result, error
 	defer f.mu.Unlock()
 	f.calls = append(f.calls, call)
 	for _, r := range f.rules {
-		if r.remaining < 0 || !r.matches(argv) {
+		if r.remaining < 0 || !r.matches(call) {
 			continue
 		}
 		if r.remaining > 0 {

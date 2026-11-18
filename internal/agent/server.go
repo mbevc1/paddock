@@ -191,6 +191,7 @@ func (s *Server) handle(ctx context.Context, uid uint32, line []byte) api.Respon
 	}
 	apiErr := s.toAPIError(op.Name, err)
 	s.audit(ctx, op, call, apiErr)
+	s.recordFailure(ctx, op, call, apiErr)
 	if apiErr != nil {
 		resp.Error = apiErr
 		return resp
@@ -292,6 +293,22 @@ func (s *Server) auditResult(ctx context.Context, op Op, c *Call, result string)
 	}
 }
 
+// recordFailure turns a failed host change into an event, so the owner hears about it even
+// when nobody watches the job.
+func (s *Server) recordFailure(ctx context.Context, op Op, c *Call, apiErr *api.Error) {
+	if apiErr == nil || apiErr.Code != api.CodeApplyFailed || s.Store == nil {
+		return
+	}
+	var owner int64
+	if c.Actor != nil {
+		owner = c.Actor.OwnerID
+	}
+	if _, err := s.Store.AppendEvent(ctx, state.Event{Kind: state.EventApplyFailed, OwnerID: owner,
+		Message: op.Name + ": " + apiErr.Message}); err != nil {
+		s.logger().Error("event write failed", "err", err)
+	}
+}
+
 func newJobID() (string, error) {
 	b := make([]byte, 16)
 	if _, err := rand.Read(b); err != nil {
@@ -328,6 +345,7 @@ func (s *Server) runJob(ctx context.Context, id string, op Op, c *Call) {
 	status, out, code, msg := state.JobSucceeded, "", "", ""
 	if apiErr := s.toAPIError(op.Name, err); apiErr != nil {
 		status, code, msg = state.JobFailed, string(apiErr.Code), apiErr.Message
+		s.recordFailure(ctx, op, c, apiErr)
 	} else if result != nil {
 		b, err := json.Marshal(result)
 		if err != nil {

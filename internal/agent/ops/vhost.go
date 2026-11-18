@@ -53,6 +53,7 @@ func RegisterVhosts(r *agent.Registry, store *state.Store, h *Host) {
 	registerCerts(r, store, h)
 	registerDatabases(r, store, h)
 	registerAccess(r, store, h)
+	registerUsage(r, store, h)
 	r.Register(agent.Op{Name: "vhost.create", Class: agent.ClassOwner, Long: true,
 		Handler: func(ctx context.Context, c *agent.Call) (any, error) {
 			args, err := agent.DecodeArgs[VhostCreateArgs](c)
@@ -216,7 +217,7 @@ var vhostSubdirs = []struct {
 // createVhost runs the §8 create sequence. Each completed step registers its undo, and a
 // failure runs them in reverse, so a failed create leaves nothing behind but a used number.
 func createVhost(ctx context.Context, store *state.Store, h *Host, actor *api.Actor, args VhostCreateArgs) (string, error) {
-	if err := ownerID(args.OwnerID); err != nil {
+	if err := checkOwnerID(args.OwnerID); err != nil {
 		return "", err
 	}
 	if err := scopeOwner(actor, args.OwnerID); err != nil {

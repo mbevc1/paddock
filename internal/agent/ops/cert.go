@@ -92,6 +92,16 @@ func registerCerts(r *agent.Registry, store *state.Store, h *Host) {
 			if err := h.run(ctx, systemctl, "reload", "httpd.service"); err != nil {
 				return nil, h.applyFailed("reloading the front Apache", err)
 			}
+			for _, d := range args.Domains {
+				sv, err := store.VhostByDomain(ctx, d)
+				if err != nil {
+					continue
+				}
+				if _, err := store.AppendEvent(ctx, state.Event{Kind: state.EventCertRenewed, OwnerID: sv.OwnerID,
+					VhostN: sv.N, Message: "certificate renewed for " + d}); err != nil {
+					return nil, err
+				}
+			}
 			return nil, nil
 		}})
 }

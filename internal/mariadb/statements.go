@@ -199,3 +199,10 @@ func writeGrants(verb, prep, vhostID string, databases, writeUsers []string) ([]
 	}
 	return out, nil
 }
+
+// AllDatabaseSizes returns the query for the bytes used by every vhost database; rows are name
+// and size.
+func AllDatabaseSizes() string {
+	return stmts("SELECT table_schema, COALESCE(SUM(data_length + index_length), 0) FROM information_schema.tables" +
+		" WHERE table_schema REGEXP '^v[0-9]{5}_' GROUP BY table_schema")
+}

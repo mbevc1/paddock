@@ -109,7 +109,7 @@ func (a LimitsArgs) apply(base state.Limits) (state.Limits, error) {
 	return out, nil
 }
 
-func ownerID(id int64) error {
+func checkOwnerID(id int64) error {
 	if err := validate.OwnerID(id); err != nil {
 		return api.Errorf(api.CodeInvalidArgument, "owner_id must be positive")
 	}
@@ -155,7 +155,7 @@ func RegisterOwners(r *agent.Registry, store *state.Store) {
 		if err != nil {
 			return nil, err
 		}
-		if err := ownerID(args.OwnerID); err != nil {
+		if err := checkOwnerID(args.OwnerID); err != nil {
 			return nil, err
 		}
 		if err := displayName(args.Name); err != nil {
@@ -169,7 +169,7 @@ func RegisterOwners(r *agent.Registry, store *state.Store) {
 		if err != nil {
 			return nil, err
 		}
-		if err := ownerID(args.OwnerID); err != nil {
+		if err := checkOwnerID(args.OwnerID); err != nil {
 			return nil, err
 		}
 		err = store.DeleteOwner(ctx, args.OwnerID)
@@ -184,7 +184,7 @@ func RegisterOwners(r *agent.Registry, store *state.Store) {
 		if err != nil {
 			return nil, err
 		}
-		if err := ownerID(args.OwnerID); err != nil {
+		if err := checkOwnerID(args.OwnerID); err != nil {
 			return nil, err
 		}
 		current, err := store.GetLimits(ctx, args.OwnerID)

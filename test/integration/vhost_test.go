@@ -272,3 +272,63 @@ func TestDatabaseIsolation(t *testing.T) {
 		t.Errorf("A opened B's database: %q", got)
 	}
 }
+
+func TestQuotaRevocation(t *testing.T) {
+	h := newAgent(t)
+	ctx := context.Background()
+	id, domain := newVhost(t, h, "8.3")
+	sv := mustVhost(t, h, id)
+	if err := h.client.Call(ctx, "owner.limits.set", h.admin, "", ops.OwnerLimitsArgs{OwnerID: sv.OwnerID, Limits: ops.LimitsArgs{DiskMB: ptrTo(50)}}, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := h.client.Call(ctx, "db.create", h.admin, "", ops.DBArgs{VhostID: id, Suffix: "wp"}, nil); err != nil {
+		t.Fatal(err)
+	}
+	sql := func(stmt string) string {
+		return servePHP(t, id, domain, "q.php", "mysqli_report(MYSQLI_REPORT_OFF);\n"+
+			"$m = new mysqli('localhost', '"+id+"', '', '"+id+"_wp');\n"+
+			"echo $m->query(\""+stmt+"\") ? 'OK' : 'ERR';")
+	}
+	if got := sql("CREATE TABLE t (v INT)"); got != "OK" {
+		t.Fatalf("create table: %q", got)
+	}
+	if got := sql("INSERT INTO t VALUES (1)"); got != "OK" {
+		t.Fatalf("insert under the limit: %q", got)
+	}
+
+	// 60 MB of files puts the owner over 50 MB; root's writes are not held to the quota.
+	filler := filepath.Join("/srv/www", id, "private", "filler")
+	if err := os.WriteFile(filler, make([]byte, 60<<20), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := ops.ScanUsage(ctx, h.store, h.host); err != nil {
+		t.Fatal(err)
+	}
+	if got := sql("INSERT INTO t VALUES (2)"); got != "ERR" {
+		t.Errorf("insert over the limit: %q", got)
+	}
+	if got := sql("SELECT v FROM t"); got != "OK" {
+		t.Errorf("select over the limit: %q", got)
+	}
+	events, err := h.store.ListEvents(ctx, 0, 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var exceeded bool
+	for _, e := range events {
+		exceeded = exceeded || e.Kind == state.EventQuotaExceeded && e.OwnerID == sv.OwnerID
+	}
+	if !exceeded {
+		t.Errorf("no quota_exceeded event: %+v", events)
+	}
+
+	if err := os.Remove(filler); err != nil {
+		t.Fatal(err)
+	}
+	if err := ops.ScanUsage(ctx, h.store, h.host); err != nil {
+		t.Fatal(err)
+	}
+	if got := sql("INSERT INTO t VALUES (3)"); got != "OK" {
+		t.Errorf("insert after cleanup: %q", got)
+	}
+}
