@@ -175,6 +175,7 @@ func (s *Server) createVhost(w http.ResponseWriter, r *http.Request) {
 		PrimaryDomain: strings.TrimSpace(r.PostFormValue("primary")),
 		Aliases:       domainList(r.PostFormValue("aliases")),
 		PHPVersion:    r.PostFormValue("php"),
+		Database:      strings.TrimSpace(r.PostFormValue("database")),
 	}
 	s.startJob(w, r, "vhost.create", args, "/vhosts/new", "/vhosts")
 }

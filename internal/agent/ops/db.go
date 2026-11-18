@@ -328,3 +328,31 @@ func dropVhostDatabases(ctx context.Context, store *state.Store, h *Host, sv sta
 	}
 	return nil
 }
+
+// createVhostDatabase creates the empty database a vhost asked for at creation, within the
+// owner's limit. The vhost's rollback drops it again; its state row goes with the vhost.
+func createVhostDatabase(ctx context.Context, store *state.Store, h *Host, undo *rollback, sv state.Vhost, suffix string) error {
+	name, err := validate.DatabaseName(sv.ID, suffix)
+	if err != nil {
+		return invalidArg(err)
+	}
+	sql, err := mariadb.CreateDatabase(name, sv.ID)
+	if err != nil {
+		return invalidArg(err)
+	}
+	drop, err := mariadb.DropDatabase(name)
+	if err != nil {
+		return err
+	}
+	if err := store.CreateDatabase(ctx, sv.N, name); err != nil {
+		return err
+	}
+	undo.add(func(ctx context.Context) error {
+		_, err := h.db().Exec(ctx, drop)
+		return err
+	})
+	if _, err := h.db().Exec(ctx, sql); err != nil {
+		return h.applyFailed("creating database "+name, err)
+	}
+	return nil
+}

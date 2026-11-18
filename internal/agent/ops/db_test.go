@@ -39,15 +39,15 @@ func TestDatabaseOperations(t *testing.T) {
 	e, web, owner, _ := activeVhost(t)
 
 	var res DatabaseResult
-	if err := web.Call(ctx, "db.create", owner, "", DBArgs{VhostID: "v00001", Suffix: "wp"}, &res); err != nil || res.Database != "v00001_wp" {
+	if err := web.Call(ctx, "db.create", owner, "", DBArgs{VhostID: "v00001", Suffix: "app"}, &res); err != nil || res.Database != "v00001_app" {
 		t.Fatalf("db.create = %+v, %v", res, err)
 	}
-	if sql := lastSQL(t, e); !strings.Contains(sql, "CREATE DATABASE `v00001_wp` CHARACTER SET utf8mb4") ||
-		!strings.Contains(sql, "GRANT ALL PRIVILEGES ON `v00001\\_wp`.* TO 'v00001'@'localhost'") {
+	if sql := lastSQL(t, e); !strings.Contains(sql, "CREATE DATABASE `v00001_app` CHARACTER SET utf8mb4") ||
+		!strings.Contains(sql, "GRANT ALL PRIVILEGES ON `v00001\\_app`.* TO 'v00001'@'localhost'") {
 		t.Errorf("db.create SQL = %q", sql)
 	}
-	wantCode(t, web.Call(ctx, "db.create", owner, "", DBArgs{VhostID: "v00001", Suffix: "wp"}, nil), api.CodeConflict)
-	for _, bad := range []string{"", "WP", "w_p", "w`p", strings.Repeat("a", 21)} {
+	wantCode(t, web.Call(ctx, "db.create", owner, "", DBArgs{VhostID: "v00001", Suffix: "app"}, nil), api.CodeConflict)
+	for _, bad := range []string{"", "APP", "w_p", "w`p", strings.Repeat("a", 21)} {
 		wantCode(t, web.Call(ctx, "db.create", owner, "", DBArgs{VhostID: "v00001", Suffix: bad}, nil), api.CodeInvalidArgument)
 	}
 	stranger := &api.Actor{UserID: 9, Role: api.RoleOwner, OwnerID: 999}
@@ -69,7 +69,7 @@ func TestDatabaseOperations(t *testing.T) {
 	wantCode(t, web.Call(ctx, "db.delete", owner, "", DBArgs{VhostID: "v00001", Suffix: "nope"}, nil), api.CodeNotFound)
 	e.run.On("/usr/bin/mariadb").Return(system.Result{}, nil).Times(1)
 	e.run.On("/usr/bin/mariadb").Fail("ERROR 1141 (42000) at line 1: There is no such grant defined").Times(1)
-	if err := web.Call(ctx, "db.delete", owner, "", DBArgs{VhostID: "v00001", Suffix: "wp"}, nil); err != nil {
+	if err := web.Call(ctx, "db.delete", owner, "", DBArgs{VhostID: "v00001", Suffix: "app"}, nil); err != nil {
 		t.Fatalf("db.delete with the grant already gone: %v", err)
 	}
 	if dbs, _ := e.store.ListDatabases(ctx, 1); len(dbs) != 0 {
@@ -139,7 +139,7 @@ func TestDBUserOperations(t *testing.T) {
 func TestVhostDeleteDropsDatabases(t *testing.T) {
 	ctx := context.Background()
 	e, web, owner, _ := activeVhost(t)
-	if err := web.Call(ctx, "db.create", owner, "", DBArgs{VhostID: "v00001", Suffix: "wp"}, nil); err != nil {
+	if err := web.Call(ctx, "db.create", owner, "", DBArgs{VhostID: "v00001", Suffix: "app"}, nil); err != nil {
 		t.Fatal(err)
 	}
 	if err := web.Call(ctx, "dbuser.create", owner, "", DBUserCreateArgs{VhostID: "v00001", Suffix: "ro", Grants: mariadb.PrivilegesRead}, nil); err != nil {
@@ -148,8 +148,42 @@ func TestVhostDeleteDropsDatabases(t *testing.T) {
 	if v := runJob(t, web, "vhost.delete", owner, VhostDeleteArgs{VhostID: "v00001", Confirm: "shop.example.com"}); v.Status != state.JobSucceeded {
 		t.Fatal(v)
 	}
-	want := "DROP DATABASE IF EXISTS `v00001_wp`;\nDROP USER IF EXISTS 'v00001'@'localhost';\nDROP USER IF EXISTS 'v00001_ro'@'localhost';\n"
+	want := "DROP DATABASE IF EXISTS `v00001_app`;\nDROP USER IF EXISTS 'v00001'@'localhost';\nDROP USER IF EXISTS 'v00001_ro'@'localhost';\n"
 	if sql := lastSQL(t, e); sql != want {
 		t.Errorf("delete SQL:\n got %q\nwant %q", sql, want)
+	}
+}
+
+func TestVhostCreateWithDatabase(t *testing.T) {
+	ctx := context.Background()
+	e, web, owner, o := vhostEnv(t)
+	args := createArgs(o)
+	args.Database = "app"
+	if v := runJob(t, web, "vhost.create", owner, args); v.Status != state.JobSucceeded {
+		t.Fatalf("create: %+v", v)
+	}
+	if dbs, _ := e.store.ListDatabases(ctx, 1); len(dbs) != 1 || dbs[0] != "v00001_app" {
+		t.Errorf("databases = %q", dbs)
+	}
+	if sql := lastSQL(t, e); !strings.Contains(sql, "CREATE DATABASE `v00001_app`") || !strings.Contains(sql, "TO 'v00001'@'localhost'") {
+		t.Errorf("SQL = %q", sql)
+	}
+
+	args = createArgs(o)
+	args.PrimaryDomain, args.Aliases, args.Database = "b.example.com", nil, "Bad-Name"
+	wantJobError(t, runJob(t, web, "vhost.create", owner, args), api.CodeInvalidArgument)
+	if _, err := e.store.GetVhost(ctx, 2); !errors.Is(err, state.ErrNotFound) {
+		t.Error("vhost created despite a bad database suffix")
+	}
+
+	// A failing CREATE DATABASE rolls back the whole vhost.
+	e.run.OnCall(func(c system.Call) bool { return strings.Contains(string(c.Stdin), "CREATE DATABASE") }).Fail("ERROR 1007").Times(1)
+	args.Database = "app"
+	wantJobError(t, runJob(t, web, "vhost.create", owner, args), api.CodeApplyFailed)
+	if vs, _ := e.store.ListVhosts(ctx, o.ID); len(vs) != 1 {
+		t.Errorf("vhosts after the failed create = %d", len(vs))
+	}
+	if !strings.Contains(lastSQL(t, e), "DROP USER IF EXISTS 'v00002'@'localhost'") {
+		t.Errorf("primary DB user not dropped: %q", lastSQL(t, e))
 	}
 }

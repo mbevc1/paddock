@@ -32,6 +32,8 @@ type VhostCreateArgs struct {
 	PrimaryDomain string   `json:"primary_domain"`
 	Aliases       []string `json:"aliases,omitempty"`
 	PHPVersion    string   `json:"php_version"`
+	// Database, when set, is the suffix of an empty database created with the vhost.
+	Database string `json:"database,omitempty"`
 }
 
 // VhostDeleteArgs are the arguments of vhost.delete. Confirm must repeat the vhost's primary
@@ -236,6 +238,12 @@ func createVhost(ctx context.Context, store *state.Store, h *Host, actor *api.Ac
 	if err := checkPHPAllowed(ctx, store, limits, args.PHPVersion); err != nil {
 		return "", err
 	}
+	if args.Database != "" {
+		// The vhost ID is not known yet; any valid one checks the suffix.
+		if _, err := validate.DatabaseName("v00001", args.Database); err != nil {
+			return "", invalidArg(err)
+		}
+	}
 
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -262,6 +270,12 @@ func createVhost(ctx context.Context, store *state.Store, h *Host, actor *api.Ac
 	if err := createPrimaryDBUser(ctx, h, undo, sv.ID, limits.MaxUserConnections); err != nil {
 		undo.run(ctx)
 		return "", err
+	}
+	if args.Database != "" {
+		if err := createVhostDatabase(ctx, store, h, undo, sv, args.Database); err != nil {
+			undo.run(ctx)
+			return "", err
+		}
 	}
 	if err := store.SetVhostStatus(ctx, sv.N, state.VhostActive); err != nil {
 		undo.run(ctx)
