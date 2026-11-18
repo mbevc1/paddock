@@ -1,0 +1,14 @@
+[Unit]
+Description=Paddock PHP {{.Version}} FPM for %i
+
+[Service]
+Type=notify
+User=%i
+Group=%i
+ExecStart=/opt/remi/php{{.Tag}}/root/usr/sbin/php-fpm --nodaemonize --fpm-config /etc/paddock/fpm/%i.conf
+ExecReload=/bin/kill -USR2 $MAINPID
+CapabilityBoundingSet=
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target

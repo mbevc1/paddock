@@ -1,0 +1,15 @@
+# path: /etc/systemd/system/paddock-php83-fpm@.service
+[Unit]
+Description=Paddock PHP 8.3 FPM for %i
+
+[Service]
+Type=notify
+User=%i
+Group=%i
+ExecStart=/opt/remi/php83/root/usr/sbin/php-fpm --nodaemonize --fpm-config /etc/paddock/fpm/%i.conf
+ExecReload=/bin/kill -USR2 $MAINPID
+CapabilityBoundingSet=
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target

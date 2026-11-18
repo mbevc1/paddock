@@ -1,0 +1,19 @@
+{{define "content"}}
+<h1>New vhost</h1>
+{{if .Data.NeedsOwner}}
+<p>Admins create vhosts while acting as an owner. Open the owner and choose “Act as owner”.</p>
+{{else if .Can "vhost.manage"}}
+<form method="post" action="/vhosts" class="stack">
+  <input type="hidden" name="csrf" value="{{.CSRF}}">
+  <label>Primary domain <input name="primary" required placeholder="shop.example.com"></label>
+  <label>Aliases <textarea name="aliases" rows="2" placeholder="www.shop.example.com"></textarea></label>
+  <label>PHP version
+    <select name="php">{{range .Data.PHPVersions}}<option>{{.}}</option>{{end}}</select>
+  </label>
+  <label>Database (optional): an empty database named after the vhost and this suffix
+    <input name="database" pattern="[a-z0-9]{1,20}" placeholder="app">
+  </label>
+  <button type="submit">Create</button>
+</form>
+{{end}}
+{{end}}

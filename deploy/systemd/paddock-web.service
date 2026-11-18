@@ -1,0 +1,31 @@
+[Unit]
+Description=Paddock web panel
+After=network-online.target paddock-agent.service
+Wants=network-online.target paddock-agent.service
+
+[Service]
+Type=simple
+User=paddock
+Group=paddock
+EnvironmentFile=/etc/paddock/web.env
+ExecStart=/usr/bin/paddock web
+Restart=on-failure
+RestartSec=2s
+NoNewPrivileges=yes
+CapabilityBoundingSet=
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/var/lib/paddock/web /run/paddock
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictNamespaces=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+SystemCallArchitectures=native
+
+[Install]
+WantedBy=multi-user.target

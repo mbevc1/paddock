@@ -1,0 +1,15 @@
+# path: /etc/httpd/conf.d/paddock-v00012.conf
+MDomain shop.example.com www.shop.example.com
+MDRequireHttps permanent
+
+<VirtualHost *:80>
+    ServerName shop.example.com
+    ServerAlias www.shop.example.com
+</VirtualHost>
+
+<VirtualHost *:443>
+    ServerName shop.example.com
+    ServerAlias www.shop.example.com
+    SSLEngine on
+    Redirect 503 /
+</VirtualHost>

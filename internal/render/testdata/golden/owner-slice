@@ -1,0 +1,5 @@
+# path: /etc/systemd/system/paddock-owner-3.slice
+[Slice]
+MemoryMax=2G
+CPUQuota=200%
+TasksMax=512

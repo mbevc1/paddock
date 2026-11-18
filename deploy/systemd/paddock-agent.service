@@ -1,0 +1,13 @@
+[Unit]
+Description=Paddock agent
+After=network.target mariadb.service
+Wants=mariadb.service
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/paddock agent
+Restart=on-failure
+RestartSec=2s
+
+[Install]
+WantedBy=multi-user.target

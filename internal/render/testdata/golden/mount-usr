@@ -1,0 +1,9 @@
+# path: /etc/systemd/system/srv-jail-v00012-usr.mount
+[Mount]
+What=/usr
+Where=/srv/jail/v00012/usr
+Type=none
+Options=bind,ro,nosuid,nodev
+
+[Install]
+WantedBy=multi-user.target

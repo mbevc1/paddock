@@ -1,0 +1,9 @@
+# path: /etc/systemd/system/srv-jail-v00012-site.mount
+[Mount]
+What=/srv/www/v00012
+Where=/srv/jail/v00012/site
+Type=none
+Options=bind
+
+[Install]
+WantedBy=multi-user.target

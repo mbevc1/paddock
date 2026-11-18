@@ -1,0 +1,18 @@
+# Findings that are deliberate for Paddock. rpmlint reads this file as Python: EL 9's rpmlint 1.x
+# takes it with -f, rpmlint 2 with -r.
+
+# §6: the agent's and the web process's state directories are private.
+addFilter(r"non-standard-dir-perm /var/lib/paddock/(agent|web) 700")
+addFilter(r"non-standard-[ug]id /var/lib/paddock/web paddock")
+# §14.1: one CGO_ENABLED=0 binary serves every supported EL release.
+addFilter(r"statically-linked-binary /usr/bin/paddock")
+addFilter(r"position-independent-executable-suggested /usr/bin/paddock")
+# Packages are unsigned until T2.9.
+addFilter(r"no-signature")
+# EL packaging guidelines do not use these tags.
+addFilter(r"no-group-tag")
+addFilter(r"no-packager-tag")
+addFilter(r"spelling-error .*vhosts")
+addFilter(r"no-manual-page-for-binary paddock")
+# MPL-2.0 is the SPDX identifier EL uses; older rpmlint license lists lack it.
+addFilter(r"invalid-license MPL-2.0")

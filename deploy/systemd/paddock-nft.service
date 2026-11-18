@@ -1,0 +1,13 @@
+[Unit]
+Description=Paddock loopback firewall rule
+After=firewalld.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/sbin/nft -f /etc/paddock/nftables.conf
+ExecReload=/usr/sbin/nft -f /etc/paddock/nftables.conf
+ExecStop=/usr/sbin/nft delete table inet paddock
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,13 @@
+{{define "content"}}
+<h1>PHP versions</h1>
+<p>Installed: {{join .Data ", "}}</p>
+{{if .Can "php.manage"}}
+<form method="post" action="/admin/php" class="inline">
+  <input type="hidden" name="csrf" value="{{.CSRF}}">
+  <select name="version"><option>8.2</option><option>8.3</option><option>8.4</option></select>
+  <select name="action"><option value="install">Install</option><option value="remove">Remove</option></select>
+  <input name="totp" inputmode="numeric" pattern="[0-9]{6}" placeholder="TOTP code" autocomplete="one-time-code">
+  <button type="submit">Apply</button>
+</form>
+{{end}}
+{{end}}

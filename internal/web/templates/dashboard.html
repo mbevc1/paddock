@@ -1,0 +1,27 @@
+{{define "content"}}
+<h1>Dashboard</h1>
+{{if .Data.AdminHome}}
+<p>You are signed in as an admin. Manage <a href="/admin/owners">owners</a>, <a href="/admin/php">PHP versions</a>,
+or open an owner and act as them to work on their vhosts.</p>
+{{else}}
+  {{with .Data.Usage}}
+  <section>
+    <h2>Disk</h2>
+    <p>{{mb .TotalBytes}} of {{mb .LimitBytes}} used ({{.Percent}}%).</p>
+  </section>
+  {{end}}
+  <section>
+    <h2>Vhosts</h2>
+    {{if .Data.Vhosts}}
+    <ul>{{range .Data.Vhosts}}<li><a href="/vhosts/{{.ID}}">{{.Primary}}</a> · PHP {{.PHPVersion}} · {{.Status}}</li>{{end}}</ul>
+    {{else}}<p>No vhosts yet.</p>{{end}}
+    {{if .Can "vhost.manage"}}<p><a class="button" href="/vhosts/new">New vhost</a></p>{{end}}
+  </section>
+  {{with .Data.Owner}}
+  <section>
+    <h2>Limits</h2>
+    <p>{{.Limits.MaxVhosts}} vhosts, {{.Limits.DiskMB}} MB disk, {{.Limits.MaxDatabases}} databases, {{.Limits.MaxAccessAccounts}} access accounts{{if .Limits.ShellAllowed}}, shell allowed{{end}}.</p>
+  </section>
+  {{end}}
+{{end}}
+{{end}}

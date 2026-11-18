@@ -1,0 +1,4 @@
+# path: /srv/jail/v00012/etc/profile
+export PATH=/opt/paddock/bin:/usr/local/bin:/usr/bin
+export HOME=/site
+cd /site

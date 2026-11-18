@@ -1,0 +1,30 @@
+# Disposable AlmaLinux 9 test VM for the phase 0 checks.
+#   vagrant up && vagrant ssh -c 'sudo /vagrant/poc/00-setup.sh --device /dev/vdb'
+# Snapshot right after provisioning so each run starts clean:
+#   vagrant snapshot save clean
+
+# Older Vagrant releases gate the VirtualBox disk API behind this flag.
+ENV["VAGRANT_EXPERIMENTAL"] ||= "disks"
+
+MEMORY = Integer(ENV.fetch("POC_MEMORY", "4096"))
+CPUS = Integer(ENV.fetch("POC_CPUS", "2"))
+WWW_DISK_GB = Integer(ENV.fetch("POC_WWW_DISK_GB", "20"))
+
+Vagrant.configure("2") do |config|
+  config.vm.box = "almalinux/9"
+  config.vm.hostname = "paddock-poc"
+  config.vm.synced_folder "..", "/vagrant", type: "rsync",
+    rsync__exclude: [".git/"]
+
+  config.vm.provider "libvirt" do |lv|
+    lv.memory = MEMORY
+    lv.cpus = CPUS
+    lv.storage :file, size: "#{WWW_DISK_GB}G", device: "vdb"
+  end
+
+  config.vm.provider "virtualbox" do |vb, override|
+    vb.memory = MEMORY
+    vb.cpus = CPUS
+    override.vm.disk :disk, name: "www", size: "#{WWW_DISK_GB}GB"
+  end
+end
