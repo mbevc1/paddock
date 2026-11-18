@@ -1,0 +1,14 @@
+# path: /etc/httpd/conf.d/paddock-00-global.conf
+MDContactEmail ops@example.com
+MDCertificateAgreement accepted
+MDNotifyCmd /usr/bin/paddock agent-notify md-renewed
+
+<Directory />
+    AllowOverride None
+    Require all denied
+</Directory>
+
+<Location "/md-status">
+    SetHandler md-status
+    Require local
+</Location>

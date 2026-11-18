@@ -1,0 +1,18 @@
+# path: /usr/lib/systemd/system/paddock-httpd@.service
+[Unit]
+Description=Paddock backend Apache for %i
+After=network.target
+
+[Service]
+Type=notify
+User=%i
+Group=%i
+ExecStart=/usr/sbin/httpd -DFOREGROUND -f /etc/paddock/httpd/%i.conf
+ExecReload=/usr/sbin/httpd -f /etc/paddock/httpd/%i.conf -k graceful
+RuntimeDirectory=paddock-httpd/%i
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target

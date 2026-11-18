@@ -1,0 +1,17 @@
+[Service]
+Slice=paddock-owner-{{.OwnerID}}.slice
+TemporaryFileSystem=/srv/www /srv/jail /run/paddock
+BindPaths=/srv/www/{{.ID}} /run/paddock/fpm/{{.ID}}
+ReadWritePaths=/srv/www/{{.ID}} /run/paddock/fpm/{{.ID}}
+ProtectProc=invisible
+ProcSubset=pid
+PrivateTmp=yes
+PrivateIPC=yes
+PrivateDevices=yes
+ProtectSystem=strict
+ProtectHome=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+NoNewPrivileges=yes
+RestrictSUIDSGID=yes

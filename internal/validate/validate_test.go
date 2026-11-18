@@ -115,3 +115,14 @@ func TestDomain(t *testing.T) {
 		assertInvalid(t, err)
 	}
 }
+
+func TestEmail(t *testing.T) {
+	if got, err := Email("Ops+acme@Example.COM"); err != nil || got != "Ops+acme@example.com" {
+		t.Errorf("Email = %q, %v", got, err)
+	}
+	for _, in := range []string{"", "a", "@example.com", "a@", "a@b@example.com", "a b@example.com",
+		"a\n@example.com", "a\"@example.com", "a@localhost", strings.Repeat("a", 65) + "@example.com", "ä@example.com"} {
+		_, err := Email(in)
+		assertInvalid(t, err)
+	}
+}

@@ -71,3 +71,26 @@ func allDigits(s string) bool {
 	}
 	return true
 }
+
+const maxEmailLocal = 64
+
+// Email checks an address such as an ACME contact and returns it with the domain lowercased.
+// The local part is limited to letters, digits, and ._%+- so it is safe in config files.
+func Email(addr string) (string, error) {
+	local, domain, ok := strings.Cut(addr, "@")
+	if !ok || local == "" || len(local) > maxEmailLocal {
+		return "", invalid("email address %q is malformed", addr)
+	}
+	for i := 0; i < len(local); i++ {
+		c := local[i]
+		ok := c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || strings.IndexByte("._%+-", c) >= 0
+		if !ok {
+			return "", invalid("email address %q has an unsupported character", addr)
+		}
+	}
+	d, err := Domain(domain)
+	if err != nil {
+		return "", err
+	}
+	return local + "@" + d, nil
+}

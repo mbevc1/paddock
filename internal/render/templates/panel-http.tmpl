@@ -1,0 +1,5 @@
+<VirtualHost *:80>
+    ServerName {{.Hostname}}
+    ProxyPass /.well-known/acme-challenge/ "unix:/run/paddock/acme.sock|http://panel/.well-known/acme-challenge/"
+    RedirectMatch 301 ^/(?!\.well-known/acme-challenge/)(.*)$ https://{{.Hostname}}:8443/$1
+</VirtualHost>

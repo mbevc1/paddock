@@ -1,0 +1,32 @@
+{{if eq .TLS "acme"}}MDomain {{join .Domains " "}}
+MDRequireHttps permanent
+
+{{end}}<VirtualHost *:80>
+    ServerName {{.Primary}}
+{{- if .Aliases}}
+    ServerAlias {{join .Aliases " "}}
+{{- end}}
+{{- if eq .TLS "upload"}}
+    Redirect permanent / https://{{.Primary}}/
+{{- end}}
+</VirtualHost>
+
+<VirtualHost *:443>
+    ServerName {{.Primary}}
+{{- if .Aliases}}
+    ServerAlias {{join .Aliases " "}}
+{{- end}}
+    SSLEngine on
+{{- if eq .TLS "upload"}}
+    SSLCertificateFile {{.CertFile}}
+    SSLCertificateKeyFile {{.KeyFile}}
+{{- end}}
+{{- if .Suspended}}
+    Redirect 503 /
+{{- else}}
+    ProxyPreserveHost On
+    RequestHeader set X-Forwarded-Proto https
+    ProxyPass        / http://{{.Address}}:81/
+    ProxyPassReverse / http://{{.Address}}:81/
+{{- end}}
+</VirtualHost>

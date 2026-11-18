@@ -1,0 +1,18 @@
+# path: /etc/systemd/system/paddock-httpd@v00012.service.d/10-sandbox.conf
+[Service]
+Slice=paddock-owner-3.slice
+TemporaryFileSystem=/srv/www /srv/jail /run/paddock
+BindPaths=/srv/www/v00012 /run/paddock/fpm/v00012
+ReadWritePaths=/srv/www/v00012 /run/paddock/fpm/v00012
+ProtectProc=invisible
+ProcSubset=pid
+PrivateTmp=yes
+PrivateIPC=yes
+PrivateDevices=yes
+ProtectSystem=strict
+ProtectHome=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+NoNewPrivileges=yes
+RestrictSUIDSGID=yes

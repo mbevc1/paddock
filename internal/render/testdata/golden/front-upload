@@ -1,0 +1,18 @@
+# path: /etc/httpd/conf.d/paddock-v00012.conf
+<VirtualHost *:80>
+    ServerName shop.example.com
+    ServerAlias www.shop.example.com
+    Redirect permanent / https://shop.example.com/
+</VirtualHost>
+
+<VirtualHost *:443>
+    ServerName shop.example.com
+    ServerAlias www.shop.example.com
+    SSLEngine on
+    SSLCertificateFile /etc/pki/paddock/v00012.crt
+    SSLCertificateKeyFile /etc/pki/paddock/v00012.key
+    ProxyPreserveHost On
+    RequestHeader set X-Forwarded-Proto https
+    ProxyPass        / http://127.64.0.12:81/
+    ProxyPassReverse / http://127.64.0.12:81/
+</VirtualHost>
