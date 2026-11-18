@@ -44,7 +44,7 @@ jobs:
           for arch in x86_64 aarch64; do
             scripts/build-rpm.sh "$version" "$arch" "$OWNER"
           done
-      - run: rpmlint -r packaging/paddock.rpmlintrc dist/*.rpm
+      - run: rpmlint -f packaging/paddock.rpmlintrc dist/*.rpm
       - name: Bootstrap script and checksums
         env:
           OWNER: ${{ github.repository_owner }}

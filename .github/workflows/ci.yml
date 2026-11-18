@@ -76,5 +76,5 @@ jobs:
       # git for its VCS stamp.
       - run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
       - run: scripts/build-rpm.sh 0.0.0 x86_64
-      - run: rpmlint -r packaging/paddock.rpmlintrc dist/*.rpm
+      - run: rpmlint -f packaging/paddock.rpmlintrc dist/*.rpm
       - run: rpm -qp --scripts dist/*.rpm

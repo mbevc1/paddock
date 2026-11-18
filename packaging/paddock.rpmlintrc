@@ -1,4 +1,5 @@
-# Findings that are deliberate for Paddock. rpmlint reads this file as Python.
+# Findings that are deliberate for Paddock. rpmlint reads this file as Python: EL 9's rpmlint 1.x
+# takes it with -f, rpmlint 2 with -r.
 
 # §6: the agent's and the web process's state directories are private.
 addFilter(r"non-standard-dir-perm /var/lib/paddock/(agent|web) 700")
