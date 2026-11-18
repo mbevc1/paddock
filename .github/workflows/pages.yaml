@@ -7,6 +7,7 @@ on:
     branches: [main]
     paths:
       - pages/**
+      - docs/assets/logo/**
       - .github/workflows/pages.yaml
   workflow_dispatch:
   workflow_call:
@@ -52,6 +53,8 @@ jobs:
           echo "LATEST_TAG=$(head -n1 <<<"$tags")" >>"$GITHUB_ENV"
       - name: Build the landing page
         run: |
+          mkdir -p _site/assets
+          cp docs/assets/logo/* _site/assets/
           owner=${GITHUB_REPOSITORY%%/*}
           name=${GITHUB_REPOSITORY#*/}
           [[ $owner =~ ^[A-Za-z0-9-]+$ && $name =~ ^[A-Za-z0-9._-]+$ ]] || { echo "unexpected repository name" >&2; exit 1; }

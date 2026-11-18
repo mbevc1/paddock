@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <title>Paddock</title>
+  <rect width="64" height="64" rx="14" fill="#2f6f4f"/>
+  <g stroke="#e8f4ec" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" fill="none">
+    <rect x="11" y="11" width="42" height="42" rx="4"/>
+    <path d="M32 11V53M11 32H53"/>
+  </g>
+  <circle cx="21.5" cy="21.5" r="4.5" fill="#8fd6b0"/><circle cx="42.5" cy="21.5" r="4.5" fill="#8fd6b0"/>
+  <circle cx="21.5" cy="42.5" r="4.5" fill="#8fd6b0"/><circle cx="42.5" cy="42.5" r="4.5" fill="#f2c14e"/>
+</svg>
