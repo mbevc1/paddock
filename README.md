@@ -14,11 +14,11 @@ Early development; nothing here is ready to install. `docs/plan.md` holds the sp
 Requires Go 1.27.
 
 ```bash
-go build ./cmd/paddock
-scripts/check.sh
+make build
+make check
 ```
 
-`scripts/check.sh` runs gofmt, `go vet`, golangci-lint and shellcheck when installed, the unit tests, and `packaging/bootstrap_test.sh`. Unit tests run anywhere as a normal user. Never run the agent, `paddock setup`, or the bootstrap script on a development machine: they change the host as root.
+`make help` lists the targets. `make check` runs `scripts/check.sh`, which runs gofmt, `go vet`, golangci-lint and shellcheck when installed, the unit tests, and `packaging/bootstrap_test.sh`. Unit tests run anywhere as a normal user. Never run the agent, `paddock setup`, or the bootstrap script on a development machine: they change the host as root.
 
 ## Test VM
 

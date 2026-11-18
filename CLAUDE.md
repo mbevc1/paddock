@@ -81,9 +81,10 @@ Never break these. If a task seems to require breaking one, stop and ask.
 ## Commands
 
 ```
-go build ./cmd/paddock          build
-go test ./...                   unit tests
-PADDOCK_INTEGRATION=1 go test -tags integration ./test/integration/...   as root, on the VM only
-scripts/build-rpm.sh            on the AlmaLinux build VM only
-gofmt -l . && go vet ./...      checks
+make build                      build ./paddock
+make test                       unit tests
+make check                      every check: gofmt, vet, lint, shellcheck, unit and bootstrap tests
+PADDOCK_INTEGRATION=1 make integration   as root, on the VM only
+make rpm RPM_VERSION=0.1.0      on the AlmaLinux build VM only
+make help                       all targets
 ```
