@@ -1,0 +1,38 @@
+name: Labels
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/labels.yml
+      - .github/workflows/labels.yml
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: labels
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Create or update labels
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # The runner image ships mikefarah's yq v4; other tools named yq take other flags.
+          yq --version | grep -q mikefarah || { yq --version; echo "unexpected yq" >&2; exit 1; }
+          yq -o=json '.' .github/labels.yml | jq -c '.[]' | while read -r label; do
+            name=$(jq -r '.name' <<<"$label")
+            color=$(jq -r '.color' <<<"$label")
+            description=$(jq -r '.description // ""' <<<"$label")
+            gh label create "$name" --repo "$GITHUB_REPOSITORY" --color "$color" --description "$description" --force
+          done
