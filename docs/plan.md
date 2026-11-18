@@ -634,7 +634,7 @@ Throwaway shell scripts in `poc/`, run as root on a disposable AlmaLinux 9.4+ VM
 - [x] **T1.1 Repository skeleton.** `go.mod` with only the allowed modules, `cmd/paddock` with subcommands `agent`, `web`, `setup`, `teardown`, `reconcile`, `admin`, `agent-notify` (stubs), `scripts/check.sh` running gofmt, vet, and tests, `README.md` (purpose, status, test-VM instructions), `.gitignore`. Ask the owner which license to add.
     - Acceptance: `go build ./cmd/paddock` succeeds; `scripts/check.sh` passes.
     - Done: the repository already carried the MPL-2.0 license. `scripts/check.sh` also runs golangci-lint and shellcheck when installed; `.github/workflows/ci.yml` runs the same checks.
-- [ ] **T1.1a Platform layer.** `internal/platform` per §16: detect the EL major version and return package names, module commands, Remi release URL, and repository paths; EL 9 implemented, EL 10 stubbed with a clear error.
+- [x] **T1.1a Platform layer.** `internal/platform` per §16: detect the EL major version and return package names, module commands, Remi release URL, and repository paths; EL 9 implemented, EL 10 stubbed with a clear error.
     - Acceptance: no package outside `internal/platform` contains `el9`, `el10`, or `dnf module` strings (enforced by a test).
 - [ ] **T1.2 Validators.** `internal/validate`: vhost ID, owner ID, domain names (IDNA to ASCII, no wildcards), DB and DB-user suffixes, PHP versions, SSH public keys (`ssh-ed25519`, `ecdsa-sha2-*`, `ssh-rsa` with at least 3072 bits), path containment helper that rejects symlinks.
     - Acceptance: table-driven tests including hostile inputs (`../`, NUL bytes, newline injection, uppercase, overlong names, shell metacharacters).
