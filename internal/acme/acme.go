@@ -35,7 +35,10 @@ const (
 	// LetsEncryptStaging is the staging directory, for tests against real ACME.
 	LetsEncryptStaging = "https://acme-staging-v02.api.letsencrypt.org/directory"
 	selfSignedLife     = 10 * 365 * 24 * time.Hour
-	challengePrefix    = "/.well-known/acme-challenge/"
+	// RetryAfter spaces failed attempts: Let's Encrypt allows five failed validations per
+	// hostname per hour, and every visit to the panel would otherwise start one.
+	RetryAfter      = 15 * time.Minute
+	challengePrefix = "/.well-known/acme-challenge/"
 )
 
 // Manager serves the panel certificate: Let's Encrypt for the panel hostname when available,
@@ -46,7 +49,11 @@ type Manager struct {
 	self     *tls.Certificate
 	trusted  atomic.Bool
 	fetching atomic.Bool
-	log      *slog.Logger
+	// nextTry is the Unix time in nanoseconds before which no new attempt starts.
+	nextTry   atomic.Int64
+	challenge http.Handler
+	now       func() time.Time
+	log       *slog.Logger
 }
 
 // Config configures a Manager.
@@ -59,6 +66,8 @@ type Config struct {
 	DirectoryURL string
 	SelfSigned   tls.Certificate
 	Log          *slog.Logger
+	// Now defaults to time.Now.
+	Now func() time.Time
 }
 
 // New returns a Manager. It does not contact the CA until a certificate is needed.
@@ -78,6 +87,13 @@ func New(c Config) *Manager {
 	}
 	if c.DirectoryURL != "" {
 		m.auto.Client = &xacme.Client{DirectoryURL: c.DirectoryURL}
+	}
+	// autocert offers HTTP-01 only after its handler exists, and only HTTP-01 works behind the
+	// front Apache, so the handler is made before any certificate can be requested.
+	m.challenge = m.auto.HTTPHandler(http.NotFoundHandler())
+	m.now = c.Now
+	if m.now == nil {
+		m.now = time.Now
 	}
 	return m
 }
@@ -102,14 +118,15 @@ func (m *Manager) GetCertificate(hello *tls.ClientHelloInfo) (*tls.Certificate, 
 }
 
 func (m *Manager) fetch(hello *tls.ClientHelloInfo) {
-	if !m.fetching.CompareAndSwap(false, true) {
+	if m.now().UnixNano() < m.nextTry.Load() || !m.fetching.CompareAndSwap(false, true) {
 		return
 	}
 	h := *hello
 	go func() {
 		defer m.fetching.Store(false)
 		if _, err := m.auto.GetCertificate(&h); err != nil {
-			m.log.Warn("obtaining the panel certificate failed", "err", err)
+			m.nextTry.Store(m.now().Add(RetryAfter).UnixNano())
+			m.log.Warn("obtaining the panel certificate failed", "err", err, "retry_in", RetryAfter.String())
 			return
 		}
 		m.trusted.Store(true)
@@ -131,7 +148,7 @@ func (m *Manager) Prefetch() {
 
 // ChallengeHandler answers HTTP-01 challenges and nothing else.
 func (m *Manager) ChallengeHandler() http.Handler {
-	h := m.auto.HTTPHandler(http.NotFoundHandler())
+	h := m.challenge
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet || !strings.HasPrefix(r.URL.Path, challengePrefix) {
 			http.NotFound(w, r)

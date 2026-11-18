@@ -1,14 +1,19 @@
 package acme
 
 import (
+	"bytes"
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -148,4 +153,75 @@ func TestServeChallengesSocket(t *testing.T) {
 	if err := <-done; err != nil {
 		t.Errorf("ServeChallenges = %v", err)
 	}
+}
+
+// waitFetched waits until no certificate fetch is running.
+func waitFetched(t *testing.T, m *Manager) {
+	t.Helper()
+	deadline := time.Now().Add(20 * time.Second)
+	for m.fetching.Load() {
+		if time.Now().After(deadline) {
+			t.Fatal("certificate fetch still running")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+// The panel starts its first fetch before it serves challenges, so HTTP-01 must be on from New.
+func TestHTTP01OfferedFromTheFirstFetch(t *testing.T) {
+	ca := newFakeCA(t)
+	m := New(Config{Hostname: "panel.example.com", CacheDir: t.TempDir(), DirectoryURL: ca.directory(), SelfSigned: selfPair(t, time.Now())})
+	m.Prefetch()
+	waitFetched(t, m)
+	if got := ca.acceptedTypes(); !slices.Contains(got, "http-01") {
+		t.Errorf("challenges accepted = %q, want http-01 among them", got)
+	}
+}
+
+// autocert answers a repeat request within a minute of real time from its own record of the
+// failure, so the attempts are counted in Paddock's log rather than at the CA.
+func TestFailedFetchWaitsBeforeRetrying(t *testing.T) {
+	ca := newFakeCA(t)
+	now := time.Date(2026, 11, 18, 22, 30, 0, 0, time.UTC)
+	var logs syncBuffer
+	m := New(Config{Hostname: "panel.example.com", CacheDir: t.TempDir(), DirectoryURL: ca.directory(),
+		SelfSigned: selfPair(t, now), Now: func() time.Time { return now }, Log: slog.New(slog.NewTextHandler(&logs, nil))})
+	attempts := func() int { return strings.Count(logs.String(), "obtaining the panel certificate failed") }
+	hello := &tls.ClientHelloInfo{ServerName: "panel.example.com"}
+
+	_, _ = m.GetCertificate(hello)
+	waitFetched(t, m)
+	if attempts() != 1 || ca.requestCount() == 0 {
+		t.Fatalf("first visit: %d failed attempts, %d CA requests", attempts(), ca.requestCount())
+	}
+	now = now.Add(RetryAfter - time.Minute)
+	_, _ = m.GetCertificate(hello)
+	waitFetched(t, m)
+	if attempts() != 1 {
+		t.Errorf("a visit %v after a failure started another attempt", RetryAfter-time.Minute)
+	}
+	now = now.Add(2 * time.Minute)
+	_, _ = m.GetCertificate(hello)
+	waitFetched(t, m)
+	if attempts() != 2 {
+		t.Errorf("a visit %v after a failure started %d attempts, want 1", RetryAfter+time.Minute, attempts()-1)
+	}
+}
+
+// syncBuffer is a bytes.Buffer safe for the fetch goroutine to log into.
+type syncBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (b *syncBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.Write(p)
+}
+
+func (b *syncBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.String()
 }
