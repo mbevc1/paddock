@@ -64,16 +64,17 @@ func redactValue(v any, extra []string) any {
 }
 
 type auditActor struct {
-	CallerUID uint32 `json:"caller_uid"`
-	UserID    int64  `json:"user_id,omitempty"`
-	Role      string `json:"role,omitempty"`
-	OwnerID   int64  `json:"owner_id,omitempty"`
+	CallerUID      uint32 `json:"caller_uid"`
+	UserID         int64  `json:"user_id,omitempty"`
+	Role           string `json:"role,omitempty"`
+	OwnerID        int64  `json:"owner_id,omitempty"`
+	ImpersonatedBy int64  `json:"impersonated_by,omitempty"`
 }
 
 func actorJSON(c *Call) string {
 	a := auditActor{CallerUID: c.CallerUID}
 	if c.Actor != nil {
-		a.UserID, a.Role, a.OwnerID = c.Actor.UserID, string(c.Actor.Role), c.Actor.OwnerID
+		a.UserID, a.Role, a.OwnerID, a.ImpersonatedBy = c.Actor.UserID, string(c.Actor.Role), c.Actor.OwnerID, c.Actor.ImpersonatedBy
 	}
 	b, err := json.Marshal(a)
 	if err != nil {

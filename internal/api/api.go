@@ -26,6 +26,8 @@ type Actor struct {
 	UserID  int64 `json:"user_id"`
 	Role    Role  `json:"role"`
 	OwnerID int64 `json:"owner_id,omitempty"`
+	// ImpersonatedBy is the admin acting as this owner; the audit log records both.
+	ImpersonatedBy int64 `json:"impersonated_by,omitempty"`
 }
 
 // Request is one line sent to the agent.
