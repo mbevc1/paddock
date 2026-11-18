@@ -19,7 +19,12 @@ func TestRun(t *testing.T) {
 		{name: "help", args: []string{"help"}, wantCode: 0, wantStdout: "Usage: paddock"},
 		{name: "version", args: []string{"version"}, wantCode: 0, wantStdout: "paddock dev\n"},
 		{name: "unknown command", args: []string{"bogus"}, wantCode: 2, wantStderr: `unknown command "bogus"`},
-		{name: "stub", args: []string{"agent"}, wantCode: 1, wantStderr: "paddock agent: not implemented yet"},
+		{name: "stub", args: []string{"web"}, wantCode: 1, wantStderr: "paddock web: not implemented yet"},
+		{name: "admin without subcommand", args: []string{"admin"}, wantCode: 1, wantStderr: "usage: paddock admin"},
+		{name: "admin add without username", args: []string{"admin", "add", "-user-id", "1"}, wantCode: 1, wantStderr: "usage: paddock admin"},
+		{name: "admin unknown subcommand", args: []string{"admin", "remove", "-user-id", "1"}, wantCode: 1, wantStderr: "usage: paddock admin"},
+		{name: "admin without agent", args: []string{"admin", "totp-reset", "-user-id", "1", "-socket", "/nonexistent/agent.sock"}, wantCode: 1, wantStderr: "connect to agent"},
+		{name: "agent with stray argument", args: []string{"agent", "extra"}, wantCode: 1, wantStderr: "unexpected arguments"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

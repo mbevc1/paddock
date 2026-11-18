@@ -42,15 +42,15 @@ type Server struct {
 	// Gate authorizes admin operations; nil denies them all.
 	Gate AdminGate
 	Log  *slog.Logger
+	// PeerUID identifies the caller; nil means SO_PEERCRED. Tests replace it because they
+	// cannot change their own UID.
+	PeerUID func(*net.UnixConn) (uint32, error)
 
 	jobs sync.WaitGroup
 	// jobCtx outlives connections so jobs finish after the caller hangs up.
 	jobCtx  context.Context
 	jobOnce sync.Once
 }
-
-// peerCredentials is replaced in tests, which cannot change their own UID.
-var peerCredentials = peerUID
 
 func (s *Server) initJobs(ctx context.Context) {
 	s.jobOnce.Do(func() { s.jobCtx = context.WithoutCancel(ctx) })
@@ -125,7 +125,11 @@ func (s *Server) Serve(ctx context.Context, l *net.UnixListener) error {
 func (s *Server) ServeConn(ctx context.Context, conn *net.UnixConn) {
 	defer conn.Close()
 	s.initJobs(ctx)
-	uid, err := peerCredentials(conn)
+	identify := s.PeerUID
+	if identify == nil {
+		identify = peerUID
+	}
+	uid, err := identify(conn)
 	if err != nil {
 		s.logger().Warn("peer credentials unavailable", "err", err)
 		return

@@ -25,12 +25,12 @@ type command struct {
 
 func commands() []command {
 	return []command{
-		{"agent", "run the root agent on /run/paddock/agent.sock", notImplemented},
+		{"agent", "run the root agent on /run/paddock/agent.sock", runAgent},
 		{"web", "run the web panel", notImplemented},
 		{"setup", "configure this host for Paddock", notImplemented},
 		{"teardown", "remove all vhosts and Paddock's host configuration", notImplemented},
 		{"reconcile", "re-render and re-apply everything from state.db", notImplemented},
-		{"admin", "manage admin accounts", notImplemented},
+		{"admin", "add an admin or reset an admin's TOTP secret (root)", runAdmin},
 		{"agent-notify", "notify the agent of an external event", notImplemented},
 		{"version", "print the version", printVersion},
 	}

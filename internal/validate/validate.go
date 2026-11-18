@@ -93,3 +93,13 @@ func PHPVersion(v string) error {
 	}
 	return nil
 }
+
+var usernamePattern = regexp.MustCompile(`^[a-z][a-z0-9._-]{2,31}$`)
+
+// Username checks a panel username: 3 to 32 characters, lowercase, starting with a letter.
+func Username(name string) error {
+	if !usernamePattern.MatchString(name) {
+		return invalid("username %q must be 3 to 32 lowercase letters, digits, or ._- and start with a letter", name)
+	}
+	return nil
+}

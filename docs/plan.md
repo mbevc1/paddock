@@ -652,8 +652,10 @@ Throwaway shell scripts in `poc/`, run as root on a disposable AlmaLinux 9.4+ VM
     - Acceptance: tests over a socketpair cover unknown op, malformed JSON, oversized request (limit 1 MiB), forbidden caller UID, audit content.
     - Done: besides the four classes of §4, a `root` class serves root CLI commands such as `paddock admin add` (T1.7). Audit arguments are redacted by name (`password`, `secret`, `token`, `totp`, `code`, `pem`, and per-operation extras); errors that are not protocol errors reach the caller as `internal` without detail. Admin operations are denied until T1.7 supplies the gate.
     - Deferred: wiring `paddock agent` to `Listen` and `Serve` comes with T1.7, the first task with a CLI client.
-- [ ] **T1.7 Admin identity and TOTP gate.** `admins` table, `admin.totp.verify`, admin ops require a valid unused code or an open 10-minute window for that admin; root CLI `paddock admin add` and `paddock admin totp-reset` talk to the agent over the socket as UID 0.
+- [x] **T1.7 Admin identity and TOTP gate.** `admins` table, `admin.totp.verify`, admin ops require a valid unused code or an open 10-minute window for that admin; root CLI `paddock admin add` and `paddock admin totp-reset` talk to the agent over the socket as UID 0.
     - Acceptance: replayed code rejected; expired window rejected; a user marked admin only in `web.db` cannot run admin ops; owner-class callers never can.
+    - Done: root operations are `admin.add` and `admin.totp.reset`; they return the `otpauth://` URI once and the CLI prints it. A code is single-use per time step: after a code is accepted, codes from that step or earlier fail. `paddock agent` now listens and serves these operations.
+    - Deferred: `paddock admin add` takes the admin's panel user ID; creating the matching `web.db` user belongs to the web tasks (T1.18, T1.24).
 - [ ] **T1.8 Owners and limits.** `owner.*` ops; limits and defaults from §5; limit checks shared by all ops that consume quota.
     - Acceptance: creating a vhost, database, or access account beyond the limit returns `limit_exceeded`.
 - [ ] **T1.9 PHP versions.** `php.version.install` and `php.version.remove` via dnf (Remi packages), render the FPM unit template per version, refuse removal while vhosts use the version.

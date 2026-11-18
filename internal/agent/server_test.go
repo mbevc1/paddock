@@ -55,11 +55,8 @@ func start(t *testing.T, callerUID uint32, configure func(*Server)) *harness {
 	}
 	t.Cleanup(func() { _ = store.Close() })
 
-	orig := peerCredentials
-	peerCredentials = func(*net.UnixConn) (uint32, error) { return callerUID, nil }
-	t.Cleanup(func() { peerCredentials = orig })
-
-	srv := &Server{WebUID: webUID, Registry: NewRegistry(), Store: store}
+	srv := &Server{WebUID: webUID, Registry: NewRegistry(), Store: store,
+		PeerUID: func(*net.UnixConn) (uint32, error) { return callerUID, nil }}
 	srv.RegisterJobGet()
 	if configure != nil {
 		configure(srv)

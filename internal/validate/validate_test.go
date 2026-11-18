@@ -126,3 +126,14 @@ func TestEmail(t *testing.T) {
 		assertInvalid(t, err)
 	}
 }
+
+func TestUsername(t *testing.T) {
+	for _, ok := range []string{"admin", "ops.team", "a_b-c", "abc"} {
+		if err := Username(ok); err != nil {
+			t.Errorf("Username(%q): %v", ok, err)
+		}
+	}
+	for _, bad := range append([]string{"ab", "1admin", "Admin", "ad min", strings.Repeat("a", 33), "admin\n"}, hostile...) {
+		assertInvalid(t, Username(bad))
+	}
+}
