@@ -593,6 +593,11 @@ EOF
 install_nft_rule() {
 	install -d -m 0755 "$ETC_PADDOCK"
 	cat <<'EOF' | write_if_changed "$ETC_PADDOCK/nftables.conf"
+# Declaring and deleting the table first makes nft -f replace it in one transaction: the old
+# rule stays in force until the new one is in place, and a file that fails to load changes nothing.
+table inet paddock
+delete table inet paddock
+
 table inet paddock {
     chain output {
         type filter hook output priority 0; policy accept;
@@ -600,18 +605,16 @@ table inet paddock {
     }
 }
 EOF
-	# ExecStartPre makes restarts idempotent; nft -f would otherwise append duplicate rules.
 	cat <<'EOF' | write_if_changed "$UNIT_DIR/paddock-nft.service"
 [Unit]
 Description=Paddock loopback firewall rule
 After=firewalld.service
-Wants=network-pre.target
 
 [Service]
 Type=oneshot
 RemainAfterExit=yes
-ExecStartPre=-/usr/sbin/nft delete table inet paddock
 ExecStart=/usr/sbin/nft -f /etc/paddock/nftables.conf
+ExecReload=/usr/sbin/nft -f /etc/paddock/nftables.conf
 ExecStop=/usr/sbin/nft delete table inet paddock
 
 [Install]
@@ -619,7 +622,7 @@ WantedBy=multi-user.target
 EOF
 	systemctl daemon-reload
 	systemctl enable --now paddock-nft.service
-	systemctl restart paddock-nft.service
+	systemctl reload-or-restart paddock-nft.service
 }
 
 remove_nft_rule() {

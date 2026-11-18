@@ -30,5 +30,14 @@ checks "after load"
 firewall-cmd -q --reload
 check "table inet paddock survives firewall-cmd --reload" nft list table inet paddock
 checks "after firewalld reload"
+rules() { nft list chain inet paddock output | grep -c reject; }
 systemctl restart paddock-nft.service
-check "restart leaves exactly one rule" test "$(nft list chain inet paddock output | grep -c reject)" = 1
+check "restart leaves exactly one rule" test "$(rules)" = 1
+systemctl reload paddock-nft.service
+check "reload leaves exactly one rule" test "$(rules)" = 1
+cp "$ETC_PADDOCK/nftables.conf" "$ETC_PADDOCK/nftables.conf.good"
+sed -i 's/ reject$/ rejekt/' "$ETC_PADDOCK/nftables.conf"
+refute "reload of a broken file fails" systemctl reload paddock-nft.service
+check "the old rule stays after a failed reload" test "$(rules)" = 1
+mv -f "$ETC_PADDOCK/nftables.conf.good" "$ETC_PADDOCK/nftables.conf"
+checks "after a failed reload"

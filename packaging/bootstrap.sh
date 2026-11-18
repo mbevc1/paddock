@@ -298,7 +298,7 @@ enable_services() {
 	firewall-cmd -q --permanent --add-service=http --add-service=https --add-port=8080/tcp --add-port=8443/tcp
 	firewall-cmd -q --reload
 	systemctl enable -q --now paddock-nft.service fail2ban.service
-	if changed /etc/paddock/nftables.conf; then systemctl restart paddock-nft.service; fi
+	if changed /etc/paddock/nftables.conf; then systemctl reload-or-restart paddock-nft.service; fi
 	if changed /etc/fail2ban/; then systemctl restart fail2ban.service; fi
 	apachectl configtest
 	systemctl enable -q --now httpd.service

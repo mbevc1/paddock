@@ -354,9 +354,14 @@ For every vhost user: `systemctl mask user@<uid>.service`, and a `user-<uid>.sli
 
 ### 7.6 Firewall and kernel
 
-`/etc/paddock/nftables.conf`, loaded by `paddock-nft.service` (oneshot, `After=firewalld.service`):
+`/etc/paddock/nftables.conf`, loaded by `paddock-nft.service` (oneshot, `After=firewalld.service`; `systemctl reload` loads a changed file):
 
 ```
+# Declaring and deleting the table first makes nft -f replace it in one transaction: the old
+# rule stays in force until the new one is in place, and a file that fails to load changes nothing.
+table inet paddock
+delete table inet paddock
+
 table inet paddock {
     chain output {
         type filter hook output priority 0; policy accept;

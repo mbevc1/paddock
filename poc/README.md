@@ -39,5 +39,5 @@ Run them in order after `00-setup.sh`, for example `sudo /vagrant/poc/02-sandbox
 - The backend Apache config adds `DefaultRuntimeDir` and the `combined` `LogFormat`; it loads no `httpd.conf`, which otherwise defines both.
 - Front vhosts use the `mod_ssl` self-signed certificate instead of `MDomain`: test VMs have no public DNS for ACME.
 - `useradd` runs with `-K SUB_UID_COUNT=0 -K SUB_GID_COUNT=0` and an explicit group, so vhost users get no subordinate ID ranges and their GID equals their UID.
-- `paddock-nft.service` deletes the table before loading it, so a restart does not duplicate the rule.
+- The nftables file declares and deletes its table before defining it, so `nft -f` replaces the table atomically; `paddock-nft.service` reloads it without a gap.
 - Unit templates are written to `/etc/systemd/system`; the RPM installs the backend template to `/usr/lib/systemd/system` later.

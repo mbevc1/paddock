@@ -5,8 +5,8 @@ After=firewalld.service
 [Service]
 Type=oneshot
 RemainAfterExit=yes
-ExecStartPre=-/usr/sbin/nft delete table inet paddock
 ExecStart=/usr/sbin/nft -f /etc/paddock/nftables.conf
+ExecReload=/usr/sbin/nft -f /etc/paddock/nftables.conf
 ExecStop=/usr/sbin/nft delete table inet paddock
 
 [Install]
