@@ -35,9 +35,12 @@ const (
 	// LetsEncryptStaging is the staging directory, for tests against real ACME.
 	LetsEncryptStaging = "https://acme-staging-v02.api.letsencrypt.org/directory"
 	selfSignedLife     = 10 * 365 * 24 * time.Hour
-	// RetryAfter spaces failed attempts: Let's Encrypt allows five failed validations per
-	// hostname per hour, and every visit to the panel would otherwise start one.
-	RetryAfter      = 15 * time.Minute
+	// FirstRetryAfter is the wait after a failed attempt, doubling with each further failure.
+	// Let's Encrypt allows five failed validations per hostname per hour: waits of 2, 4, 8, 16
+	// and 32 minutes fit five attempts into the first hour.
+	FirstRetryAfter = 2 * time.Minute
+	// MaxRetryAfter caps the wait between attempts.
+	MaxRetryAfter   = time.Hour
 	challengePrefix = "/.well-known/acme-challenge/"
 )
 
@@ -51,6 +54,7 @@ type Manager struct {
 	fetching atomic.Bool
 	// nextTry is the Unix time in nanoseconds before which no new attempt starts.
 	nextTry   atomic.Int64
+	failures  atomic.Int32
 	challenge http.Handler
 	now       func() time.Time
 	log       *slog.Logger
@@ -85,9 +89,12 @@ func New(c Config) *Manager {
 		Email:       c.Email,
 		RenewBefore: RenewBefore,
 	}
-	if c.DirectoryURL != "" {
-		m.auto.Client = &xacme.Client{DirectoryURL: c.DirectoryURL}
+	dir := c.DirectoryURL
+	if dir == "" {
+		dir = autocert.DefaultACMEDirectory
 	}
+	m.auto.Client = &xacme.Client{DirectoryURL: dir,
+		HTTPClient: &http.Client{Transport: httpOnly{base: http.DefaultTransport}}}
 	// autocert offers HTTP-01 only after its handler exists, and only HTTP-01 works behind the
 	// front Apache, so the handler is made before any certificate can be requested.
 	m.challenge = m.auto.HTTPHandler(http.NotFoundHandler())
@@ -125,12 +132,23 @@ func (m *Manager) fetch(hello *tls.ClientHelloInfo) {
 	go func() {
 		defer m.fetching.Store(false)
 		if _, err := m.auto.GetCertificate(&h); err != nil {
-			m.nextTry.Store(m.now().Add(RetryAfter).UnixNano())
-			m.log.Warn("obtaining the panel certificate failed", "err", err, "retry_in", RetryAfter.String())
+			wait := retryDelay(int(m.failures.Add(1)))
+			m.nextTry.Store(m.now().Add(wait).UnixNano())
+			m.log.Warn("obtaining the panel certificate failed", "err", err, "retry_in", wait.String())
 			return
 		}
+		m.failures.Store(0)
 		m.trusted.Store(true)
 	}()
+}
+
+// retryDelay is the wait after the given number of consecutive failures, counting from 1.
+func retryDelay(failures int) time.Duration {
+	d := FirstRetryAfter
+	for i := 1; i < failures && d < MaxRetryAfter; i++ {
+		d *= 2
+	}
+	return min(d, MaxRetryAfter)
 }
 
 // Trusted reports whether a Let's Encrypt certificate has been served, which turns HSTS on.

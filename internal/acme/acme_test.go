@@ -167,44 +167,78 @@ func waitFetched(t *testing.T, m *Manager) {
 	}
 }
 
-// The panel starts its first fetch before it serves challenges, so HTTP-01 must be on from New.
-func TestHTTP01OfferedFromTheFirstFetch(t *testing.T) {
+// The panel starts its first fetch before it serves challenges, so HTTP-01 must be on from New,
+// and TLS-ALPN-01, which fails behind the front Apache, must never be tried.
+func TestOnlyHTTP01TriedFromTheFirstFetch(t *testing.T) {
 	ca := newFakeCA(t)
 	m := New(Config{Hostname: "panel.example.com", CacheDir: t.TempDir(), DirectoryURL: ca.directory(), SelfSigned: selfPair(t, time.Now())})
 	m.Prefetch()
 	waitFetched(t, m)
-	if got := ca.acceptedTypes(); !slices.Contains(got, "http-01") {
-		t.Errorf("challenges accepted = %q, want http-01 among them", got)
+	if got := ca.acceptedTypes(); !slices.Equal(got, []string{"http-01"}) {
+		t.Errorf("challenges accepted = %q, want only http-01", got)
 	}
 }
 
 // autocert answers a repeat request within a minute of real time from its own record of the
 // failure, so the attempts are counted in Paddock's log rather than at the CA.
-func TestFailedFetchWaitsBeforeRetrying(t *testing.T) {
+func TestFailedFetchesBackOff(t *testing.T) {
 	ca := newFakeCA(t)
 	now := time.Date(2026, 11, 18, 22, 30, 0, 0, time.UTC)
 	var logs syncBuffer
 	m := New(Config{Hostname: "panel.example.com", CacheDir: t.TempDir(), DirectoryURL: ca.directory(),
 		SelfSigned: selfPair(t, now), Now: func() time.Time { return now }, Log: slog.New(slog.NewTextHandler(&logs, nil))})
 	attempts := func() int { return strings.Count(logs.String(), "obtaining the panel certificate failed") }
-	hello := &tls.ClientHelloInfo{ServerName: "panel.example.com"}
+	visit := func() {
+		_, _ = m.GetCertificate(&tls.ClientHelloInfo{ServerName: "panel.example.com"})
+		waitFetched(t, m)
+	}
 
-	_, _ = m.GetCertificate(hello)
-	waitFetched(t, m)
+	visit()
 	if attempts() != 1 || ca.requestCount() == 0 {
 		t.Fatalf("first visit: %d failed attempts, %d CA requests", attempts(), ca.requestCount())
 	}
-	now = now.Add(RetryAfter - time.Minute)
-	_, _ = m.GetCertificate(hello)
-	waitFetched(t, m)
-	if attempts() != 1 {
-		t.Errorf("a visit %v after a failure started another attempt", RetryAfter-time.Minute)
+	for i, wait := range []time.Duration{2, 4, 8, 16, 32, 60, 60} {
+		wait *= time.Minute
+		now = now.Add(wait - time.Second)
+		visit()
+		if attempts() != i+1 {
+			t.Fatalf("a visit %v after failure %d started another attempt", wait-time.Second, i+1)
+		}
+		now = now.Add(time.Second)
+		visit()
+		if attempts() != i+2 {
+			t.Fatalf("a visit %v after failure %d started no attempt", wait, i+1)
+		}
 	}
-	now = now.Add(2 * time.Minute)
-	_, _ = m.GetCertificate(hello)
-	waitFetched(t, m)
-	if attempts() != 2 {
-		t.Errorf("a visit %v after a failure started %d attempts, want 1", RetryAfter+time.Minute, attempts()-1)
+}
+
+func TestRetryDelay(t *testing.T) {
+	for failures, want := range map[int]time.Duration{1: 2 * time.Minute, 2: 4 * time.Minute, 5: 32 * time.Minute,
+		6: time.Hour, 1000: time.Hour} {
+		if got := retryDelay(failures); got != want {
+			t.Errorf("retryDelay(%d) = %v, want %v", failures, got, want)
+		}
+	}
+}
+
+// Let's Encrypt allows five failed validations per hostname per hour.
+func TestRetriesStayWithinTheFailedValidationLimit(t *testing.T) {
+	var at []time.Duration
+	var now time.Duration
+	for n := 1; now < 48*time.Hour; n++ {
+		at = append(at, now)
+		now += retryDelay(n)
+	}
+	for i := range at {
+		in := 0
+		for _, a := range at[i:] {
+			if a-at[i] < time.Hour {
+				in++
+			}
+		}
+		if in > 5 {
+			t.Fatalf("%d attempts in the hour from %v", in, at[i])
+		}
 	}
 }
 
