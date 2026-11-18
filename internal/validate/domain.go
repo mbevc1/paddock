@@ -2,6 +2,8 @@ package validate
 
 import (
 	"strings"
+
+	"golang.org/x/net/idna"
 )
 
 const (
@@ -9,22 +11,28 @@ const (
 	maxLabelLength  = 63
 )
 
-// Domain checks a host name and returns it in lowercase ASCII. Wildcards, trailing dots,
-// IP addresses, and single-label names are rejected. Internationalized names must arrive
-// as A-labels ("xn--..."): Unicode input is rejected until IDNA conversion is available.
+// maxDomainInput bounds the raw input before IDNA mapping.
+const maxDomainInput = 1024
+
+// Domain checks a host name and returns its lowercase ASCII form. Internationalized names
+// are converted with the UTS #46 lookup profile (IDNA 2008, non-transitional), so "Bücher.example"
+// becomes "xn--bcher-kva.example". Wildcards, trailing dots, IP addresses, and single-label
+// names are rejected.
 func Domain(name string) (string, error) {
 	if name == "" {
 		return "", invalid("domain name is empty")
 	}
-	if len(name) > maxDomainLength {
+	if len(name) > maxDomainInput {
+		return "", invalid("domain name longer than %d bytes", maxDomainInput)
+	}
+	ascii, err := idna.Lookup.ToASCII(name)
+	if err != nil {
+		return "", invalid("domain name %q is not a valid IDNA name", name)
+	}
+	lower := strings.ToLower(ascii)
+	if len(lower) > maxDomainLength {
 		return "", invalid("domain name longer than %d characters", maxDomainLength)
 	}
-	for i := 0; i < len(name); i++ {
-		if name[i] >= 0x80 {
-			return "", invalid("domain name %q must be ASCII; give internationalized names as xn-- labels", name)
-		}
-	}
-	lower := strings.ToLower(name)
 	labels := strings.Split(lower, ".")
 	if len(labels) < 2 {
 		return "", invalid("domain name %q needs at least two labels", name)

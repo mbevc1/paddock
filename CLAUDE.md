@@ -37,7 +37,8 @@ test/integration/       tests that need a real AlmaLinux VM
 
 Standard library first. Only these modules may appear in `go.mod`:
 
-- `golang.org/x/crypto` (argon2, acme)
+- `golang.org/x/crypto` (argon2, acme, ssh key parsing)
+- `golang.org/x/net` (idna: internationalized domain names)
 - `golang.org/x/sys` (unix: peer credentials, mounts, xattrs)
 - `modernc.org/sqlite` (pure Go SQLite)
 

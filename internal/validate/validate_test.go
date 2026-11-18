@@ -93,6 +93,10 @@ func TestDomain(t *testing.T) {
 		"Shop.Example.COM":               "shop.example.com",
 		"a-b.example.co.uk":              "a-b.example.co.uk",
 		"xn--bcher-kva.example":          "xn--bcher-kva.example",
+		"bücher.example":                 "xn--bcher-kva.example",
+		"Bücher.Example":                 "xn--bcher-kva.example",
+		"ｅｘａｍｐｌｅ.com":                    "example.com",
+		"münchen.de":                     "xn--mnchen-3ya.de",
 		"123.example.com":                "123.example.com",
 		strings.Repeat("a", 63) + ".com": strings.Repeat("a", 63) + ".com",
 	}
@@ -105,7 +109,8 @@ func TestDomain(t *testing.T) {
 	invalidDomains := []string{
 		"", "localhost", "*.example.com", "example.com.", ".example.com", "a..example.com",
 		"-a.example.com", "a-.example.com", "ab--c.example.com", "under_score.example.com",
-		"bücher.example", "192.168.1.1", "example.com/../etc", "example.com\n", "exa\x00mple.com",
+		"192.168.1.1", "a.example。", "xn--zz.example", "ab\u05d0.example", "a\u0000b.example",
+		strings.Repeat("ü", 600) + ".example", "example.com/../etc", "example.com\n", "exa\x00mple.com",
 		"example.com;id", "$(id).example.com", "exa mple.com",
 		strings.Repeat("a", 64) + ".com",
 		strings.Repeat(strings.Repeat("a", 60)+".", 5) + "com",
