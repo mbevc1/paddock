@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Prepares an AlmaLinux 9.4+ host for Paddock and installs it (§14.3). Runs as root; safe to rerun.
-# Usage: bootstrap.sh --hostname NAME [--www-device DEV [--format]] [--email ADDR] [--admin NAME]
-#                     [--rpm FILE]
+# Usage: bootstrap.sh --hostname NAME [--www-device DEV [--format] | --www-file SIZE]
+#                     [--email ADDR] [--admin NAME] [--rpm FILE]
 set -euo pipefail
 
 # The release workflow replaces @OWNER@; --rpm installs a local package instead of the repository.
@@ -16,6 +16,8 @@ readonly REMI_FINGERPRINTS=(
 )
 
 readonly WWW=/srv/www
+# --www-file keeps /srv/www in this XFS image, loop-mounted, instead of on its own disk.
+readonly WWW_IMAGE=/var/lib/paddock/www.img
 readonly JAIL=/srv/jail
 readonly MARKER=$WWW/.paddock
 readonly SHARE=/usr/share/paddock/etc
@@ -34,6 +36,7 @@ readonly LOGIN_DEFS=/etc/login.defs
 HOSTNAME_ARG=
 DEVICE=
 FORMAT=no
+WWW_FILE=
 EMAIL=
 ADMIN='admin'
 LOCAL_RPM=
@@ -68,6 +71,12 @@ valid_email() {
 valid_admin() { [[ $1 =~ ^[a-z][a-z0-9_-]{0,31}$ ]]; }
 
 valid_device() { [[ $1 =~ ^/dev/[A-Za-z0-9/_-]+$ && $1 != *..* ]]; }
+
+# valid_size accepts whole gibibytes or tebibytes, as fallocate reads them: 20G, 1T.
+valid_size() { [[ $1 =~ ^[1-9][0-9]{0,5}[GT]$ ]]; }
+
+# fstab_has_www succeeds when an fstab file already mounts something on /srv/www.
+fstab_has_www() { grep -qE "^[^#[:space:]]+[[:space:]]+${WWW}[[:space:]]" "${1:-/etc/fstab}"; }
 
 # version_at_least returns true when $1 >= $2 in dotted numeric order.
 version_at_least() { [[ $(printf '%s\n' "$2" "$1" | sort -V | head -1) == "$2" ]]; }
@@ -121,6 +130,7 @@ parse_args() {
 		--hostname) HOSTNAME_ARG=${2:-} && shift 2 ;;
 		--www-device) DEVICE=${2:-} && shift 2 ;;
 		--format) FORMAT=yes && shift ;;
+		--www-file) WWW_FILE=${2:-} && shift 2 ;;
 		--email) EMAIL=${2:-} && shift 2 ;;
 		--admin) ADMIN=${2:-} && shift 2 ;;
 		--rpm) LOCAL_RPM=${2:-} && shift 2 ;;
@@ -133,6 +143,9 @@ parse_args() {
 	[[ -z $EMAIL ]] || valid_email "$EMAIL" || die "--email is not a valid address"
 	valid_admin "$ADMIN" || die "--admin must match ^[a-z][a-z0-9_-]{0,31}$"
 	[[ -z $DEVICE ]] || valid_device "$DEVICE" || die "--www-device must be a /dev path"
+	[[ -z $WWW_FILE ]] || valid_size "$WWW_FILE" || die "--www-file takes a size in G or T, such as 20G"
+	[[ -z $DEVICE || -z $WWW_FILE ]] || die "give --www-device or --www-file, not both"
+	[[ $FORMAT == no || -n $DEVICE ]] || die "--format applies to --www-device only"
 	[[ -z $LOCAL_RPM || -f $LOCAL_RPM ]] || die "--rpm $LOCAL_RPM does not exist"
 	if [[ -z $LOCAL_RPM && $OWNER == @*@ ]]; then
 		die "this copy has no repository owner; use the release asset or give --rpm"
@@ -279,26 +292,55 @@ check_www() {
 	[[ ${#others[@]} -eq 0 ]] || die "$WWW holds unexpected entries: ${others[*]}"
 }
 
+# add_www_mount records how to mount /srv/www unless fstab already does.
+add_www_mount() {
+	fstab_has_www && return
+	echo "$1" >>/etc/fstab
+	systemctl daemon-reload
+}
+
+prepare_www_device() {
+	[[ -b $DEVICE ]] || die "$DEVICE is not a block device"
+	local fstype uuid
+	fstype=$(blkid -o value -s TYPE "$DEVICE" || true)
+	if [[ -z $fstype ]]; then
+		[[ $FORMAT == yes ]] || die "$DEVICE is empty; rerun with --format to create XFS on it"
+		mkfs.xfs -q "$DEVICE"
+	elif [[ $fstype != xfs ]]; then
+		die "$DEVICE holds $fstype, not XFS; refusing to format it"
+	fi
+	uuid=$(blkid -o value -s UUID "$DEVICE")
+	[[ $uuid =~ ^[0-9a-fA-F-]{8,64}$ ]] || die "$DEVICE has no usable UUID"
+	add_www_mount "UUID=$uuid $WWW xfs prjquota 0 0"
+}
+
+# prepare_www_file creates the image on the first run and reuses it after; it never reformats one.
+prepare_www_file() {
+	if [[ ! -e $WWW_IMAGE ]]; then
+		install -d -m 0755 "$(dirname "$WWW_IMAGE")"
+		fallocate -l "$WWW_FILE" "$WWW_IMAGE" || {
+			rm -f "$WWW_IMAGE"
+			die "cannot allocate $WWW_FILE for $WWW_IMAGE; free space on its file system or choose a smaller size"
+		}
+		chmod 0600 "$WWW_IMAGE"
+		mkfs.xfs -q "$WWW_IMAGE"
+	elif [[ $(blkid -o value -s TYPE "$WWW_IMAGE" || true) != xfs ]]; then
+		die "$WWW_IMAGE exists but holds no XFS file system; refusing to format it"
+	fi
+	add_www_mount "$WWW_IMAGE $WWW xfs loop,prjquota 0 0"
+}
+
 prepare_www() {
 	step "preparing $WWW"
 	install -d -m 0711 "$WWW"
 	if ! mountpoint -q "$WWW"; then
 		check_www
-		[[ -n $DEVICE ]] || die "$WWW is not mounted; give --www-device"
-		[[ -b $DEVICE ]] || die "$DEVICE is not a block device"
-		local fstype uuid
-		fstype=$(blkid -o value -s TYPE "$DEVICE" || true)
-		if [[ -z $fstype ]]; then
-			[[ $FORMAT == yes ]] || die "$DEVICE is empty; rerun with --format to create XFS on it"
-			mkfs.xfs -q "$DEVICE"
-		elif [[ $fstype != xfs ]]; then
-			die "$DEVICE holds $fstype, not XFS; refusing to format it"
-		fi
-		uuid=$(blkid -o value -s UUID "$DEVICE")
-		[[ $uuid =~ ^[0-9a-fA-F-]{8,64}$ ]] || die "$DEVICE has no usable UUID"
-		if ! grep -qE "^[^#[:space:]]+[[:space:]]+${WWW}[[:space:]]" /etc/fstab; then
-			echo "UUID=$uuid $WWW xfs prjquota 0 0" >>/etc/fstab
-			systemctl daemon-reload
+		if [[ -n $DEVICE ]]; then
+			prepare_www_device
+		elif [[ -n $WWW_FILE ]]; then
+			prepare_www_file
+		else
+			die "$WWW is not mounted; give --www-device or --www-file"
 		fi
 		mount "$WWW"
 	fi
