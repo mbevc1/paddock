@@ -42,15 +42,14 @@ jobs:
             scripts/build-rpm.sh "$version" "$arch" "$OWNER"
           done
       - run: rpmlint -r packaging/paddock.rpmlintrc dist/*.rpm
-      - name: Checksums
+      - name: Bootstrap script and checksums
+        env:
+          OWNER: ${{ github.repository_owner }}
         run: |
+          sed "s/^readonly OWNER='@OWNER@'$/readonly OWNER='$OWNER'/" packaging/bootstrap.sh > dist/bootstrap.sh
+          grep -qxF "readonly OWNER='$OWNER'" dist/bootstrap.sh
           cd dist
-          files=(*.rpm)
-          if [[ -f ../packaging/bootstrap.sh ]]; then
-            cp ../packaging/bootstrap.sh .
-            files+=(bootstrap.sh)
-          fi
-          sha256sum -- "${files[@]}" > SHA256SUMS
+          sha256sum -- *.rpm bootstrap.sh > SHA256SUMS
           cat SHA256SUMS
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:

@@ -18,8 +18,9 @@ else
 	echo "golangci-lint not installed; skipping lint" >&2
 fi
 if command -v shellcheck >/dev/null; then
-	shellcheck -x scripts/*.sh poc/*.sh
+	shellcheck -x scripts/*.sh poc/*.sh packaging/*.sh
 else
 	echo "shellcheck not installed; skipping shell lint" >&2
 fi
 go test -race ./...
+packaging/bootstrap_test.sh

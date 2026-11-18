@@ -528,7 +528,7 @@ sha256sum -c --ignore-missing SHA256SUMS
 sudo bash bootstrap.sh --hostname panel.example.com --www-device /dev/vdb --format
 ```
 
-Options: `--hostname` (required), `--www-device` (needed until `/srv/www` is mounted), `--format` (create XFS on an empty device), `--email` (ACME contact, optional), `--admin` (first admin's username, default `admin`). Rerunning the script is safe; it changes nothing that is already in place.
+Options: `--hostname` (required), `--www-device` (needed until `/srv/www` is mounted), `--format` (create XFS on an empty device), `--email` (ACME contact, optional), `--admin` (first admin's username, default `admin`), `--rpm` (install a local Paddock RPM instead of the repository, for testing a build before it is released). Rerunning the script is safe; it changes nothing that is already in place.
 
 1. Check OS (EL 9.4+), SELinux enforcing, root.
 2. `dnf install epel-release`; install `remi-release-9` after checking its GPG key fingerprint against the value pinned in the script (EPEL and Remi packages stay signature-checked).
@@ -721,6 +721,8 @@ Throwaway shell scripts in `poc/`, run as root on a disposable AlmaLinux 9.4+ VM
     - Choices to confirm: `paddock-nft` also gets `%systemd_post` and `%systemd_preun` but is not restarted on upgrade; `rpmlint` filters for deliberate findings (private state directories, the static binary, no signature until T2.9) live in `packaging/paddock.rpmlintrc`; `/run/paddock` is `1775 root:paddock`, so the web user can create its sockets there but cannot replace `agent.sock`.
 - [ ] **T1.26 Bootstrap.** `packaging/bootstrap.sh` per §14.3 with the pinned Remi key fingerprint.
     - Acceptance: on a fresh VM, bootstrap completes, prints credentials, and the panel creates a vhost serving a PHP application; rerunning bootstrap changes nothing; a tampered Remi key fingerprint aborts the run.
+    - Status: `packaging/bootstrap.sh` runs §14.3 steps 1 to 12 and ends with `paddock setup`, which prints the first admin's credentials. It writes a config only when its content differs, so a rerun changes nothing and restarts only services whose config changed. The release workflow fills in the repository owner; a copy without one needs `--rpm`. Remi trust: the script imports only keys inside `remi-release-9` whose primary fingerprint is pinned, then requires `rpm --checksig` to pass. `packaging/bootstrap_test.sh` sources the script and tests the validators, the port parser, the config writer (content, idempotence, keep marker), and the fingerprint check against a generated key; it runs in `scripts/check.sh` and CI.
+    - Open: the Remi fingerprint list is empty, so `install_remi` aborts until a fingerprint checked against https://rpms.remirepo.net/ is pinned (the development session could not reach that site). The VM run is still to do.
 - [ ] **T1.27 Integration suite and red team.** Collect integration tests; port `poc/90-redteam.sh` to run against panel-created vhosts.
     - Acceptance: full suite passes on a fresh VM; red team finds no cross-tenant access.
 

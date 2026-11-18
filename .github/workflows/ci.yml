@@ -50,7 +50,8 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - run: shellcheck -x scripts/*.sh poc/*.sh
+      - run: shellcheck -x scripts/*.sh poc/*.sh packaging/*.sh
+      - run: packaging/bootstrap_test.sh
 
   rpm:
     runs-on: ubuntu-latest
