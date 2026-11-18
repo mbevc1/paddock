@@ -1,0 +1,16 @@
+# Commit message rules from CLAUDE.md, checked on pull requests by
+# .github/workflows/conventional-commits.yaml.
+extends:
+  - "@commitlint/config-conventional"
+rules:
+  type-enum:
+    - 2
+    - always
+    - [feat, fix, docs, test, refactor, perf, build, ci, chore, revert]
+  scope-case: [2, always, lower-case]
+  subject-case: [2, never, [sentence-case, start-case, pascal-case, upper-case]]
+  # Subjects stay under 72 characters; longer ones warn so Dependabot's do not fail.
+  header-max-length: [1, always, 71]
+  # Dependabot's bodies carry long URLs and tables.
+  body-max-line-length: [0]
+  footer-max-line-length: [0]

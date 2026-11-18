@@ -1,7 +1,8 @@
 name: Conventional Commits
 
 # Squash merges take the pull request title as the commit subject and other merges keep each
-# commit, so both must follow Conventional Commits as CLAUDE.md defines them.
+# commit, so both must follow Conventional Commits as CLAUDE.md defines them. The commit rules
+# live in .commitlintrc.yaml; keep the title types below in step with its type-enum.
 on:
   pull_request:
     types: [opened, edited, synchronize, reopened]
@@ -16,17 +17,26 @@ jobs:
   title:
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      pull-requests: read
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-          sparse-checkout: scripts/conventional.sh
-          sparse-checkout-cone-mode: false
-      - name: Check the title
+      - uses: amannn/action-semantic-pull-request@2252a14e810aa9b85c2d560bd7070c802206ecf6 # v6.1.2
         env:
-          TITLE: ${{ github.event.pull_request.title }}
-        run: printf '%s\n' "$TITLE" | scripts/conventional.sh title
+          GITHUB_TOKEN: ${{ github.token }}
+        with:
+          types: |
+            feat
+            fix
+            docs
+            test
+            refactor
+            perf
+            build
+            ci
+            chore
+            revert
+          subjectPattern: ^(?![A-Z]).+$
+          subjectPatternError: |
+            The summary "{subject}" in "{title}" must start in lowercase.
 
   commits:
     # Editing the title or description changes no commit.
@@ -39,12 +49,6 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-          sparse-checkout: scripts/conventional.sh
-          sparse-checkout-cone-mode: false
-      - name: Check every commit
-        env:
-          GH_TOKEN: ${{ github.token }}
-          PR: ${{ github.event.pull_request.number }}
-        run: |
-          gh api --paginate "repos/$GITHUB_REPOSITORY/pulls/$PR/commits" \
-            --jq '.[].commit.message | split("\n")[0]' | scripts/conventional.sh commit
+      - uses: wagoid/commitlint-github-action@b948419dd99f3fd78a6548d48f94e3df7f6bf3ed # v6.2.1
+        with:
+          configFile: .commitlintrc.yaml
