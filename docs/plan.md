@@ -639,7 +639,7 @@ Throwaway shell scripts in `poc/`, run as root on a disposable AlmaLinux 9.4+ VM
 - [x] **T1.2 Validators.** `internal/validate`: vhost ID, owner ID, domain names (IDNA to ASCII, no wildcards), DB and DB-user suffixes, PHP versions, SSH public keys (`ssh-ed25519`, `ecdsa-sha2-*`, `ssh-rsa` with at least 3072 bits), path containment helper that rejects symlinks.
     - Acceptance: table-driven tests including hostile inputs (`../`, NUL bytes, newline injection, uppercase, overlong names, shell metacharacters).
     - Deferred: IDNA conversion of Unicode domain names. The standard library has no IDNA and `golang.org/x/net/idna` is not an allowed module, so `Domain` accepts ASCII names and `xn--` A-labels and rejects Unicode input until the owner decides on the dependency.
-- [ ] **T1.3 System runner.** `internal/system.Runner` interface with `Run(ctx, argv []string, opts)`; real implementation via `os/exec` with a clean environment; fake implementation that records calls and returns scripted results.
+- [x] **T1.3 System runner.** `internal/system.Runner` interface with `Run(ctx, argv []string, opts)`; real implementation via `os/exec` with a clean environment; fake implementation that records calls and returns scripted results.
     - Acceptance: no package outside `internal/system` imports `os/exec` (enforced by a test that scans imports).
 - [ ] **T1.4 State store.** `internal/state` with embedded migrations for the tables in §13 and typed accessors.
     - Acceptance: migrations apply to an empty file and are idempotent; accessor tests run against a temp database.
