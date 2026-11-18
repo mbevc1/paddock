@@ -29,7 +29,7 @@ func commands() []command {
 		{"web", "run the web panel", notImplemented},
 		{"setup", "configure this host for Paddock", notImplemented},
 		{"teardown", "remove all vhosts and Paddock's host configuration", notImplemented},
-		{"reconcile", "re-render and re-apply everything from state.db", notImplemented},
+		{"reconcile", "re-render and re-apply everything from state.db (root)", runReconcile},
 		{"admin", "add an admin or reset an admin's TOTP secret (root)", runAdmin},
 		{"agent-notify", "tell the agent mod_md renewed certificates (MDNotifyCmd)", runAgentNotify},
 		{"version", "print the version", printVersion},

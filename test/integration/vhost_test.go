@@ -20,6 +20,7 @@ import (
 
 	"github.com/mbevc1/paddock/internal/agent/ops"
 	"github.com/mbevc1/paddock/internal/state"
+	"github.com/mbevc1/paddock/internal/system"
 )
 
 // frontGetPath fetches a path from the front Apache over HTTPS on this host.
@@ -330,5 +331,32 @@ func TestQuotaRevocation(t *testing.T) {
 	}
 	if got := sql("INSERT INTO t VALUES (3)"); got != "OK" {
 		t.Errorf("insert after cleanup: %q", got)
+	}
+}
+
+func TestReconcileRestoresVhost(t *testing.T) {
+	h := newAgent(t)
+	ctx := context.Background()
+	id, domain := newVhost(t, h, "8.3")
+	for _, p := range []string{
+		"/etc/paddock/httpd/" + id + ".conf",
+		"/etc/paddock/fpm/" + id + ".conf",
+		"/etc/httpd/conf.d/paddock-" + id + ".conf",
+	} {
+		if err := os.Remove(p); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, unit := range []string{"paddock-httpd@" + id + ".service", "paddock-php83-fpm@" + id + ".service"} {
+		if _, err := (system.Exec{}).Run(ctx, []string{"/usr/bin/systemctl", "stop", unit}, system.Opts{}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	res, err := ops.Reconcile(ctx, h.store, h.host)
+	if err != nil || len(res.Errors) != 0 {
+		t.Fatalf("Reconcile = %+v, %v", res, err)
+	}
+	if status, body := frontGet(t, domain); status != http.StatusOK || body != "8.3" {
+		t.Errorf("after reconcile: %d %q", status, body)
 	}
 }
