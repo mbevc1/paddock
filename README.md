@@ -4,7 +4,7 @@ Paddock is a simple web hosting panel for AlmaLinux 9.4+. It runs PHP sites in i
 
 ## Status
 
-Early development; nothing here is ready to install. `docs/plan.md` holds the specification (part 1) and the task list (part 2).
+Early development; nothing here is ready to install. The project page with install instructions and the dnf repository is at https://mbevc1.github.io/paddock/. `docs/plan.md` holds the specification (part 1) and the task list (part 2).
 
 - **Phase 0:** proof-of-concept scripts in `poc/` check the design on a VM. Results go into `docs/poc-results.md`.
 - **Phase 1:** the `paddock` binary. Subcommands exist as stubs.
