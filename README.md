@@ -22,7 +22,7 @@ Early development. Packages are not signed yet, so install Paddock on disposable
 
 ## Install
 
-On a fresh AlmaLinux 9.4+ server with SELinux enforcing and a spare disk for `/srv/www`, run the bootstrap script of a [release](https://github.com/mbevc1/paddock/releases):
+On a fresh AlmaLinux 9.4+ server with SELinux enforcing and a spare disk for `/srv/www` (or `--www-file 20G` to use a disk image instead), run the bootstrap script of a [release](https://github.com/mbevc1/paddock/releases):
 
 ```bash
 VER=v0.0.1

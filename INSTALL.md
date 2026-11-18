@@ -8,7 +8,10 @@ Packages are not signed yet (planned as task T2.9), so install Paddock on dispos
 
 - **Operating system:** AlmaLinux 9.4 or later, x86_64 or aarch64, freshly installed, with root access.
 - **SELinux:** enforcing (the AlmaLinux default).
-- **Disk for sites:** a spare disk or partition for `/srv/www`. Bootstrap creates an XFS file system on it with project quotas, which enforce each vhost's disk limit. A `/srv/www` that is already XFS and mounted with `prjquota` works too.
+- **Disk for sites:** `/srv/www` must be its own XFS file system with project quotas, which enforce each vhost's disk limit. Any of these works:
+  - a spare disk, partition or LVM volume (`--www-device`), which bootstrap formats when empty;
+  - a disk image on the root file system (`--www-file`), loop-mounted; simplest on test machines, with some I/O overhead;
+  - a `/srv/www` that is already XFS and mounted with `prjquota`.
 - **Free ports:** 80 and 443 for sites, 8443 for the panel and 8080 for its redirect, and 81 on loopback for internal use. Only Apache or Paddock may hold them.
 - **Panel hostname:** a DNS name that resolves to the server. With a public name, the panel obtains a Let's Encrypt certificate on its own; otherwise it keeps a self-signed one.
 - **Network:** outbound HTTPS to GitHub, the AlmaLinux mirrors, EPEL and Remi's repository.
@@ -28,6 +31,12 @@ sudo bash bootstrap.sh --hostname panel.example.com --www-device /dev/vdb --form
 
 At the end it prints the first admin's username, password and TOTP URI, the panel URL and the panel certificate's fingerprint. The password and TOTP URI are shown only once, so store them before closing the terminal.
 
+Without a spare disk, keep `/srv/www` in a disk image instead, for example 20 GB:
+
+```bash
+sudo bash bootstrap.sh --hostname panel.example.com --www-file 20G
+```
+
 ### Options
 
 | Option | Meaning |
@@ -35,6 +44,7 @@ At the end it prints the first admin's username, password and TOTP URI, the pane
 | `--hostname NAME` | Panel hostname (required). |
 | `--www-device DEV` | Block device for `/srv/www`; needed until `/srv/www` is mounted. |
 | `--format` | Create XFS on `--www-device` when it is empty. A device holding a file system is never formatted. |
+| `--www-file SIZE` | Keep `/srv/www` in an XFS image of that size, such as `20G`, at `/var/lib/paddock/www.img`, instead of on its own device. Reruns reuse the image. |
 | `--email ADDR` | Contact address for Let's Encrypt certificates (optional). |
 | `--admin NAME` | Username of the first admin (default `admin`). |
 | `--rpm FILE` | Install a local `paddock` RPM instead of the one from the repository. |
@@ -44,7 +54,7 @@ At the end it prints the first admin's username, password and TOTP URI, the pane
 1. Checks the OS, SELinux and root, and that no subordinate ID range overlaps the vhost IDs.
 2. Adds EPEL, Remi's repository (its signing key is pinned in the script) and Paddock's repository, enables MariaDB 10.11, and installs `paddock` and `firewalld`.
 3. Checks that the ports above are free.
-4. Prepares `/srv/www` with project quotas and `/srv/jail` for SFTP and shell accounts.
+4. Prepares `/srv/www` with project quotas, on the device or in the image, adds it to `/etc/fstab`, and creates `/srv/jail` for SFTP and shell accounts.
 5. Installs host configuration: sshd, sysctl, nftables, fail2ban, MariaDB and front Apache settings. Files containing the line `# paddock: keep` are left alone.
 6. Starts MariaDB, opens the firewall ports, and enables `httpd`, `mariadb`, `fail2ban` and the loopback firewall rule.
 7. Runs `paddock setup`, which creates Paddock's databases and the first admin, then starts `paddock-agent` and `paddock-web`.

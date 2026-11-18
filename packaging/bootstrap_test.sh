@@ -31,6 +31,27 @@ for a in "" Admin "1admin" "ad min" "admin;rm"; do reject valid_admin "$a"; done
 expect valid_device /dev/vdb
 expect valid_device /dev/disk/by-id/virtio-www
 for d in vdb /dev/../etc/passwd "/dev/vdb x" /tmp/x; do reject valid_device "$d"; done
+for size in 20G 1T 999999G; do expect valid_size "$size"; done
+for size in "" 0G 20 20M 20g 1.5G -5G "20G;id" 1000000G; do reject valid_size "$size"; done
+
+printf 'UUID=1 / xfs defaults 0 0\n' >"$WORK/fstab"
+reject fstab_has_www "$WORK/fstab"
+printf '# /dev/vdb /srv/www xfs prjquota 0 0\n' >>"$WORK/fstab"
+reject fstab_has_www "$WORK/fstab"
+printf '/var/lib/paddock/www.img /srv/www xfs loop,prjquota 0 0\n' >>"$WORK/fstab"
+expect fstab_has_www "$WORK/fstab"
+printf 'UUID=2 /srv/www-old xfs defaults 0 0\n' >"$WORK/fstab2"
+reject fstab_has_www "$WORK/fstab2"
+
+: >"$WORK/local.rpm"
+args_fail() { (parse_args --hostname panel.example.com --rpm "$WORK/local.rpm" "$@") >/dev/null 2>&1 && fail "parse_args accepted: $*"; }
+args_ok() { (parse_args --hostname panel.example.com --rpm "$WORK/local.rpm" "$@") >/dev/null 2>&1 || fail "parse_args refused: $*"; }
+args_ok --www-file 20G
+args_ok --www-device /dev/vdb --format
+args_fail --www-device /dev/vdb --www-file 20G
+args_fail --www-file 20G --format
+args_fail --www-file 20MB
+
 expect version_at_least 9.4 9.4
 expect version_at_least 9.10 9.4
 reject version_at_least 9.3 9.4
