@@ -26,7 +26,7 @@ MDRequireHttps permanent
 {{- else}}
     ProxyPreserveHost On
     RequestHeader set X-Forwarded-Proto https
-    ProxyPass        / http://{{.Address}}:81/
+    ProxyPass        / http://{{.Address}}:81/ timeout=310
     ProxyPassReverse / http://{{.Address}}:81/
 {{- end}}
 </VirtualHost>

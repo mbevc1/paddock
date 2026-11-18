@@ -13,6 +13,6 @@ MDRequireHttps permanent
     SSLEngine on
     ProxyPreserveHost On
     RequestHeader set X-Forwarded-Proto https
-    ProxyPass        / http://127.64.0.12:81/
+    ProxyPass        / http://127.64.0.12:81/ timeout=310
     ProxyPassReverse / http://127.64.0.12:81/
 </VirtualHost>

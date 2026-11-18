@@ -243,6 +243,7 @@ SetEnvIf X-Forwarded-Proto https HTTPS=on
     AllowOverride AuthConfig FileInfo Indexes Limit Options=Indexes,SymLinksIfOwnerMatch
     Require all granted
 </Directory>
+ProxyTimeout 305
 <FilesMatch "\.php$">
     SetHandler "proxy:unix:/run/paddock/fpm/v00012/php.sock|fcgi://localhost"
 </FilesMatch>
@@ -266,6 +267,7 @@ pm = ondemand
 pm.max_children = 10
 pm.process_idle_timeout = 30s
 pm.max_requests = 500
+request_terminate_timeout = 300s
 php_admin_value[open_basedir] = /srv/www/v00012/
 php_admin_value[upload_tmp_dir] = /srv/www/v00012/tmp
 php_admin_value[sys_temp_dir] = /srv/www/v00012/tmp
@@ -300,10 +302,12 @@ MDRequireHttps permanent
     SSLEngine on
     ProxyPreserveHost On
     RequestHeader set X-Forwarded-Proto https
-    ProxyPass        / http://127.64.0.12:81/
+    ProxyPass        / http://127.64.0.12:81/ timeout=310
     ProxyPassReverse / http://127.64.0.12:81/
 </VirtualHost>
 ```
+
+Request timeouts nest so the innermost layer ends a slow request first: PHP-FPM stops a script after 300 s of wall-clock time (`request_terminate_timeout`; PHP's own `max_execution_time` counts only CPU time), the backend waits 305 s for FPM (`ProxyTimeout`), and the front waits 310 s for the backend (`timeout=` on `ProxyPass`). A visitor whose request runs out of time gets a 504 only once PHP has already stopped, never while it keeps running.
 
 Global front settings in `/etc/httpd/conf.d/paddock-00-global.conf`: `MDContactEmail`, `MDNotifyCmd /usr/bin/paddock agent-notify md-renewed`, `AllowOverride None` everywhere, no `DocumentRoot` under `/srv/www`, `mod_status` disabled. Uploaded custom certificates replace `MDomain` with `SSLCertificateFile` and `SSLCertificateKeyFile` stored under `/etc/pki/paddock/`.
 

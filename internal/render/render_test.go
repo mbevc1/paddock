@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -257,5 +258,29 @@ func TestDeployedBackendUnitMatches(t *testing.T) {
 	}
 	if string(got) != string(want.Data) {
 		t.Errorf("deploy/systemd/paddock-httpd@.service differs from render.BackendUnit:\n%s", got)
+	}
+}
+
+// TestTimeoutsNest keeps each layer waiting longer than the one inside it, so PHP-FPM ends a
+// slow request before either proxy gives up on it.
+func TestTimeoutsNest(t *testing.T) {
+	files := goldenFiles(t)
+	seconds := func(name, pattern string) int {
+		t.Helper()
+		m := regexp.MustCompile(pattern).FindStringSubmatch(string(files[name].Data))
+		if m == nil {
+			t.Fatalf("%s has no %s", name, pattern)
+		}
+		n, err := strconv.Atoi(m[1])
+		if err != nil {
+			t.Fatal(err)
+		}
+		return n
+	}
+	fpm := seconds("fpm", `(?m)^request_terminate_timeout = (\d+)s$`)
+	backend := seconds("backend-httpd", `(?m)^ProxyTimeout (\d+)$`)
+	front := seconds("front-acme", `ProxyPass +/ \S+ timeout=(\d+)\n`)
+	if fpm >= backend || backend >= front {
+		t.Errorf("timeouts FPM %ds, backend %ds, front %ds must increase outwards", fpm, backend, front)
 	}
 }
