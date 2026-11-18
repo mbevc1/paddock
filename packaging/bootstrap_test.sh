@@ -102,6 +102,10 @@ printf 'SUB_UID_MIN\t\t   100000\nSUB_UID_MAX\t\t600100000\n# SUB_GID_MAX 200000
 [[ $(login_def "$WORK/login.defs" SUB_UID_MAX) == 600100000 ]] || fail "login_def SUB_UID_MAX"
 [[ -z $(login_def "$WORK/login.defs" SUB_GID_MAX) ]] || fail "login_def read a commented-out key"
 
+if grep -E '^[[:space:]]*firewall-cmd .*--add-service.*--add-port|^[[:space:]]*firewall-cmd .*--add-port.*--add-service' ./bootstrap.sh; then
+	fail "a firewall-cmd call mixes --add-service and --add-port, which firewall-cmd refuses"
+fi
+
 [[ ${#REMI_FINGERPRINTS[@]} -gt 0 ]] || fail "no Remi fingerprint pinned"
 for f in "${REMI_FINGERPRINTS[@]}"; do
 	[[ $f =~ ^[0-9A-F]{40}$ ]] || fail "Remi fingerprint $f is not 40 uppercase hex digits"

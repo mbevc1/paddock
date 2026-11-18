@@ -378,7 +378,9 @@ configure_mariadb() {
 enable_services() {
 	step "enabling services and firewall"
 	systemctl enable -q --now firewalld.service
-	firewall-cmd -q --permanent --add-service=http --add-service=https --add-port=8080/tcp --add-port=8443/tcp
+	# firewall-cmd refuses --add-service and --add-port in one call.
+	firewall-cmd -q --permanent --add-service=http --add-service=https
+	firewall-cmd -q --permanent --add-port=8080/tcp --add-port=8443/tcp
 	firewall-cmd -q --reload
 	systemctl enable -q --now paddock-nft.service fail2ban.service
 	if changed /etc/paddock/nftables.conf; then systemctl reload-or-restart paddock-nft.service; fi
