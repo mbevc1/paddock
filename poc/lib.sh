@@ -602,6 +602,7 @@ table inet paddock {
     chain output {
         type filter hook output priority 0; policy accept;
         ip daddr 127.64.0.0/16 tcp dport 81 meta skuid != "apache" reject
+        ip daddr 127.0.0.1 tcp dport 81 meta skuid != "root" reject
     }
 }
 EOF

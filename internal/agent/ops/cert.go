@@ -18,8 +18,8 @@ import (
 const (
 	certFileMode = 0o644
 	keyFileMode  = 0o600
-	// mdStatusURL is served by the front Apache to local clients only (§10).
-	mdStatusURL      = "http://127.0.0.1/md-status"
+	// mdStatusURL is the front Apache's status listener, which the loopback rule keeps to root.
+	mdStatusURL      = "http://127.0.0.1:81/md-status"
 	maxMDStatusBytes = 4 << 20
 )
 

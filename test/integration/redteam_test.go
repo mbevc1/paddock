@@ -76,6 +76,18 @@ func TestRedTeam(t *testing.T) {
 		noToken(t, "B's Host header on A's backend", backendGet(t, a, "/private/secret.txt", bDomain))
 	})
 
+	t.Run("list B's domains through mod_md's status", func(t *testing.T) {
+		if got := phpEval(t, a, "$f = @fsockopen('127.0.0.1', 81, $e, $s, 3); echo $f ? 'OPEN' : 'BLOCKED';"); got != "BLOCKED" {
+			t.Errorf("A's PHP reached the md-status listener: %q", got)
+		}
+		if got := phpShell(t, a, "curl -s -m 5 http://127.0.0.1/md-status https://127.0.0.1/md-status -k"); strings.Contains(got, bDomain) {
+			t.Errorf("A's PHP read B's domain from md-status: %.300s", got)
+		}
+		if got := asVhostUID(t, a, "/usr/bin/curl", "-s", "-o", "/dev/null", "-m", "5", "-w", "%{http_code}", "http://127.0.0.1:81/md-status"); got != "000" {
+			t.Errorf("A's UID reached the md-status listener: HTTP %s", got)
+		}
+	})
+
 	t.Run("run code as B through B's PHP socket", func(t *testing.T) {
 		sock := "/run/paddock/fpm/" + b + "/php.sock"
 		if got := phpShell(t, a, "test -e "+sock+" && echo present"); strings.Contains(got, "present") {

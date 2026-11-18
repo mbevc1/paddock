@@ -38,7 +38,7 @@ Work through the tasks in part 2 in order. Tick a task's checkbox when every acc
 | --- | --- | --- | --- |
 | `paddock agent` | root | `/run/paddock/agent.sock` (`root:paddock`, `0660`) | all host changes |
 | `paddock web` | `paddock` | `:8443` TLS, `:8080` redirect, `/run/paddock/acme.sock` | panel, API, ACME challenge responses |
-| front `httpd` | `apache` | `:80`, `:443` | TLS for vhosts, proxy to backends |
+| front `httpd` | `apache` | `:80`, `:443`, `127.0.0.1:81` (root only) | TLS for vhosts, proxy to backends; `md-status` for the agent on port 81 |
 | `paddock-httpd@vNNNNN` | vhost user | `127.64.X.Y:81` | static files, `.htaccess`, PHP via FastCGI |
 | `paddock-phpNN-fpm@vNNNNN` | vhost user | `/run/paddock/fpm/vNNNNN/php.sock` (`0600`) | PHP |
 
@@ -370,6 +370,7 @@ table inet paddock {
     chain output {
         type filter hook output priority 0; policy accept;
         ip daddr 127.64.0.0/16 tcp dport 81 meta skuid != "apache" reject
+        ip daddr 127.0.0.1 tcp dport 81 meta skuid != "root" reject
     }
 }
 ```
@@ -428,7 +429,7 @@ Known limits: a kernel exploit crosses every boundary; SELinux confines Apache a
 
 ## 10. TLS
 
-- **Vhosts:** `mod_md` in the front Apache. `MDNotifyCmd` calls the agent, which runs `apachectl configtest` and a graceful reload. The agent reads `md-status` (localhost only) for expiry notifications.
+- **Vhosts:** `mod_md` in the front Apache. `MDNotifyCmd` calls the agent, which runs `apachectl configtest` and a graceful reload. The agent reads `md-status` for expiry notifications from a front listener on `127.0.0.1:81`, which the §7.6 rule keeps to root: the page lists every managed domain, so tenants must not read it.
 - **Panel:** at install, a self-signed ECDSA P-256 certificate for the hostname and server IP; the SHA-256 fingerprint is printed. The web process then obtains a Let's Encrypt certificate with `golang.org/x/crypto/acme` using HTTP-01 only, served through `/run/paddock/acme.sock`. `GetCertificate` returns the Let's Encrypt certificate for SNI matches and the self-signed one otherwise. HSTS once a trusted certificate is active.
 
 ## 11. Panel
@@ -544,7 +545,7 @@ Options: `--hostname` (required), `--www-device` (needed until `/srv/www` is mou
 3. On EL 9 only: `dnf module enable mariadb:10.11` (EL 10 ships MariaDB 10.11 as a plain package).
 4. Write `/etc/yum.repos.d/paddock.repo` with `baseurl=https://<owner>.github.io/paddock/el$releasever/$basearch/`, `gpgcheck=0`, `repo_gpgcheck=0`, and a comment pointing to T2.9.
 5. `dnf install paddock`.
-6. Check free ports 80, 443, 8080, 8443; only `httpd` and `paddock` may hold them.
+6. Check free ports 80, 81, 443, 8080, 8443; only `httpd` and `paddock` may hold them.
 7. Prepare `/srv/www` on the given XFS device with `prjquota` (format only if empty and confirmed with `--format`; never one holding a filesystem); create `/srv/www` (`0711`) and `/srv/jail` (`0755`); add the `semanage fcontext` rule and `restorecon`. Refuse a `/srv/www` holding anything but the `.paddock` marker and vhost directories.
 8. Install `/usr/share/paddock/etc/` into `/etc`, keeping files that contain `# paddock: keep`; fill the panel hostname into `paddock-01-panel.conf`; write `MDContactEmail` to `/etc/httpd/conf.d/paddock-00-contact.conf` when `--email` is given; write `/etc/paddock/web.env` (`PADDOCK_HOSTNAME`, `PADDOCK_ACME_EMAIL`); comment out `mod_status` in `00-base.conf`; load the sysctl settings.
 9. Start MariaDB and verify `unix_socket` for root in `mysql.global_priv`.

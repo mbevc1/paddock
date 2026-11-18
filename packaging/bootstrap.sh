@@ -23,7 +23,7 @@ readonly KEEP='# paddock: keep'
 readonly MODULES_CONF=/etc/httpd/conf.modules.d/00-base.conf
 readonly STATUS_LINE='LoadModule status_module modules/mod_status.so'
 readonly PANEL_CERT=/var/lib/paddock/web/panel.crt
-readonly PORTS=(80 443 8080 8443)
+readonly PORTS=(80 81 443 8080 8443)
 # Vhost UIDs and GIDs are 100000 + N for N up to 65535.
 readonly VHOST_ID_MIN=100001
 readonly VHOST_ID_MAX=165535
