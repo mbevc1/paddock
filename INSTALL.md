@@ -18,11 +18,10 @@ Packages are not signed yet (planned as task T2.9), so install Paddock on dispos
 
 ## Install
 
-Pick a release from the [Releases page](https://github.com/mbevc1/paddock/releases), then fetch its bootstrap script, check it and run it:
+Fetch the bootstrap script of the latest release, check it and run it:
 
 ```bash
-VER=v0.0.1
-BASE=https://github.com/mbevc1/paddock/releases/download/$VER
+BASE=https://github.com/mbevc1/paddock/releases/latest/download
 curl -fsSLO $BASE/bootstrap.sh
 curl -fsSLO $BASE/SHA256SUMS
 sha256sum -c --ignore-missing SHA256SUMS
@@ -30,6 +29,8 @@ sudo bash bootstrap.sh --hostname panel.example.com --www-device /dev/vdb --form
 ```
 
 At the end it prints the first admin's username, password and TOTP URI, the panel URL and the panel certificate's fingerprint. The password and TOTP URI are shown only once, so store them before closing the terminal.
+
+To install a particular release from the [Releases page](https://github.com/mbevc1/paddock/releases) instead, set `BASE=https://github.com/mbevc1/paddock/releases/download/vX.Y.Z`, replacing `vX.Y.Z` with its tag. Bootstrap always installs the newest `paddock` package from the repository.
 
 Without a spare disk, keep `/srv/www` in a disk image instead, for example 20 GB:
 

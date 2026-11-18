@@ -18,15 +18,14 @@ Paddock is a simple web hosting panel. It runs PHP sites in isolated vhosts: eac
 Early development. Packages are not signed yet, so install Paddock on disposable test machines only. `docs/plan.md` holds the specification (part 1) and the task list (part 2).
 
 - **Phase 0:** proof-of-concept scripts in `poc/` check the design on a VM. Results go into `docs/poc-results.md`.
-- **Phase 1:** the agent, the web panel, the RPM and the bootstrap script, released as `v0.0.1`.
+- **Phase 1:** the agent, the web panel, the RPM and the bootstrap script, published on the [Releases page](https://github.com/mbevc1/paddock/releases).
 
 ## Install
 
-On a fresh AlmaLinux 9.4+ server with SELinux enforcing and a spare disk for `/srv/www` (or `--www-file 20G` to use a disk image instead), run the bootstrap script of a [release](https://github.com/mbevc1/paddock/releases):
+On a fresh AlmaLinux 9.4+ server with SELinux enforcing and a spare disk for `/srv/www` (or `--www-file 20G` to use a disk image instead), run the bootstrap script of the latest [release](https://github.com/mbevc1/paddock/releases):
 
 ```bash
-VER=v0.0.1
-BASE=https://github.com/mbevc1/paddock/releases/download/$VER
+BASE=https://github.com/mbevc1/paddock/releases/latest/download
 curl -fsSLO $BASE/bootstrap.sh
 curl -fsSLO $BASE/SHA256SUMS
 sha256sum -c --ignore-missing SHA256SUMS
