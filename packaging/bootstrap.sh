@@ -24,6 +24,12 @@ readonly MODULES_CONF=/etc/httpd/conf.modules.d/00-base.conf
 readonly STATUS_LINE='LoadModule status_module modules/mod_status.so'
 readonly PANEL_CERT=/var/lib/paddock/web/panel.crt
 readonly PORTS=(80 443 8080 8443)
+# Vhost UIDs and GIDs are 100000 + N for N up to 65535.
+readonly VHOST_ID_MIN=100001
+readonly VHOST_ID_MAX=165535
+# useradd hands out subordinate ID ranges from here up, clear of the vhost IDs.
+readonly SUBID_MIN=200000
+readonly LOGIN_DEFS=/etc/login.defs
 
 HOSTNAME_ARG=
 DEVICE=
@@ -141,6 +147,56 @@ check_host() {
 		die "needs AlmaLinux 9.4 or later, found ${PRETTY_NAME:-unknown}"
 	fi
 	[[ $(getenforce) == Enforcing ]] || die "SELinux must be enforcing"
+}
+
+# subid_overlaps prints the entries of a subuid or subgid file whose range meets the vhost IDs.
+subid_overlaps() {
+	[[ -f $1 ]] || return 0
+	awk -F: -v lo="$VHOST_ID_MIN" -v hi="$VHOST_ID_MAX" 'NF == 3 && $2 <= hi && $2 + $3 > lo' "$1"
+}
+
+# raise_login_def sets KEY in a login.defs file to VALUE when it is lower or missing, through a
+# temporary file in the same directory.
+raise_login_def() {
+	local file=$1 key=$2 value=$3 tmp
+	tmp=$(mktemp "$file.XXXXXX")
+	awk -v k="$key" -v v="$value" '
+		$1 == k { found = 1; if ($2 + 0 < v) { print k "\t\t" v; next } }
+		{ print }
+		END { if (!found) print k "\t\t" v }' "$file" >"$tmp"
+	if cmp -s "$tmp" "$file"; then
+		rm -f "$tmp"
+		return
+	fi
+	chmod --reference="$file" "$tmp"
+	chown --reference="$file" "$tmp"
+	mv -f "$tmp" "$file"
+	restorecon -F "$file" 2>/dev/null || true
+	CHANGED+=("$file")
+	echo "    set $key to $value in $file"
+}
+
+# fence_subids refuses subordinate ID ranges that would let their holder map vhost UIDs in a user
+# namespace, and keeps the ranges useradd hands out later above the vhost IDs.
+fence_subids() {
+	step "checking subordinate ID ranges"
+	local overlaps
+	overlaps=$({
+		subid_overlaps /etc/subuid
+		subid_overlaps /etc/subgid
+	} | sort -u)
+	if [[ -n $overlaps ]]; then
+		die "these subordinate ID ranges overlap vhost IDs $VHOST_ID_MIN-$VHOST_ID_MAX:
+$overlaps
+Move each above $SUBID_MIN, for example for NAME:START:COUNT:
+  usermod --del-subuids START-END --del-subgids START-END NAME
+  usermod --add-subuids NEW-NEWEND --add-subgids NEW-NEWEND NAME
+with END = START + COUNT - 1, then rerun bootstrap."
+	fi
+	local key
+	for key in SUB_UID_MIN SUB_GID_MIN; do
+		raise_login_def "$LOGIN_DEFS" "$key" "$SUBID_MIN"
+	done
 }
 
 # key_pinned succeeds when KEY's primary fingerprint is one of the given fingerprints.
@@ -328,6 +384,7 @@ main() {
 	check_host
 	WORK=$(mktemp -d)
 	trap 'rm -rf "$WORK"' EXIT
+	fence_subids
 	install_packages
 	check_ports
 	prepare_www
