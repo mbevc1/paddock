@@ -1,0 +1,17 @@
+# Repository labels, created or updated by .github/workflows/labels.yaml when this file changes
+# on main. Labels missing here are left alone, never deleted.
+- name: dependencies
+  color: "0366d6"
+  description: Dependency updates
+- name: go
+  color: "00add8"
+  description: Go module updates
+- name: github_actions
+  color: "000000"
+  description: GitHub Actions updates
+- name: documentation
+  color: "0075ca"
+  description: Documentation changes
+- name: pipelines
+  color: "5319e7"
+  description: CI, release and repository automation changes
