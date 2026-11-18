@@ -14,8 +14,21 @@ LDFLAGS = -s -w -X main.version=$(VERSION)
 
 .PHONY: help build test vet fmt fmt-check lint shellcheck bootstrap-test check integration rpm clean
 
+# Colours only on a terminal, and never with NO_COLOR set (https://no-color.org).
 help: ## list targets
-	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{ printf "  %-15s %s\n", $$1, $$2 }'
+	@if [[ -t 1 && -z $${NO_COLOR:-} ]]; then \
+		bold=$$'\e[1m' cyan=$$'\e[36m' yellow=$$'\e[33m' dim=$$'\e[2m' reset=$$'\e[0m'; \
+	else bold= cyan= yellow= dim= reset=; fi; \
+	printf '%sPaddock%s %sdevelopment targets, version %s%s\n\n' "$$bold" "$$reset" "$$dim" "$(VERSION)" "$$reset"; \
+	printf '%sUsage:%s make %s<target>%s [VAR=value]\n\n%sTargets:%s\n' "$$bold" "$$reset" "$$cyan" "$$reset" "$$bold" "$$reset"; \
+	grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | \
+		awk -F':.*## ' -v c="$$cyan" -v r="$$reset" '{ printf "  %s%-15s%s %s\n", c, $$1, r, $$2 }'; \
+	printf '\n%sVariables:%s\n' "$$bold" "$$reset"; \
+	var() { printf '  %s%-15s%s %s %s(%s)%s\n' "$$yellow" "$$1" "$$reset" "$$3" "$$dim" "$$2" "$$reset"; }; \
+	var VERSION "$(VERSION)" "version stamped into the binary"; \
+	var RPM_VERSION "$(RPM_VERSION)" "RPM version, X.Y.Z"; \
+	var ARCH "$(ARCH)" "RPM architecture: x86_64 or aarch64"; \
+	var OWNER "$(OWNER)" "GitHub owner in the RPM's URL"
 
 build: ## build ./paddock as a static binary
 	CGO_ENABLED=0 go build -trimpath -ldflags "$(LDFLAGS)" -o paddock ./cmd/paddock
