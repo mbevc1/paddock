@@ -1,8 +1,15 @@
-<p align="center"><img src="docs/assets/logo/paddock-logo.svg" alt="" width="96" height="96"></p>
+<img src="docs/assets/logo/paddock-logo.svg" alt="" width="72" height="72" align="left">
 
-<h1 align="center">Paddock</h1>
+# Paddock
 
-<p align="center">Isolated PHP hosting</p>
+Isolated web hosting
+
+<br clear="left">
+
+[![CI](https://github.com/mbevc1/paddock/actions/workflows/ci.yaml/badge.svg)](https://github.com/mbevc1/paddock/actions/workflows/ci.yaml)
+[![Pages](https://github.com/mbevc1/paddock/actions/workflows/pages.yaml/badge.svg)](https://github.com/mbevc1/paddock/actions/workflows/pages.yaml)
+[![Latest release](https://img.shields.io/github/v/release/mbevc1/paddock)](https://github.com/mbevc1/paddock/releases/latest)
+[![License: MPL-2.0](https://img.shields.io/github/license/mbevc1/paddock)](LICENSE)
 
 Paddock is a simple web hosting panel. It runs PHP sites in isolated vhosts: each vhost has its own Linux user, its own sandboxed Apache and PHP-FPM, and cannot see or touch another vhost's files or processes. Owners manage several vhosts within limits an admin sets.
 
