@@ -5,8 +5,6 @@ package setup
 import (
 	"bytes"
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -30,16 +28,6 @@ import (
 	"github.com/mbevc1/paddock/internal/web/store"
 )
 
-// wp-cli is pinned by version and SHA-256, the checksum published with the release.
-const (
-	WPCLIVersion = "2.12.0"
-	wpCLIURL     = "https://github.com/wp-cli/wp-cli/releases/download/v" + WPCLIVersion + "/wp-cli-" + WPCLIVersion + ".phar"
-	wpCLIPath    = "/usr/local/bin/wp"
-)
-
-// wpCLISHA256 is a variable only so tests can pin their own download.
-var wpCLISHA256 = "ce34ddd838f7351d6759068d09793f26755463b4a4610a5a5c0a97b68220d85c"
-
 // Paths and programs setup uses.
 const (
 	StateDir   = "/var/lib/paddock/agent"
@@ -62,7 +50,6 @@ const (
 	sysctl      = "/usr/sbin/sysctl"
 	systemctl   = "/usr/bin/systemctl"
 	apachectl   = "/usr/sbin/apachectl"
-	curl        = "/usr/bin/curl"
 	// blkidNothing is blkid's exit code when the device has no recognized filesystem.
 	blkidNothing = 2
 	// findmntNotMounted is findmnt's exit code when the path is not a mount point.
@@ -97,8 +84,6 @@ type Deps struct {
 	WebUser func() (uid, gid int, err error)
 	// Chown sets ownership of web files; nil uses os.Lchown.
 	Chown func(path string, uid, gid int) error
-	// Download fetches url to a host path; nil runs curl.
-	Download func(ctx context.Context, url, hostPath string) error
 }
 
 func (d *Deps) path(hostPath string) string {
@@ -178,7 +163,6 @@ func Run(ctx context.Context, opts Options, d *Deps) error {
 		name string
 		fn   func(context.Context, Options, *Deps) error
 	}{
-		{"installing wp-cli " + WPCLIVersion, installWPCLI},
 		{"enabling services and firewall", enableServices},
 	} {
 		d.printf("==> %s\n", s.name)
@@ -428,56 +412,8 @@ func configureMariaDB(ctx context.Context, _ Options, d *Deps) error {
 	return nil
 }
 
-func fileSHA256(path string) (string, error) {
-	f, err := os.Open(path) // #nosec G304 -- a fixed path below the setup root.
-	if err != nil {
-		return "", err
-	}
-	defer f.Close()
-	h := sha256.New()
-	if _, err := io.Copy(h, f); err != nil {
-		return "", err
-	}
-	return hex.EncodeToString(h.Sum(nil)), nil
-}
-
-// installWPCLI downloads wp-cli and keeps it only if it matches the pinned SHA-256 (§14.4
-// step 6).
-func installWPCLI(ctx context.Context, _ Options, d *Deps) error {
-	dest := d.path(wpCLIPath)
-	if sum, err := fileSHA256(dest); err == nil && sum == wpCLISHA256 {
-		return nil
-	}
-	if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil { // #nosec G301 -- /usr/local/bin holds executables for every user.
-		return err
-	}
-	tmp := wpCLIPath + ".download"
-	download := d.Download
-	if download == nil {
-		download = func(ctx context.Context, url, path string) error {
-			_, err := d.run(ctx, curl, "-fsSL", "--proto", "=https", "-o", path, url)
-			return err
-		}
-	}
-	if err := download(ctx, wpCLIURL, tmp); err != nil {
-		return err
-	}
-	defer os.Remove(d.path(tmp))
-	sum, err := fileSHA256(d.path(tmp))
-	if err != nil {
-		return err
-	}
-	if sum != wpCLISHA256 {
-		return fmt.Errorf("wp-cli download has SHA-256 %s, want %s", sum, wpCLISHA256)
-	}
-	if err := os.Chmod(d.path(tmp), 0o755); err != nil { // #nosec G302 -- an executable for every user.
-		return err
-	}
-	return os.Rename(d.path(tmp), dest)
-}
-
 // enableServices opens the firewall, starts the services, and reloads sshd and Apache after
-// checking their configuration (§14.4 step 7).
+// checking their configuration (§14.4 step 6).
 func enableServices(ctx context.Context, _ Options, d *Deps) error {
 	for _, argv := range [][]string{
 		{systemctl, "enable", "--now", "firewalld.service"},
@@ -500,7 +436,7 @@ func enableServices(ctx context.Context, _ Options, d *Deps) error {
 
 // firstRun creates the first admin, in web.db with a random password and in state.db with a
 // TOTP secret, and the panel's self-signed certificate. It prints the secrets once; later runs
-// find an admin and print none (§14.4 step 8).
+// find an admin and print none (§14.4 step 7).
 func firstRun(ctx context.Context, opts Options, d *Deps, st *state.Store) error {
 	uid, gid, err := d.WebUser()
 	if err != nil {

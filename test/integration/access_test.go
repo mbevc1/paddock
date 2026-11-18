@@ -86,9 +86,6 @@ func TestShellAccount(t *testing.T) {
 	if got := shell("php -v | head -1"); !strings.HasPrefix(got, "PHP 8.3") {
 		t.Errorf("php -v = %q", got)
 	}
-	if got := shell("wp --info"); !strings.Contains(got, "WP-CLI version") {
-		t.Errorf("wp --info = %q", got)
-	}
 	if got := shell("cat /proc/self/cgroup"); !strings.Contains(got, "user-"+uidOf(t, id)+".slice") {
 		t.Errorf("cgroup = %q", got)
 	}

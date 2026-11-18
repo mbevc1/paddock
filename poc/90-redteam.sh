@@ -15,8 +15,8 @@ FRONT=1 vh_create 1 1 8.3 a.test 20
 FRONT=1 vh_create 2 2 8.3 b.test 1024
 on_cleanup "remove_owner_slice 1"
 on_cleanup "remove_owner_slice 2"
-db_create_primary 1 wp
-db_create_primary 2 wp
+db_create_primary 1 app
+db_create_primary 2 app
 jail_create 1 shell
 key=$(ssh_key_for 1)
 
@@ -25,7 +25,7 @@ B=$(vh_id 2)
 TOKEN=redteam-$(head -c 12 /dev/urandom | od -An -tx1 | tr -d ' \n')
 install -o "$B" -g "$B" -m 0600 /dev/null "$WWW/$B/private/secret.txt"
 echo "$TOKEN" >"$WWW/$B/private/secret.txt"
-mysql "${B}_wp" -e "CREATE TABLE secret (v VARCHAR(64)); INSERT INTO secret VALUES ('$TOKEN');"
+mysql "${B}_app" -e "CREATE TABLE secret (v VARCHAR(64)); INSERT INTO secret VALUES ('$TOKEN');"
 b_pid=$(vh_pid 2)
 b_httpd_pid=$(systemctl show -p MainPID --value "$(httpd_unit 2)")
 
@@ -105,9 +105,9 @@ if (\$m->connect_errno) { echo 'ERR'; exit; }
 \$r = @\$m->query('$3');
 echo \$r ? implode(',', array_column(\$r->fetch_all(), 0)) : 'ERR';"
 }
-no_token "A's PHP cannot log in as B's DB user" "$(mysqli "$B" "${B}_wp" 'SELECT v FROM secret')"
-no_token "A's DB user cannot read B's database" "$(mysqli "$A" "${A}_wp" "SELECT v FROM ${B}_wp.secret")"
-no_token "A's PHP cannot log in as root" "$(mysqli root '' "SELECT v FROM ${B}_wp.secret")"
+no_token "A's PHP cannot log in as B's DB user" "$(mysqli "$B" "${B}_app" 'SELECT v FROM secret')"
+no_token "A's DB user cannot read B's database" "$(mysqli "$A" "${A}_app" "SELECT v FROM ${B}_app.secret")"
+no_token "A's PHP cannot log in as root" "$(mysqli root '' "SELECT v FROM ${B}_app.secret")"
 
 # 9. See B through SFTP or a shell.
 sh_jail() { ssh_as "$key" "$A" "bash -lc '$1'" 2>&1; }

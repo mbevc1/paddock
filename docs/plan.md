@@ -13,7 +13,7 @@ Work through the tasks in part 2 in order. Tick a task's checkbox when every acc
 
 **Out of scope:** DNS, email hosting, reseller accounts, containers.
 
-**Target workload:** WordPress and custom PHP applications (Laravel, Symfony, plain PHP).
+**Target workload:** custom PHP applications (Laravel, Symfony, plain PHP). Paddock provides isolated hosting environments; it installs no application.
 
 **Sources:** AlmaLinux BaseOS/AppStream (including dnf modules), EPEL, and Remi for parallel PHP versions. Nothing else.
 
@@ -96,7 +96,7 @@ Newline-delimited JSON over the Unix socket, one request and one response per li
 | Backend address | `127.64.(N >> 8).(N & 255)`, port 81 | `127.64.0.12:81` |
 | XFS project ID | N | 12 |
 | Owner slice | `paddock-owner-<owner_id>.slice` | `paddock-owner-3.slice` |
-| Database name | `<vhost id>_<suffix>`, suffix `^[a-z0-9]{1,20}$`, total ≤ 32 | `v00012_wp` |
+| Database name | `<vhost id>_<suffix>`, suffix `^[a-z0-9]{1,20}$`, total ≤ 32 | `v00012_app` |
 | Primary DB user | the vhost ID | `v00012` |
 | Extra DB user | `<vhost id>_<suffix>`, suffix `^[a-z0-9]{1,8}$` | `v00012_ro` |
 
@@ -243,11 +243,6 @@ SetEnvIf X-Forwarded-Proto https HTTPS=on
     AllowOverride AuthConfig FileInfo Indexes Limit Options=Indexes,SymLinksIfOwnerMatch
     Require all granted
 </Directory>
-<Directory /srv/www/v00012/public/wp-content/uploads>
-    <FilesMatch "\.(php|phar|phtml)$">
-        Require all denied
-    </FilesMatch>
-</Directory>
 <FilesMatch "\.php$">
     SetHandler "proxy:unix:/run/paddock/fpm/v00012/php.sock|fcgi://localhost"
 </FilesMatch>
@@ -337,7 +332,7 @@ Options=bind
 WantedBy=multi-user.target
 ```
 
-Shell jails add bind mounts of `/usr` and `/opt/remi` with `ro,nosuid,nodev`, symlinks `bin`, `sbin`, `lib`, `lib64` into `usr/`, a generated `etc/` (only this user in `passwd` and `group`, `resolv.conf`, `pki/`), a minimal `dev/` (`null`, `zero`, `urandom`, `tty`), `tmp/` (`1777`), and `proc/` mounted with `-t proc -o hidepid=invisible,subset=pid`. `php` and `wp` in the jail point at the vhost's current PHP version.
+Shell jails add bind mounts of `/usr` and `/opt/remi` with `ro,nosuid,nodev`, symlinks `bin`, `sbin`, `lib`, `lib64` into `usr/`, a generated `etc/` (only this user in `passwd` and `group`, `resolv.conf`, `pki/`), a minimal `dev/` (`null`, `zero`, `urandom`, `tty`), `tmp/` (`1777`), and `proc/` mounted with `-t proc -o hidepid=invisible,subset=pid`. `php` in the jail points at the vhost's current PHP version.
 
 `/etc/ssh/sshd_config.d/50-paddock.conf`:
 
@@ -417,7 +412,7 @@ Known limits: a kernel exploit crosses every boundary; SELinux confines Apache a
 - Socket `/var/lib/mysql/mysql.sock`, `bind-address=127.0.0.1`, port 3306 closed in firewalld.
 - The agent connects as `root@localhost` via `unix_socket`; the installer verifies this in `mysql.global_priv`.
 - Primary DB user: `CREATE USER 'v00012'@'localhost' IDENTIFIED VIA unix_socket OR mysql_native_password USING PASSWORD('<random>')`.
-- Grants: `GRANT ALL ON \`v00012\_wp\`.* TO 'v00012'@'localhost'`. Escape `_` and `%` in database names in grants. Reject database names whose escaped form exceeds 64 characters.
+- Grants: `GRANT ALL ON \`v00012\_app\`.* TO 'v00012'@'localhost'`. Escape `_` and `%` in database names in grants. Reject database names whose escaped form exceeds 64 characters.
 - `MAX_USER_CONNECTIONS` per user from limits.
 - Quota: database sizes count toward the owner's disk; at 90 % notify, at 100 % revoke `INSERT`, `UPDATE`, `CREATE`, keep `SELECT`, `DELETE`.
 - Backups: `mariadb-dump --single-transaction` per database next to the vhost's file backup.
@@ -472,7 +467,7 @@ Pages: login, TOTP, dashboard, vhost list, vhost detail (domains, PHP version, s
 
 ### 11.5 Notifications
 
-Stored in `web.db`, delivered over SSE; optional SMTP relay and webhook forwarding. Triggers: certificate failure or expiry within 14 days, quota at 90 %, failed apply, new SSH key, login from a new IP, PHP version nearing end of life, pending PHP updates (admins), outdated WordPress core or plugins (phase 2), new phpMyAdmin release.
+Stored in `web.db`, delivered over SSE; optional SMTP relay and webhook forwarding. Triggers: certificate failure or expiry within 14 days, quota at 90 %, failed apply, new SSH key, login from a new IP, PHP version nearing end of life, pending PHP updates (admins), new phpMyAdmin release.
 
 ## 12. phpMyAdmin (phase 2)
 
@@ -549,10 +544,9 @@ Runs as root, idempotent, safe to rerun after upgrades. It refuses to run on a h
 3. Install the files from `/usr/share/paddock/` into `/etc` (sysctl, nftables, sshd drop-in, fail2ban jail, front Apache global config), keeping local edits marked with `# paddock: keep`.
 4. Configure MariaDB (`bind-address=127.0.0.1`), start it, verify `unix_socket` for root in `mysql.global_priv`.
 5. Install the requested PHP versions through the same code path as `php.version.install`.
-6. Download `wp-cli.phar` to `/usr/local/bin/wp`, verified against a SHA-256 pinned in the binary.
-7. Open firewalld ports 80, 443, 8080, 8443; enable `paddock-nft`, `fail2ban`, `httpd`, `mariadb`; reload sshd after `sshd -t`.
-8. On first run only: create `state.db` and `web.db`, the first admin (random password in `web.db`, TOTP secret in `state.db`), and the self-signed panel certificate; print password, TOTP URI, and certificate fingerprint once.
-9. Enable and start `paddock-agent` and `paddock-web`; print the panel URL.
+6. Open firewalld ports 80, 443, 8080, 8443; enable `paddock-nft`, `fail2ban`, `httpd`, `mariadb`; reload sshd after `sshd -t`.
+7. On first run only: create `state.db` and `web.db`, the first admin (random password in `web.db`, TOTP secret in `state.db`), and the self-signed panel certificate; print password, TOTP URI, and certificate fingerprint once.
+8. Enable and start `paddock-agent` and `paddock-web`; print the panel URL.
 
 ### 14.5 Upgrade and removal
 
@@ -598,7 +592,7 @@ The in-place path is only offered once phase 0 checks pass on EL 10 and the proc
 
 # Part 2: Tasks
 
-Phase gates: phase 1 starts only when every phase 0 check passes; phase 2 starts only when a fresh install serves WordPress through the panel; phase 3 starts after an external security review of agent and panel.
+Phase gates: phase 1 starts only when every phase 0 check passes; phase 2 starts only when a fresh install serves a PHP application through the panel; phase 3 starts after an external security review of agent and panel.
 
 ## Phase 0: proof of concept on a VM
 
@@ -613,17 +607,17 @@ Throwaway shell scripts in `poc/`, run as root on a disposable AlmaLinux 9.4+ VM
 - [ ] **T0.4 Remi FPM label and switch.** FPM unit for 8.3, then switch to 8.4 per §8.
     - Acceptance: FPM runs in `httpd_t`, or a documented `semanage fcontext` equivalence fixes it; switch completes with no failed requests in a 1 req/s loop.
 - [ ] **T0.5 MariaDB from the sandbox.** Primary DB user per §9.
-    - Acceptance: PHP in A's unit connects passwordless via `unix_socket`; A cannot connect as B's user; escaped grant gives access to `v00001_wp` and not `v00001xwp`.
+    - Acceptance: PHP in A's unit connects passwordless via `unix_socket`; A cannot connect as B's user; escaped grant gives access to `v00001_app` and not `v00001xapp`.
 - [ ] **T0.6 Loopback rule.** nftables file from §7.6.
     - Acceptance: A's PHP cannot connect to B's backend; the front `apache` user can; rule survives `firewall-cmd --reload`.
 - [ ] **T0.7 SFTP jail.** Mount unit and sshd drop-in from §7.5.
     - Acceptance: SFTP login sees only `/site`; TCP forwarding to `127.0.0.1:3306` works; forwarding to any other target fails.
 - [ ] **T0.8 Shell jail.** Jail per §7.5 with private procfs.
-    - Acceptance: shell sees only its own processes and user; `php -v` and `wp --info` work; masked `user@<uid>.service` does not break login; session lands in `user-<uid>.slice`; `sudo` and `su` inside the jail cannot gain privileges.
+    - Acceptance: shell sees only its own processes and user; `php -v` works; masked `user@<uid>.service` does not break login; session lands in `user-<uid>.slice`; `sudo` and `su` inside the jail cannot gain privileges.
 - [ ] **T0.9 Kernel settings.** sysctl file from §7.6.
     - Acceptance: with `user.max_user_namespaces = 0`, all units from T0.2 to T0.8 still start.
-- [ ] **T0.10 WordPress.** Install WordPress in vhost A.
-    - Acceptance: install, core update, plugin install and update all work with `FS_METHOD=direct`; uploads directory refuses PHP execution; HTTPS detected behind the front proxy.
+- [ ] **T0.10 PHP application.** A plain PHP application in vhost A behind the front proxy.
+    - Acceptance: PHP writes and updates files in its own tree, owned by the vhost user; `open_basedir` stops writes outside it; sessions persist; PHP sees HTTPS behind the front proxy.
 - [ ] **T0.11 Scale.** 500 idle vhosts.
     - Acceptance: record memory per idle vhost, boot time to all units active, and `systemctl daemon-reload` time in `docs/poc-results.md`.
 - [ ] **T0.12 Red team.** Script `poc/90-redteam.sh` runs every attempt from §7.7 as vhost A against vhost B.
@@ -685,7 +679,7 @@ Throwaway shell scripts in `poc/`, run as root on a disposable AlmaLinux 9.4+ VM
 - [ ] **T1.14 Access accounts.** `access.*` and key ops (passwords passed to `chpasswd` on stdin, never in argv): groups, jails, mount units, shell jail contents, `authorized_keys` files, `user@<uid>.service` masking, user slice drop-in.
     - Acceptance: integration tests repeat T0.7 and T0.8 through the agent.
     - Status: `access.create`, `access.delete`, `access.key.add`, and `access.key.remove` with fake-runner tests, including rollback of a half-built shell jail; passwords reach `chpasswd` on stdin only. `test/integration/access_test.go` repeats T0.7 and T0.8 on the VM; it has not run yet, so the task stays open.
-    - Choices to confirm: each vhost has at most one access account, named after the vhost and logging in as the vhost user, which is what `ChrootDirectory /srv/jail/%u` allows (PoC question 7); `max_access_accounts` counts these across the owner's vhosts. Shell jails follow the PoC layout: `php` and `wp` links in `/opt/paddock/bin` with `PATH` set in the jail's `/etc/profile`. Deleting an account ends only its `sshd` processes, since FPM and Apache share the vhost UID. Passwords are 12 to 128 printable ASCII characters without `:`.
+    - Choices to confirm: each vhost has at most one access account, named after the vhost and logging in as the vhost user, which is what `ChrootDirectory /srv/jail/%u` allows (PoC question 7); `max_access_accounts` counts these across the owner's vhosts. Shell jails follow the PoC layout: a `php` link in `/opt/paddock/bin` with `PATH` set in the jail's `/etc/profile`. Deleting an account ends only its `sshd` processes, since FPM and Apache share the vhost UID. Passwords are 12 to 128 printable ASCII characters without `:`.
 - [ ] **T1.15 Usage and events.** XFS project usage, database sizes, quota notifications at 90 % and enforcement at 100 %; `events.list` feed.
     - Acceptance: filling a vhost to its limit produces the expected events and enforcement.
     - Status: `ScanUsage` (every 10 minutes in the agent, and on demand) sums each owner's XFS project usage and database sizes against `disk_mb`. At 90 % it records `quota_warning`; at 100 % it freezes each vhost's XFS hard limit at its current size, revokes INSERT, UPDATE, and CREATE from the primary user and full-privilege DB users, and records `quota_exceeded`; back under the limit it restores both and records `quota_cleared`. It also records `cert_expiring` once a day for certificates within 14 days of expiry. Failed applies, renewed certificates, and added SSH keys are events too; `events.list` pages through them and `usage.get` reports an owner's use. A fake-runner test walks one owner from 60 % to over the limit and back. `test/integration/vhost_test.go` (`TestQuotaRevocation`) checks the same on the VM, which also confirms the `xfs_quota report -p -N -n -b` output format; it has not run yet, so the task stays open.
@@ -719,20 +713,19 @@ Throwaway shell scripts in `poc/`, run as root on a disposable AlmaLinux 9.4+ VM
     - Status: `PollEvents` turns agent events into notifications (owner's users, plus admins for apply failures and owner-less events), stores the cursor in `web.db`, and pushes them over Server-Sent Events; a test sees an apply failure arrive on an open stream. `static/app.js` updates the page from the stream; checking that in a real browser is still open.
 - [x] **T1.24 CLI.** `paddock setup` per §14.4; `paddock admin reset-password <user>`; `paddock reconcile --all`.
     - Acceptance: `setup` is idempotent and prints secrets only on first run; reset ends the user's sessions.
-    - Done: `internal/setup` runs the §14.4 steps through the system runner and render writer, so tests drive it with a fake host: a rerun prints no secrets and changes no file, and setup refuses foreign data in `/srv/www` (anything but `.paddock` and vhost directories), ports held by programs other than httpd or Paddock, and devices holding another filesystem. wp-cli 2.12.0 is pinned by the SHA-256 published with the release. `paddock admin add NAME` now creates the `web.db` user too (removing it if the agent refuses), `paddock admin totp-reset NAME` looks the admin up by name, and `paddock admin reset-password NAME` ends the user's sessions; each hands `web.db` back to user `paddock`. A real run comes with T1.26 on the VM.
+    - Done: `internal/setup` runs the §14.4 steps through the system runner and render writer, so tests drive it with a fake host: a rerun prints no secrets and changes no file, and setup refuses foreign data in `/srv/www` (anything but `.paddock` and vhost directories), ports held by programs other than httpd or Paddock, and devices holding another filesystem. `paddock admin add NAME` now creates the `web.db` user too (removing it if the agent refuses), `paddock admin totp-reset NAME` looks the admin up by name, and `paddock admin reset-password NAME` ends the user's sessions; each hands `web.db` back to user `paddock`. A real run comes with T1.26 on the VM.
     - Choices to confirm: setup writes `/etc/paddock/web.env` (`PADDOCK_HOSTNAME`, `PADDOCK_ACME_EMAIL`), which `paddock web` reads when no flags are given, so the RPM unit needs no arguments; `--email` is optional and leaves `MDContactEmail` out when empty; `mod_status` is disabled by commenting out its `LoadModule` line in `00-base.conf`; a fail2ban jail enables `sshd` with the systemd backend; setup asks `--format` before formatting an empty device and never formats one holding a filesystem.
     - Deferred: on a rerun the running agent and setup both change the host without sharing a lock; stop `paddock-agent` first, or let setup call the agent, once the RPM exists.
 - [ ] **T1.25 RPM and GitHub release pipeline.** `packaging/paddock.spec` per §14.2, sysusers and tmpfiles files, systemd units in `deploy/`, `.github/workflows/release.yml` per §14.1 (build in `almalinux:9`, publish the Release with `SHA256SUMS`, deploy the dnf repository to Pages), `scripts/build-rpm.sh` for local builds on the build VM.
     - Acceptance: `rpmlint` reports no errors; pushing a test tag produces a Release and an updated Pages repository; on a fresh VM, `dnf install paddock` from the Pages URL succeeds; `dnf remove` leaves vhosts and data intact.
 - [ ] **T1.26 Bootstrap.** `packaging/bootstrap.sh` per §14.3 with the pinned Remi key fingerprint.
-    - Acceptance: on a fresh VM, bootstrap completes, prints credentials, and the panel creates a vhost serving WordPress; rerunning bootstrap changes nothing; a tampered Remi key fingerprint aborts the run.
+    - Acceptance: on a fresh VM, bootstrap completes, prints credentials, and the panel creates a vhost serving a PHP application; rerunning bootstrap changes nothing; a tampered Remi key fingerprint aborts the run.
 - [ ] **T1.27 Integration suite and red team.** Collect integration tests; port `poc/90-redteam.sh` to run against panel-created vhosts.
     - Acceptance: full suite passes on a fresh VM; red team finds no cross-tenant access.
 
 ## Phase 2: comfort
 
 - [ ] **T2.1 phpMyAdmin sign-on.** §12, including temporary DB users and expiry cleanup.
-- [ ] **T2.2 WordPress tools.** One-click install, nightly outdated core and plugin report, staging clone with URL search-replace, WP-Cron timers per vhost.
 - [ ] **T2.3 Backups and restore.** Files plus per-database dumps per vhost, retention, restore to the same or a new vhost.
 - [ ] **T2.4 OIDC login.** §11.2, generic provider configuration, profile linking.
 - [ ] **T2.5 GitHub login.** §11.2.
@@ -740,7 +733,7 @@ Throwaway shell scripts in `poc/`, run as root on a disposable AlmaLinux 9.4+ VM
 - [ ] **T2.7 API tokens.** Scoped, hashed, expiring; step-up on creation.
 - [ ] **T2.8 Outbound notifications.** SMTP relay and webhook forwarding, password reset by email.
 - [ ] **T2.8a Export and import.** `paddock export <vhost>` and `paddock import` with a final delta sync, per §16.1; also the basis for moving vhosts between servers.
-    - Acceptance: a WordPress vhost moves between two VMs with no data loss and under one minute of read-only time.
+    - Acceptance: a vhost with a database moves between two VMs with no data loss and under one minute of read-only time.
 - [ ] **T2.9 Package signing.** Signing key held outside GitHub or in a protected `release` environment with required reviewers; `rpmsign --addsign` for RPMs, detached signature for `repodata/repomd.xml` and `SHA256SUMS`; public key `RPM-GPG-KEY-paddock` on Pages with its fingerprint in `README.md` and pinned in `bootstrap.sh`; repo file switched to `gpgcheck=1`, `repo_gpgcheck=1`. Existing servers switch on their next `paddock setup`.
     - Acceptance: a tampered RPM or repository metadata fails `dnf install` on a test VM.
 - [ ] **T2.10 Security review.** External review of agent and panel; fix findings before phase 3.

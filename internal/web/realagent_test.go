@@ -252,7 +252,7 @@ func TestImpersonationRecordsBothIdentities(t *testing.T) {
 	if rec := b.do("GET", "/vhosts/"+v.ID, nil); rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "Acting as owner") {
 		t.Fatalf("impersonated vhost page = %d", rec.Code)
 	}
-	if rec := b.do("POST", "/vhosts/"+v.ID+"/databases", url.Values{"suffix": {"wp"}}); rec.Code != http.StatusSeeOther {
+	if rec := b.do("POST", "/vhosts/"+v.ID+"/databases", url.Values{"suffix": {"app"}}); rec.Code != http.StatusSeeOther {
 		t.Fatalf("impersonated db.create = %d %.300s", rec.Code, rec.Body.String())
 	}
 	entries, err := rh.state.ListAudit(ctx, 0, 1)

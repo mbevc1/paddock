@@ -233,9 +233,6 @@ func buildShellJail(ctx context.Context, h *Host, undo *rollback, sv state.Vhost
 	if err := linkJailPHP(h, sv.ID, sv.PHPVersion); err != nil {
 		return err
 	}
-	if err := h.FS.Symlink(BaseJail, id+"/opt/paddock/bin/wp", "/usr/local/bin/wp"); err != nil {
-		return h.applyFailed("linking the jail's wp", err)
-	}
 	for _, dev := range shellJailDevices {
 		exists, err := h.FS.Exists(BaseJail, id+"/dev/"+dev[0])
 		if err != nil {

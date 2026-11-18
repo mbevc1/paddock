@@ -47,11 +47,6 @@ SetEnvIf X-Forwarded-Proto https HTTPS=on
     AllowOverride AuthConfig FileInfo Indexes Limit Options=Indexes,SymLinksIfOwnerMatch
     Require all granted
 </Directory>
-<Directory /srv/www/v00012/public/wp-content/uploads>
-    <FilesMatch "\.(php|phar|phtml)$">
-        Require all denied
-    </FilesMatch>
-</Directory>
 <FilesMatch "\.php$">
     SetHandler "proxy:unix:/run/paddock/fpm/v00012/php.sock|fcgi://localhost"
 </FilesMatch>

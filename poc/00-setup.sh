@@ -16,7 +16,6 @@ done
 
 readonly LOOP_IMG=/var/lib/paddock-poc/www.img
 readonly LOOP_SIZE=${POC_LOOP_SIZE:-8G}
-readonly WP_CLI_URL=https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar
 
 poc_start
 
@@ -107,15 +106,6 @@ check "MariaDB root uses unix_socket" bash -c \
 	"mysql -N -e \"SELECT priv FROM mysql.global_priv WHERE User='root' AND Host='localhost'\" | grep -q unix_socket"
 check "front certificate $POC_CERT exists" test -s "$POC_CERT"
 
-if [[ ! -x /usr/local/bin/wp ]]; then
-	tmp=$(mktemp -d)
-	on_cleanup "rm -rf '$tmp'"
-	curl -fsSL -o "$tmp/wp" "$WP_CLI_URL"
-	curl -fsSL -o "$tmp/wp.sha512" "$WP_CLI_URL.sha512"
-	echo "$(cat "$tmp/wp.sha512")  $tmp/wp" | sha512sum -c --quiet
-	install -m 0755 "$tmp/wp" /usr/local/bin/wp
-fi
-check "wp-cli installed" test -x /usr/local/bin/wp
 
 getent group paddock-sftp >/dev/null || groupadd -r paddock-sftp
 getent group paddock-shell >/dev/null || groupadd -r paddock-shell

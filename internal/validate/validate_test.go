@@ -52,17 +52,17 @@ func TestOwnerID(t *testing.T) {
 }
 
 func TestDatabaseName(t *testing.T) {
-	if name, err := DatabaseName("v00012", "wp"); err != nil || name != "v00012_wp" {
+	if name, err := DatabaseName("v00012", "app"); err != nil || name != "v00012_app" {
 		t.Errorf("DatabaseName = %q, %v", name, err)
 	}
 	if name, err := DatabaseName("v00012", strings.Repeat("a", 20)); err != nil || len(name) != 27 {
 		t.Errorf("20-character suffix: %q, %v", name, err)
 	}
-	for _, suffix := range append([]string{strings.Repeat("a", 21), "WP", "w_p", "w%p", "w-p"}, hostile...) {
+	for _, suffix := range append([]string{strings.Repeat("a", 21), "APP", "w_p", "w%p", "w-p"}, hostile...) {
 		_, err := DatabaseName("v00012", suffix)
 		assertInvalid(t, err)
 	}
-	_, err := DatabaseName("v0012", "wp")
+	_, err := DatabaseName("v0012", "app")
 	assertInvalid(t, err)
 }
 

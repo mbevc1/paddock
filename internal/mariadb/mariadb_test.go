@@ -10,7 +10,7 @@ import (
 )
 
 func TestIdentAndAccount(t *testing.T) {
-	if got, err := Ident("v00012_wp"); err != nil || got != "`v00012_wp`" {
+	if got, err := Ident("v00012_app"); err != nil || got != "`v00012_app`" {
 		t.Errorf("Ident = %q, %v", got, err)
 	}
 	if got, err := Account("v00012_ro"); err != nil || got != "'v00012_ro'@'localhost'" {
@@ -27,7 +27,7 @@ func TestIdentAndAccount(t *testing.T) {
 }
 
 func TestGrantEscaping(t *testing.T) {
-	if got, err := GrantDB("v00012_wp"); err != nil || got != "`v00012\\_wp`" {
+	if got, err := GrantDB("v00012_app"); err != nil || got != "`v00012\\_app`" {
 		t.Errorf("GrantDB = %q, %v", got, err)
 	}
 	// 32 characters with 6 underscores escape to 38: fine. 60 with 5 escape to 65: refused.
@@ -79,9 +79,9 @@ func TestStatements(t *testing.T) {
 	if err != nil || sql != "CREATE USER 'v00012'@'localhost' IDENTIFIED VIA unix_socket OR mysql_native_password USING PASSWORD('pw\\'x') WITH MAX_USER_CONNECTIONS 20;\n" {
 		t.Errorf("CreatePrimaryUser = %q, %v", sql, err)
 	}
-	sql, err = CreateDatabase("v00012_wp", "v00012")
-	if err != nil || !strings.Contains(sql, "CREATE DATABASE `v00012_wp` CHARACTER SET utf8mb4") ||
-		!strings.Contains(sql, "GRANT ALL PRIVILEGES ON `v00012\\_wp`.* TO 'v00012'@'localhost'") {
+	sql, err = CreateDatabase("v00012_app", "v00012")
+	if err != nil || !strings.Contains(sql, "CREATE DATABASE `v00012_app` CHARACTER SET utf8mb4") ||
+		!strings.Contains(sql, "GRANT ALL PRIVILEGES ON `v00012\\_app`.* TO 'v00012'@'localhost'") {
 		t.Errorf("CreateDatabase = %q, %v", sql, err)
 	}
 	sql, err = CreateUser("v00012_ro", "v00012", "secret", PrivilegesRead, 5)
@@ -92,16 +92,16 @@ func TestStatements(t *testing.T) {
 	if _, err := CreateUser("v00012_ro", "v00012", "x", "root", 5); err == nil {
 		t.Error("unknown privilege level accepted")
 	}
-	revoke, err := RevokeWrites("v00012", []string{"v00012_wp"}, []string{"v00012_rw"})
+	revoke, err := RevokeWrites("v00012", []string{"v00012_app"}, []string{"v00012_rw"})
 	want := []string{
-		"REVOKE INSERT, UPDATE, CREATE ON `v00012\\_wp`.* FROM 'v00012'@'localhost'",
+		"REVOKE INSERT, UPDATE, CREATE ON `v00012\\_app`.* FROM 'v00012'@'localhost'",
 		"REVOKE INSERT, UPDATE, CREATE ON `v00012\\_%`.* FROM 'v00012_rw'@'localhost'",
 	}
 	if err != nil || strings.Join(revoke, "|") != strings.Join(want, "|") {
 		t.Errorf("RevokeWrites = %q, %v", revoke, err)
 	}
-	restore, _ := RestoreWrites("v00012", []string{"v00012_wp"}, nil)
-	if len(restore) != 1 || !strings.HasPrefix(restore[0], "GRANT INSERT, UPDATE, CREATE ON `v00012\\_wp`.* TO") {
+	restore, _ := RestoreWrites("v00012", []string{"v00012_app"}, nil)
+	if len(restore) != 1 || !strings.HasPrefix(restore[0], "GRANT INSERT, UPDATE, CREATE ON `v00012\\_app`.* TO") {
 		t.Errorf("RestoreWrites = %q", restore)
 	}
 	sql, err = DatabaseSizes("v00012")
@@ -113,10 +113,10 @@ func TestStatements(t *testing.T) {
 func TestClient(t *testing.T) {
 	ctx := context.Background()
 	f := &system.Fake{}
-	f.On(clientBinary).Return(system.Result{Stdout: []byte("v00012_wp\t1024\nv00012_shop\t0\n")}, nil).Times(1)
+	f.On(clientBinary).Return(system.Result{Stdout: []byte("v00012_app\t1024\nv00012_shop\t0\n")}, nil).Times(1)
 	c := Client{Run: f}
 	rows, err := c.Query(ctx, "SELECT 1;")
-	if err != nil || len(rows) != 2 || rows[0][0] != "v00012_wp" || rows[0][1] != "1024" {
+	if err != nil || len(rows) != 2 || rows[0][0] != "v00012_app" || rows[0][1] != "1024" {
 		t.Errorf("Query = %q, %v", rows, err)
 	}
 	if call := f.Calls()[0]; strings.Join(call.Argv, " ") != "/usr/bin/mariadb --protocol=socket --batch --skip-column-names" || string(call.Stdin) != "SELECT 1;" {

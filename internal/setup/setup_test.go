@@ -3,9 +3,6 @@ package setup
 import (
 	"bytes"
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
-	"errors"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -22,8 +19,6 @@ import (
 	"github.com/mbevc1/paddock/internal/web/store"
 )
 
-const fakeWP = "#!/usr/bin/env php\n<?php // fake wp-cli\n"
-
 type env struct {
 	t       *testing.T
 	root    string
@@ -35,11 +30,6 @@ type env struct {
 
 func newEnv(t *testing.T) *env {
 	t.Helper()
-	sum := sha256.Sum256([]byte(fakeWP))
-	old := wpCLISHA256
-	wpCLISHA256 = hex.EncodeToString(sum[:])
-	t.Cleanup(func() { wpCLISHA256 = old })
-
 	root := t.TempDir()
 	for _, p := range []string{"etc/httpd/conf.modules.d", "srv"} {
 		if err := os.MkdirAll(filepath.Join(root, p), 0o755); err != nil {
@@ -65,9 +55,6 @@ func newEnv(t *testing.T) *env {
 		Now:     func() time.Time { return time.Date(2026, 11, 17, 12, 0, 0, 0, time.UTC) },
 		WebUser: func() (int, int, error) { return os.Getuid(), os.Getgid(), nil },
 		Chown:   func(string, int, int) error { return nil },
-		Download: func(_ context.Context, _ string, hostPath string) error {
-			return os.WriteFile(filepath.Join(root, hostPath), []byte(fakeWP), 0o600)
-		},
 	}
 	e.run = withMount(e)
 	return e
@@ -161,9 +148,6 @@ func TestFirstRunAndRerun(t *testing.T) {
 		if _, err := os.Stat(filepath.Join(e.root, f)); err != nil {
 			t.Errorf("%s: %v", f, err)
 		}
-	}
-	if fi, _ := os.Stat(filepath.Join(e.root, "usr/local/bin/wp")); fi == nil || fi.Mode().Perm() != 0o755 {
-		t.Errorf("wp-cli not installed: %v", fi)
 	}
 
 	ws, err := store.Open(ctx, filepath.Join(e.root, WebDir, "web.db"))
@@ -282,19 +266,5 @@ func TestKeepsMarkedFiles(t *testing.T) {
 	}
 	if got := e.read("etc/ssh/sshd_config.d/50-paddock.conf"); got != local {
 		t.Errorf("marked file overwritten: %q", got)
-	}
-}
-
-func TestWPCLIHashMismatch(t *testing.T) {
-	e := newEnv(t)
-	e.deps.Download = func(_ context.Context, _ string, hostPath string) error {
-		return os.WriteFile(filepath.Join(e.root, hostPath), []byte("tampered"), 0o600)
-	}
-	err := Run(context.Background(), defaultOptions(), e.deps)
-	if err == nil || !strings.Contains(err.Error(), "SHA-256") {
-		t.Fatalf("err = %v", err)
-	}
-	if _, err := os.Stat(filepath.Join(e.root, "usr/local/bin/wp")); !errors.Is(err, fs.ErrNotExist) {
-		t.Error("tampered wp-cli installed")
 	}
 }

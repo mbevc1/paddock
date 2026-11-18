@@ -34,8 +34,6 @@ info "jail root: $out"
 refute "jail root has no srv" grep -qw srv <<<"$out"
 out=$(sh_jail 'php -v | head -1')
 check "php -v is PHP 8.3 ($out)" grep -q '^PHP 8\.3' <<<"$out"
-out=$(sh_jail 'wp --info')
-check "wp --info works" grep -q 'WP-CLI version' <<<"$out"
 out=$(sh_jail 'cat /proc/self/cgroup')
 check "session lands in user-$uid.slice ($out)" grep -q "user-$uid.slice" <<<"$out"
 out=$(sh_jail 'sudo -n id -u')

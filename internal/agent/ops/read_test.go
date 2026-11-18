@@ -13,7 +13,7 @@ import (
 func TestReadOperations(t *testing.T) {
 	ctx := context.Background()
 	e, web, owner, _ := activeVhost(t)
-	if err := web.Call(ctx, "db.create", owner, "", DBArgs{VhostID: "v00001", Suffix: "wp"}, nil); err != nil {
+	if err := web.Call(ctx, "db.create", owner, "", DBArgs{VhostID: "v00001", Suffix: "app"}, nil); err != nil {
 		t.Fatal(err)
 	}
 	if err := web.Call(ctx, "dbuser.create", owner, "", DBUserCreateArgs{VhostID: "v00001", Suffix: "ro", Grants: mariadb.PrivilegesRead}, nil); err != nil {

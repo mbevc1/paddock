@@ -254,7 +254,7 @@ func TestDatabaseIsolation(t *testing.T) {
 	a, aDomain := newVhost(t, h, "8.3")
 	b, _ := newVhost(t, h, "8.3")
 	for _, id := range []string{a, b} {
-		if err := h.client.Call(ctx, "db.create", h.admin, "", ops.DBArgs{VhostID: id, Suffix: "wp"}, nil); err != nil {
+		if err := h.client.Call(ctx, "db.create", h.admin, "", ops.DBArgs{VhostID: id, Suffix: "app"}, nil); err != nil {
 			t.Fatalf("db.create %s: %v", id, err)
 		}
 	}
@@ -263,13 +263,13 @@ func TestDatabaseIsolation(t *testing.T) {
 			"$m = @new mysqli('localhost', '"+user+"', '', '"+db+"');\n"+
 			"echo $m->connect_errno ? 'ERR' : 'OK';")
 	}
-	if got := connect(a, a+"_wp"); got != "OK" {
+	if got := connect(a, a+"_app"); got != "OK" {
 		t.Errorf("A to its own database: %q", got)
 	}
-	if got := connect(b, b+"_wp"); got != "ERR" {
+	if got := connect(b, b+"_app"); got != "ERR" {
 		t.Errorf("A logged in as B: %q", got)
 	}
-	if got := connect(a, b+"_wp"); got != "ERR" {
+	if got := connect(a, b+"_app"); got != "ERR" {
 		t.Errorf("A opened B's database: %q", got)
 	}
 }
@@ -282,12 +282,12 @@ func TestQuotaRevocation(t *testing.T) {
 	if err := h.client.Call(ctx, "owner.limits.set", h.admin, "", ops.OwnerLimitsArgs{OwnerID: sv.OwnerID, Limits: ops.LimitsArgs{DiskMB: ptrTo(50)}}, nil); err != nil {
 		t.Fatal(err)
 	}
-	if err := h.client.Call(ctx, "db.create", h.admin, "", ops.DBArgs{VhostID: id, Suffix: "wp"}, nil); err != nil {
+	if err := h.client.Call(ctx, "db.create", h.admin, "", ops.DBArgs{VhostID: id, Suffix: "app"}, nil); err != nil {
 		t.Fatal(err)
 	}
 	sql := func(stmt string) string {
 		return servePHP(t, id, domain, "q.php", "mysqli_report(MYSQLI_REPORT_OFF);\n"+
-			"$m = new mysqli('localhost', '"+id+"', '', '"+id+"_wp');\n"+
+			"$m = new mysqli('localhost', '"+id+"', '', '"+id+"_app');\n"+
 			"echo $m->query(\""+stmt+"\") ? 'OK' : 'ERR';")
 	}
 	if got := sql("CREATE TABLE t (v INT)"); got != "OK" {

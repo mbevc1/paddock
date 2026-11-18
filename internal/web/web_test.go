@@ -395,7 +395,7 @@ func TestStepUpOnSensitiveActions(t *testing.T) {
 	h.now = h.now.Add(stepUpWindow + time.Minute)
 	for _, path := range []string{
 		"/security/password", "/security/totp/begin", "/security/totp/confirm", "/security/totp/disable", "/security/recovery",
-		"/vhosts/v00001/delete", "/vhosts/v00001/databases/wp/delete", "/vhosts/v00001/dbusers/ro/delete",
+		"/vhosts/v00001/delete", "/vhosts/v00001/databases/app/delete", "/vhosts/v00001/dbusers/ro/delete",
 		"/vhosts/v00001/dbusers/ro/password", "/vhosts/v00001/dbpassword",
 		"/vhosts/v00001/access", "/vhosts/v00001/access/delete", "/vhosts/v00001/keys", "/vhosts/v00001/keys/remove",
 	} {

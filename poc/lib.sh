@@ -278,11 +278,6 @@ SetEnvIf X-Forwarded-Proto https HTTPS=on
     AllowOverride AuthConfig FileInfo Indexes Limit Options=Indexes,SymLinksIfOwnerMatch
     Require all granted
 </Directory>
-<Directory /srv/www/$id/public/wp-content/uploads>
-    <FilesMatch "\.(php|phar|phtml)\$">
-        Require all denied
-    </FilesMatch>
-</Directory>
 <FilesMatch "\.php\$">
     SetHandler "proxy:unix:/run/paddock/fpm/$id/php.sock|fcgi://localhost"
 </FilesMatch>
@@ -519,7 +514,6 @@ jail_create() {
 			[[ -e $j/dev/$name ]] || mknod -m 0666 "$j/dev/$name" "$type" "$major" "$minor"
 		done
 		ln -sfn "/opt/remi/php$(php_tag "$(vh_php "$n")")/root/usr/bin/php" "$j/opt/paddock/bin/php"
-		ln -sfn /usr/local/bin/wp "$j/opt/paddock/bin/wp"
 		usermod -s /bin/bash -G paddock-shell "$id"
 	else
 		usermod -G paddock-sftp "$id"
@@ -690,7 +684,7 @@ php_cli() { echo "/opt/remi/php$(php_tag "$1")/root/usr/bin/php"; }
 
 # §9 primary DB user and one database.
 db_create_primary() {
-	local n=$1 suffix=${2:-wp} id
+	local n=$1 suffix=${2:-app} id
 	id=$(vh_id "$n")
 	local pw
 	pw=$(head -c 24 /dev/urandom | base64 | tr -dc 'A-Za-z0-9' | head -c 24)

@@ -19,7 +19,7 @@ vagrant snapshot save clean
 
 | Script | Task | Checks |
 | --- | --- | --- |
-| `00-setup.sh` | T0.1 | packages from BaseOS/AppStream, EPEL, Remi; `/srv/www` with project quotas; MariaDB `unix_socket` for root; wp-cli |
+| `00-setup.sh` | T0.1 | packages from BaseOS/AppStream, EPEL, Remi; `/srv/www` with project quotas; MariaDB `unix_socket` for root |
 | `02-sandbox.sh` | T0.2 | §7.1 drop-in: private `/srv/www`, `/run/paddock`, `/tmp`, `/dev/shm`, process list |
 | `03-backend.sh` | T0.3 | §7.2 backend Apache as the vhost user in `httpd_t`; module file names |
 | `04-fpm-switch.sh` | T0.4 | Remi FPM label; §8 PHP switch under a 1 req/s loop |
@@ -28,7 +28,7 @@ vagrant snapshot save clean
 | `07-sftp.sh` | T0.7 | §7.5 SFTP chroot and forwarding limited to `127.0.0.1:3306` |
 | `08-shell.sh` | T0.8 | §7.5 shell jail, private procfs, masked `user@`, user slice |
 | `09-sysctl.sh` | T0.9 | §7.6 kernel settings, then reruns 02 to 08 |
-| `10-wordpress.sh` | T0.10 | WordPress install, core and plugin updates through FPM, uploads, HTTPS detection |
+| `10-php-app.sh` | T0.10 | PHP application writing its own files, `open_basedir`, sessions, HTTPS detection |
 | `11-scale.sh` | T0.11 | `create [COUNT]`, reboot, `report`, `cleanup` |
 | `90-redteam.sh` | T0.12 | every attempt from §7.7 |
 

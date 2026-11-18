@@ -47,7 +47,7 @@ func TestQuotas(t *testing.T) {
 		t.Errorf("vhost for missing owner: %v", err)
 	}
 
-	if err := s.CreateDatabase(ctx, v1.N, "v00001_wp"); err != nil {
+	if err := s.CreateDatabase(ctx, v1.N, "v00001_app"); err != nil {
 		t.Fatal(err)
 	}
 	wantLimit(t, s.CreateDatabase(ctx, v1.N, "v00001_shop"), ResourceDatabases, 1)
@@ -98,7 +98,7 @@ func TestDatabaseAccessors(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, db := range []string{"v00001_wp", "v00001_app"} {
+	for _, db := range []string{"v00001_app", "v00001_shop"} {
 		if err := s.CreateDatabase(ctx, v.N, db); err != nil {
 			t.Fatal(err)
 		}
@@ -106,13 +106,13 @@ func TestDatabaseAccessors(t *testing.T) {
 	if dbs, err := s.ListDatabases(ctx, v.N); err != nil || len(dbs) != 2 || dbs[0] != "v00001_app" {
 		t.Errorf("ListDatabases = %q, %v", dbs, err)
 	}
-	if n, err := s.DatabaseVhost(ctx, "v00001_wp"); err != nil || n != v.N {
+	if n, err := s.DatabaseVhost(ctx, "v00001_app"); err != nil || n != v.N {
 		t.Errorf("DatabaseVhost = %d, %v", n, err)
 	}
-	if err := s.DeleteDatabase(ctx, "v00001_wp"); err != nil {
+	if err := s.DeleteDatabase(ctx, "v00001_app"); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.DeleteDatabase(ctx, "v00001_wp"); !errors.Is(err, ErrNotFound) {
+	if err := s.DeleteDatabase(ctx, "v00001_app"); !errors.Is(err, ErrNotFound) {
 		t.Errorf("second delete: %v", err)
 	}
 	if err := s.CreateDBUser(ctx, v.N, "v00001_ro", "read"); err != nil {

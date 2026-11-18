@@ -202,7 +202,7 @@ func JailMounts(v Vhost, shell bool) ([]File, error) {
 }
 
 // JailEtc renders the shell jail's passwd and group, which list only the vhost user, and a
-// profile that puts the vhost's php and wp first on PATH.
+// profile that puts the vhost's php first on PATH.
 func JailEtc(v Vhost) ([]File, error) {
 	if err := v.valid(); err != nil {
 		return nil, err

@@ -22,7 +22,7 @@ func scriptUsage(e *env, diskMB, dbMB int64) {
 	e.run.OnFunc(func(argv []string) bool { return len(argv) > 3 && argv[3] == xfsReport }).
 		Return(system.Result{Stdout: fmt.Appendf(nil, "#1  %d  0  102400  00 [--------]\n", diskMB*1024)}, nil).Times(1)
 	e.run.OnCall(func(c system.Call) bool { return string(c.Stdin) == mariadb.AllDatabaseSizes() }).
-		Return(system.Result{Stdout: fmt.Appendf(nil, "v00001_wp\t%d\n", dbMB<<20)}, nil).Times(1)
+		Return(system.Result{Stdout: fmt.Appendf(nil, "v00001_app\t%d\n", dbMB<<20)}, nil).Times(1)
 }
 
 func eventKinds(t *testing.T, e *env) []state.EventKind {
@@ -57,7 +57,7 @@ func TestQuotaWarningAndEnforcement(t *testing.T) {
 	if err := e.store.SetLimits(ctx, owner.OwnerID, l); err != nil {
 		t.Fatal(err)
 	}
-	if err := web.Call(ctx, "db.create", owner, "", DBArgs{VhostID: "v00001", Suffix: "wp"}, nil); err != nil {
+	if err := web.Call(ctx, "db.create", owner, "", DBArgs{VhostID: "v00001", Suffix: "app"}, nil); err != nil {
 		t.Fatal(err)
 	}
 	for _, u := range []DBUserCreateArgs{{VhostID: "v00001", Suffix: "rw", Grants: mariadb.PrivilegesAll}, {VhostID: "v00001", Suffix: "ro", Grants: mariadb.PrivilegesRead}} {
@@ -94,7 +94,7 @@ func TestQuotaWarningAndEnforcement(t *testing.T) {
 	}
 	revoked := sqlSince(e, mark)
 	want := []string{
-		"REVOKE INSERT, UPDATE, CREATE ON `v00001\\_wp`.* FROM 'v00001'@'localhost';\n",
+		"REVOKE INSERT, UPDATE, CREATE ON `v00001\\_app`.* FROM 'v00001'@'localhost';\n",
 		"REVOKE INSERT, UPDATE, CREATE ON `v00001\\_%`.* FROM 'v00001_rw'@'localhost';\n",
 	}
 	if !slices.Equal(revoked, want) {
