@@ -46,10 +46,14 @@ type Domain struct {
 }
 
 // CreateVhost allocates the next vhost number, never reusing one, and records the vhost in
-// status "creating" with its primary domain and aliases.
+// status "creating" with its primary domain and aliases. It fails with *LimitError when the
+// owner is at max_vhosts.
 func (s *Store) CreateVhost(ctx context.Context, ownerID int64, php, primary string, aliases []string) (Vhost, error) {
 	var v Vhost
 	err := s.tx(ctx, func(tx *sql.Tx) error {
+		if err := checkQuota(ctx, tx, ownerID, ResourceVhosts); err != nil {
+			return err
+		}
 		var seq sql.NullInt64
 		err := tx.QueryRowContext(ctx, `SELECT seq FROM sqlite_sequence WHERE name = 'vhosts'`).Scan(&seq)
 		if err != nil && !errors.Is(err, sql.ErrNoRows) {

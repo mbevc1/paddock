@@ -656,8 +656,10 @@ Throwaway shell scripts in `poc/`, run as root on a disposable AlmaLinux 9.4+ VM
     - Acceptance: replayed code rejected; expired window rejected; a user marked admin only in `web.db` cannot run admin ops; owner-class callers never can.
     - Done: root operations are `admin.add` and `admin.totp.reset`; they return the `otpauth://` URI once and the CLI prints it. A code is single-use per time step: after a code is accepted, codes from that step or earlier fail. `paddock agent` now listens and serves these operations.
     - Deferred: `paddock admin add` takes the admin's panel user ID; creating the matching `web.db` user belongs to the web tasks (T1.18, T1.24).
-- [ ] **T1.8 Owners and limits.** `owner.*` ops; limits and defaults from §5; limit checks shared by all ops that consume quota.
+- [x] **T1.8 Owners and limits.** `owner.*` ops; limits and defaults from §5; limit checks shared by all ops that consume quota.
     - Acceptance: creating a vhost, database, or access account beyond the limit returns `limit_exceeded`.
+    - Done: quota checks run inside the state transaction that adds the vhost, database, DB user, or access account, so concurrent requests cannot both pass; shell accounts also need `shell_allowed`. Tests cover each resource from the store through the socket. `owner.create` and `owner.limits.set` merge given fields onto the defaults or current limits.
+    - Deferred: the `vhost.create`, `db.create`, and `access.create` operations arrive with T1.10, T1.13, and T1.14 and use these store methods. Applying changed limits to owner slices and FPM pools on the host comes with T1.10 and T1.16.
 - [ ] **T1.9 PHP versions.** `php.version.install` and `php.version.remove` via dnf (Remi packages), render the FPM unit template per version, refuse removal while vhosts use the version.
     - Acceptance: fake-runner tests for both paths; integration test installs 8.4 on the VM.
 - [ ] **T1.10 Vhost create and delete.** Full lifecycle from §8 with step-by-step rollback.

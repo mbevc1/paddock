@@ -8,6 +8,9 @@ import (
 	"fmt"
 	"regexp"
 	"strconv"
+	"strings"
+	"unicode"
+	"unicode/utf8"
 )
 
 // ErrInvalid wraps every validation failure.
@@ -100,6 +103,25 @@ var usernamePattern = regexp.MustCompile(`^[a-z][a-z0-9._-]{2,31}$`)
 func Username(name string) error {
 	if !usernamePattern.MatchString(name) {
 		return invalid("username %q must be 3 to 32 lowercase letters, digits, or ._- and start with a letter", name)
+	}
+	return nil
+}
+
+const maxDisplayName = 64
+
+// DisplayName checks a human-readable name such as an owner's: 1 to 64 characters of valid
+// UTF-8 without control characters or surrounding spaces.
+func DisplayName(name string) error {
+	if name == "" || utf8.RuneCountInString(name) > maxDisplayName || !utf8.ValidString(name) {
+		return invalid("name must be 1 to %d characters of UTF-8", maxDisplayName)
+	}
+	if strings.TrimSpace(name) != name {
+		return invalid("name must not start or end with spaces")
+	}
+	for _, r := range name {
+		if unicode.IsControl(r) {
+			return invalid("name must not contain control characters")
+		}
 	}
 	return nil
 }

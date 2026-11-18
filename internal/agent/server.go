@@ -260,7 +260,12 @@ func (s *Server) toAPIError(op string, err error) *api.Error {
 	if e := api.AsError(err); e != nil {
 		return e
 	}
+	var limitErr *state.LimitError
 	switch {
+	case errors.As(err, &limitErr):
+		return api.Errorf(api.CodeLimitExceeded, "%s", limitErr.Error())
+	case errors.Is(err, state.ErrShellNotAllowed):
+		return api.Errorf(api.CodeForbidden, "%s", state.ErrShellNotAllowed.Error())
 	case errors.Is(err, state.ErrNotFound):
 		return api.Errorf(api.CodeNotFound, "not found")
 	case errors.Is(err, state.ErrConflict):

@@ -41,8 +41,7 @@ func newEnv(t *testing.T) *env {
 	e.gate = &agent.TOTPGate{Store: store, Now: func() time.Time { return e.now }}
 	e.reg = agent.NewRegistry()
 	RegisterAdmin(e.reg, store, e.gate)
-	e.reg.Register(agent.Op{Name: "owner.create", Class: agent.ClassAdmin,
-		Handler: func(context.Context, *agent.Call) (any, error) { return map[string]bool{"created": true}, nil }})
+	RegisterOwners(e.reg, store)
 	return e
 }
 
@@ -100,6 +99,8 @@ func wantCode(t *testing.T, err error, code api.Code) {
 	}
 }
 
+func ownerArgs(name string) OwnerCreateArgs { return OwnerCreateArgs{Name: name} }
+
 func TestAdminTOTPGate(t *testing.T) {
 	ctx := context.Background()
 	e := newEnv(t)
@@ -114,6 +115,11 @@ func TestAdminTOTPGate(t *testing.T) {
 		t.Errorf("URI = %q", enrolled.TOTPURI)
 	}
 	secret := secretFromURI(t, enrolled.TOTPURI)
+	names := 0
+	nextName := func() string {
+		names++
+		return "owner " + string(rune('a'+names))
+	}
 	code := auth.TOTPCode(secret, auth.TOTPStep(e.now))
 	admin := &api.Actor{UserID: 1, Role: api.RoleAdmin}
 
@@ -122,38 +128,38 @@ func TestAdminTOTPGate(t *testing.T) {
 	wantCode(t, root.Call(ctx, "admin.add", nil, "", AdminAddArgs{UserID: 3, Username: "Bad Name"}, nil), api.CodeInvalidArgument)
 
 	t.Run("no code and no window", func(t *testing.T) {
-		wantCode(t, web.Call(ctx, "owner.create", admin, "", nil, nil), api.CodeTOTPRequired)
+		wantCode(t, web.Call(ctx, "owner.create", admin, "", ownerArgs(nextName()), nil), api.CodeTOTPRequired)
 	})
 	t.Run("wrong code", func(t *testing.T) {
-		wantCode(t, web.Call(ctx, "owner.create", admin, "000000", nil, nil), api.CodeTOTPInvalid)
+		wantCode(t, web.Call(ctx, "owner.create", admin, "000000", ownerArgs(nextName()), nil), api.CodeTOTPInvalid)
 	})
 	t.Run("valid code", func(t *testing.T) {
-		if err := web.Call(ctx, "owner.create", admin, code, nil, nil); err != nil {
+		if err := web.Call(ctx, "owner.create", admin, code, ownerArgs(nextName()), nil); err != nil {
 			t.Fatal(err)
 		}
 	})
 	t.Run("replayed code", func(t *testing.T) {
-		wantCode(t, web.Call(ctx, "owner.create", admin, code, nil, nil), api.CodeTOTPInvalid)
+		wantCode(t, web.Call(ctx, "owner.create", admin, code, ownerArgs(nextName()), nil), api.CodeTOTPInvalid)
 	})
 	t.Run("open window", func(t *testing.T) {
 		e.now = e.now.Add(9 * time.Minute)
-		if err := web.Call(ctx, "owner.create", admin, "", nil, nil); err != nil {
+		if err := web.Call(ctx, "owner.create", admin, "", ownerArgs(nextName()), nil); err != nil {
 			t.Errorf("within the window: %v", err)
 		}
 	})
 	t.Run("expired window", func(t *testing.T) {
 		e.now = e.now.Add(2 * time.Minute)
-		wantCode(t, web.Call(ctx, "owner.create", admin, "", nil, nil), api.CodeTOTPRequired)
+		wantCode(t, web.Call(ctx, "owner.create", admin, "", ownerArgs(nextName()), nil), api.CodeTOTPRequired)
 	})
 	t.Run("admin only in web.db", func(t *testing.T) {
 		fake := &api.Actor{UserID: 42, Role: api.RoleAdmin}
-		wantCode(t, web.Call(ctx, "owner.create", fake, "123456", nil, nil), api.CodeForbidden)
-		wantCode(t, web.Call(ctx, "owner.create", fake, "", nil, nil), api.CodeForbidden)
+		wantCode(t, web.Call(ctx, "owner.create", fake, "123456", ownerArgs(nextName()), nil), api.CodeForbidden)
+		wantCode(t, web.Call(ctx, "owner.create", fake, "", ownerArgs(nextName()), nil), api.CodeForbidden)
 	})
 	t.Run("owner caller", func(t *testing.T) {
 		owner := &api.Actor{UserID: 1, Role: api.RoleOwner, OwnerID: 5}
 		next := auth.TOTPCode(secret, auth.TOTPStep(e.now))
-		wantCode(t, web.Call(ctx, "owner.create", owner, next, nil, nil), api.CodeForbidden)
+		wantCode(t, web.Call(ctx, "owner.create", owner, next, ownerArgs(nextName()), nil), api.CodeForbidden)
 	})
 	t.Run("gate op opens the window", func(t *testing.T) {
 		e.now = e.now.Add(time.Minute)
@@ -165,7 +171,7 @@ func TestAdminTOTPGate(t *testing.T) {
 		if !v.WindowUntil.Equal(e.now.Add(agent.AdminWindow)) {
 			t.Errorf("window until %v", v.WindowUntil)
 		}
-		if err := web.Call(ctx, "owner.create", admin, "", nil, nil); err != nil {
+		if err := web.Call(ctx, "owner.create", admin, "", ownerArgs(nextName()), nil); err != nil {
 			t.Errorf("after admin.totp.verify: %v", err)
 		}
 		wantCode(t, web.Call(ctx, "admin.totp.verify", nil, "", TOTPVerifyArgs{UserID: 1, Code: next}, nil), api.CodeTOTPInvalid)
@@ -177,12 +183,12 @@ func TestAdminTOTPGate(t *testing.T) {
 			t.Fatal(err)
 		}
 		wantCode(t, root.Call(ctx, "admin.totp.reset", nil, "", AdminUserArgs{UserID: 9}, nil), api.CodeNotFound)
-		wantCode(t, web.Call(ctx, "owner.create", admin, "", nil, nil), api.CodeTOTPRequired)
+		wantCode(t, web.Call(ctx, "owner.create", admin, "", ownerArgs(nextName()), nil), api.CodeTOTPRequired)
 		e.now = e.now.Add(time.Minute)
 		old := auth.TOTPCode(secret, auth.TOTPStep(e.now))
-		wantCode(t, web.Call(ctx, "owner.create", admin, old, nil, nil), api.CodeTOTPInvalid)
+		wantCode(t, web.Call(ctx, "owner.create", admin, old, ownerArgs(nextName()), nil), api.CodeTOTPInvalid)
 		fresh := auth.TOTPCode(secretFromURI(t, again.TOTPURI), auth.TOTPStep(e.now))
-		if err := web.Call(ctx, "owner.create", admin, fresh, nil, nil); err != nil {
+		if err := web.Call(ctx, "owner.create", admin, fresh, ownerArgs(nextName()), nil); err != nil {
 			t.Errorf("new secret: %v", err)
 		}
 	})

@@ -137,3 +137,14 @@ func TestUsername(t *testing.T) {
 		assertInvalid(t, Username(bad))
 	}
 }
+
+func TestDisplayName(t *testing.T) {
+	for _, ok := range []string{"Acme Ltd", "Müller & Söhne", "a"} {
+		if err := DisplayName(ok); err != nil {
+			t.Errorf("DisplayName(%q): %v", ok, err)
+		}
+	}
+	for _, bad := range []string{"", " Acme", "Acme ", "Ac\nme", "Ac\x00me", "\xff", strings.Repeat("a", 65)} {
+		assertInvalid(t, DisplayName(bad))
+	}
+}

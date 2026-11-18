@@ -49,6 +49,7 @@ func runAgent(ctx context.Context, args []string, _, stderr io.Writer) error {
 	srv := &agent.Server{WebUID: uid, Registry: agent.NewRegistry(), Store: store, Gate: gate, Log: log}
 	srv.RegisterJobGet()
 	ops.RegisterAdmin(srv.Registry, store, gate)
+	ops.RegisterOwners(srv.Registry, store)
 
 	l, err := agent.Listen(*socket, gid)
 	if err != nil {
