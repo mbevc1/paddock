@@ -249,6 +249,20 @@ repo_gpgcheck=0" "$REPO_FILE"
 	dnf -y -q install paddock firewalld
 }
 
+# check_apache stops before anything changes when an Apache already installed has an invalid
+# configuration, which would otherwise fail bootstrap's own reload halfway through.
+check_apache() {
+	command -v apachectl >/dev/null || return 0
+	step "checking the existing Apache configuration"
+	local out
+	if ! out=$(apachectl configtest 2>&1); then
+		die "the existing Apache configuration is invalid, so bootstrap could not reload Apache:
+$out
+Fix or remove the file named above (Apache loads only *.conf files from /etc/httpd/conf.d),
+then rerun bootstrap."
+	fi
+}
+
 check_ports() {
 	step "checking ports"
 	local port user
@@ -414,6 +428,7 @@ main() {
 	WORK=$(mktemp -d)
 	trap 'rm -rf "$WORK"' EXIT
 	fence_subids
+	check_apache
 	install_packages
 	check_ports
 	prepare_www
