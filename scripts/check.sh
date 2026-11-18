@@ -3,7 +3,9 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-unformatted=$(gofmt -l .)
+# gofmt from the module's toolchain: formatting changes between Go releases.
+gofmt="$(go env GOROOT)/bin/gofmt"
+unformatted=$("$gofmt" -s -l .)
 if [[ -n $unformatted ]]; then
 	echo "gofmt needed:" >&2
 	echo "$unformatted" >&2
