@@ -46,8 +46,10 @@ type VhostResult struct {
 	VhostID string `json:"vhost_id"`
 }
 
-// RegisterVhosts adds vhost.create and vhost.delete. Both run as jobs.
+// RegisterVhosts adds vhost.create, vhost.delete, vhost.php.switch, vhost.suspend, and
+// vhost.resume. All run as jobs.
 func RegisterVhosts(r *agent.Registry, store *state.Store, h *Host) {
+	registerVhostState(r, store, h)
 	r.Register(agent.Op{Name: "vhost.create", Class: agent.ClassOwner, Long: true,
 		Handler: func(ctx context.Context, c *agent.Call) (any, error) {
 			args, err := agent.DecodeArgs[VhostCreateArgs](c)
@@ -177,6 +179,30 @@ func renderInputs(v state.Vhost, primary string, aliases []string, l state.Limit
 	}
 	rl, err := render.NewLimits(v.OwnerID, l.MemoryMaxMB, l.CPUQuotaPct, l.TasksMax)
 	return rv, rl, err
+}
+
+// renderedVhost builds the render inputs of a recorded vhost from its domains and its
+// owner's current limits.
+func renderedVhost(ctx context.Context, store *state.Store, sv state.Vhost) (render.Vhost, error) {
+	domains, err := store.Domains(ctx, sv.N)
+	if err != nil {
+		return render.Vhost{}, err
+	}
+	var primary string
+	var aliases []string
+	for _, d := range domains {
+		if d.Primary {
+			primary = d.Name
+		} else {
+			aliases = append(aliases, d.Name)
+		}
+	}
+	limits, err := store.GetLimits(ctx, sv.OwnerID)
+	if err != nil {
+		return render.Vhost{}, err
+	}
+	v, _, err := renderInputs(sv, primary, aliases, limits)
+	return v, err
 }
 
 var vhostSubdirs = []struct {
@@ -332,24 +358,21 @@ func applyVhost(ctx context.Context, h *Host, undo *rollback, sv state.Vhost, v 
 	}
 	undo.add(func(ctx context.Context) error { return h.run(ctx, systemctl, "daemon-reload") })
 
+	// A failed enable --now can leave the unit enabled, so its undo is registered first.
 	mount := render.MountUnitName(BaseJail + "/" + id + "/site")
-	for _, unit := range []string{mount, v.FPMUnit()} {
+	for _, unit := range []string{mount, v.FPMUnit(), v.HTTPDUnit()} {
+		undo.add(func(ctx context.Context) error { return h.run(ctx, systemctl, "disable", "--now", unit) })
 		if err := step("starting "+unit, systemctl, "enable", "--now", unit); err != nil {
 			return err
 		}
-		undo.add(func(ctx context.Context) error { return h.run(ctx, systemctl, "disable", "--now", unit) })
 		if unit == v.FPMUnit() {
 			if err := h.waitSocket(ctx, id); err != nil {
 				return h.applyFailed("starting "+unit, err)
 			}
 		}
 	}
-	if err := step("starting "+v.HTTPDUnit(), systemctl, "enable", "--now", v.HTTPDUnit()); err != nil {
-		return err
-	}
-	undo.add(func(ctx context.Context) error { return h.run(ctx, systemctl, "disable", "--now", v.HTTPDUnit()) })
 
-	return applyFront(ctx, h, undo, v, render.FrontOptions{TLS: render.TLSACME})
+	return applyFront(ctx, h, undo, v, frontOptions(false))
 }
 
 // applyFront writes the front vhost, checks the whole front config, and reloads Apache. A
@@ -391,29 +414,12 @@ func deleteVhost(ctx context.Context, store *state.Store, h *Host, actor *api.Ac
 	if err != nil {
 		return err
 	}
-	domains, err := store.Domains(ctx, sv.N)
+	v, err := renderedVhost(ctx, store, sv)
 	if err != nil {
 		return err
 	}
-	var primary string
-	var aliases []string
-	for _, d := range domains {
-		if d.Primary {
-			primary = d.Name
-		} else {
-			aliases = append(aliases, d.Name)
-		}
-	}
-	if args.Confirm != primary {
+	if args.Confirm != v.Primary() {
 		return api.Errorf(api.CodeInvalidArgument, "confirm must repeat the primary domain")
-	}
-	limits, err := store.GetLimits(ctx, sv.OwnerID)
-	if err != nil {
-		return err
-	}
-	v, _, err := renderInputs(sv, primary, aliases, limits)
-	if err != nil {
-		return err
 	}
 
 	h.mu.Lock()

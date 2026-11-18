@@ -179,6 +179,11 @@ func TestVhostCreateRollsBackEveryStep(t *testing.T) {
 				t.Fatalf("forward commands = %q", cmds[:i+1])
 			}
 			undone := cmds[i+1:]
+			if strings.Contains(failing, "enable --now") {
+				if undo := strings.Replace(failing, "enable --now", "disable --now", 1); !slices.Contains(undone, undo) {
+					t.Errorf("failed %q not undone; rollback ran %q", failing, undone)
+				}
+			}
 			for _, done := range wantCreateCommands[:i] {
 				if undo, ok := undoOf[done]; ok && !slices.Contains(undone, undo) {
 					t.Errorf("%q not undone; rollback ran %q", done, undone)

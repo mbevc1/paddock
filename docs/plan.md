@@ -670,6 +670,9 @@ Throwaway shell scripts in `poc/`, run as root on a disposable AlmaLinux 9.4+ VM
     - Deferred: the primary DB user (create) and dropping databases and DB users (delete) arrive with `internal/mariadb` in T1.13.
 - [ ] **T1.11 PHP switch, suspend, resume.** §8.
     - Acceptance: integration test switches 8.3 to 8.4 under a request loop with no errors; suspended vhost returns 503.
+    - Status: `vhost.php.switch`, `vhost.suspend`, and `vhost.resume` run as jobs with fake-runner tests for each sequence and rollback. `test/integration/vhost_test.go` covers the acceptance on the VM; it has not run yet, so the task stays open.
+    - Choices to confirm: only an active vhost can switch PHP; a suspended one must be resumed first. If the FPM socket is missing after the old master stops (PoC question 5), the switch restarts the new unit, which costs a brief gap instead of an outage. Suspend points the front at `Redirect 503 /` before stopping the units, and resume starts the units before restoring the proxy.
+    - Deferred: updating the shell jail's `php` link comes with shell jails in T1.14. Front TLS mode is always `mod_md` until T1.12 records uploaded certificates.
 - [ ] **T1.12 Front Apache and certificates.** Front vhost rendering, `MDNotifyCmd` handler (`paddock agent-notify md-renewed` asks the agent to validate and reload), `md-status` reader, custom certificate upload with key and chain validation.
     - Acceptance: `apachectl configtest` failure restores the previous file and reports `apply_failed`; uploaded certificate whose key does not match is rejected.
 - [ ] **T1.13 MariaDB.** `internal/mariadb`: identifier quoting, grant escaping with the 64-character check, `db.*` and `dbuser.*` ops, usage query, quota enforcement per §9.
