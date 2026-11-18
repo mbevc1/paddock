@@ -34,6 +34,15 @@ func TestFake(t *testing.T) {
 		t.Errorf("Commands() = %q, want %q", got, want)
 	}
 
+	byFunc := &Fake{}
+	byFunc.OnFunc(func(argv []string) bool { return len(argv) == 3 && argv[2] == "a b" }).Fail("no")
+	if _, err := byFunc.Run(ctx, []string{"/usr/sbin/x", "-c", "a b"}, Opts{}); err == nil {
+		t.Error("OnFunc rule did not match")
+	}
+	if _, err := byFunc.Run(ctx, []string{"/usr/sbin/x", "-c", "a"}, Opts{}); err != nil {
+		t.Errorf("OnFunc rule matched the wrong command: %v", err)
+	}
+
 	strict := &Fake{Strict: true}
 	if _, err := strict.Run(ctx, []string{"/usr/bin/true"}, Opts{}); err == nil {
 		t.Error("strict fake accepted an unscripted command")

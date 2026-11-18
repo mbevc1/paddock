@@ -33,6 +33,11 @@ type env struct {
 	gate  *agent.TOTPGate
 	run   *system.Fake
 	root  string
+	host  *Host
+	// chowns records ownership changes HostFS made.
+	chowns *[]chownCall
+	// socketErr is what waiting for an FPM socket returns.
+	socketErr error
 }
 
 func newEnv(t *testing.T) *env {
@@ -53,8 +58,13 @@ func newEnv(t *testing.T) *env {
 		t.Fatal(err)
 	}
 	e.run = &system.Fake{}
-	e.root = t.TempDir()
-	RegisterPHP(e.reg, store, &Host{Run: e.run, Files: render.Writer{Root: e.root}, Platform: plat})
+	hfs, chowns := testFS(t)
+	e.root, e.chowns = hfs.Root, chowns
+	e.host = &Host{Run: e.run, Files: render.Writer{Root: e.root}, FS: hfs, Platform: plat,
+		Now:        func() time.Time { return e.now },
+		WaitSocket: func(context.Context, string) error { return e.socketErr }}
+	RegisterPHP(e.reg, store, e.host)
+	RegisterVhosts(e.reg, store, e.host)
 	return e
 }
 

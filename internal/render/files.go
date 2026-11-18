@@ -215,6 +215,15 @@ func JailEtc(v Vhost) ([]File, error) {
 	return []File{passwd, group}, nil
 }
 
+// Tmpfiles renders the tmpfiles.d entry that recreates the vhost's FPM socket directory at
+// boot, since /run is empty after a restart.
+func Tmpfiles(v Vhost) (File, error) {
+	if err := v.valid(); err != nil {
+		return File{}, err
+	}
+	return file("/etc/tmpfiles.d/paddock-"+v.id+".conf", "tmpfiles.tmpl", v.data())
+}
+
 // SSHDDropIn renders the sshd settings for jailed accounts.
 func SSHDDropIn() (File, error) {
 	return file("/etc/ssh/sshd_config.d/50-paddock.conf", "sshd.tmpl", nil)

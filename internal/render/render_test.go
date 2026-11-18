@@ -77,6 +77,7 @@ func goldenFiles(t *testing.T) map[string]File {
 		"sshd":            must(SSHDDropIn()),
 		"nftables":        must(NFTables()),
 		"sysctl":          must(Sysctl()),
+		"tmpfiles":        must(Tmpfiles(v)),
 	}
 	return files
 }
@@ -170,6 +171,9 @@ func TestRejectsUnvalidatedInput(t *testing.T) {
 	}
 	if _, err := SandboxDropIns(zero); !errors.Is(err, ErrUnvalidated) {
 		t.Errorf("SandboxDropIns(zero) = %v", err)
+	}
+	if _, err := Tmpfiles(zero); !errors.Is(err, ErrUnvalidated) {
+		t.Errorf("Tmpfiles(zero) = %v", err)
 	}
 	if _, err := JailMounts(zero, true); !errors.Is(err, ErrUnvalidated) {
 		t.Errorf("JailMounts(zero) = %v", err)

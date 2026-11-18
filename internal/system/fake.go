@@ -17,9 +17,10 @@ type Call struct {
 	Env   []string
 }
 
-// Rule scripts the response to commands whose argv starts with a prefix.
+// Rule scripts the response to matching commands.
 type Rule struct {
 	prefix    []string
+	match     func(argv []string) bool
 	result    Result
 	err       error
 	remaining int
@@ -64,6 +65,22 @@ func (f *Fake) On(prefix ...string) *Rule {
 	return r
 }
 
+// OnFunc adds a rule for commands that match reports true for. Earlier rules win.
+func (f *Fake) OnFunc(match func(argv []string) bool) *Rule {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	r := &Rule{match: match}
+	f.rules = append(f.rules, r)
+	return r
+}
+
+func (r *Rule) matches(argv []string) bool {
+	if r.match != nil {
+		return r.match(argv)
+	}
+	return hasPrefix(argv, r.prefix)
+}
+
 // Run records the call and returns the first matching rule's result.
 func (f *Fake) Run(ctx context.Context, argv []string, opts Opts) (Result, error) {
 	if err := ctx.Err(); err != nil {
@@ -85,7 +102,7 @@ func (f *Fake) Run(ctx context.Context, argv []string, opts Opts) (Result, error
 	defer f.mu.Unlock()
 	f.calls = append(f.calls, call)
 	for _, r := range f.rules {
-		if r.remaining < 0 || !hasPrefix(argv, r.prefix) {
+		if r.remaining < 0 || !r.matches(argv) {
 			continue
 		}
 		if r.remaining > 0 {

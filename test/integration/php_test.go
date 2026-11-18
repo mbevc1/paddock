@@ -64,7 +64,9 @@ func newAgent(t *testing.T) *agentHarness {
 	srv.RegisterJobGet()
 	ops.RegisterAdmin(srv.Registry, store, gate)
 	ops.RegisterOwners(srv.Registry, store)
-	ops.RegisterPHP(srv.Registry, store, &ops.Host{Run: system.Exec{}, Files: render.Writer{}, Platform: plat, Log: log})
+	host := &ops.Host{Run: system.Exec{}, Files: render.Writer{}, FS: &ops.HostFS{}, Platform: plat, Log: log}
+	ops.RegisterPHP(srv.Registry, store, host)
+	ops.RegisterVhosts(srv.Registry, store, host)
 
 	fds, err := unix.Socketpair(unix.AF_UNIX, unix.SOCK_STREAM|unix.SOCK_CLOEXEC, 0)
 	if err != nil {

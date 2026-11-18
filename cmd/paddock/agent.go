@@ -58,8 +58,9 @@ func runAgent(ctx context.Context, args []string, _, stderr io.Writer) error {
 	srv.RegisterJobGet()
 	ops.RegisterAdmin(srv.Registry, store, gate)
 	ops.RegisterOwners(srv.Registry, store)
-	host := &ops.Host{Run: system.Exec{}, Files: render.Writer{}, Platform: plat, Log: log}
+	host := &ops.Host{Run: system.Exec{}, Files: render.Writer{}, FS: &ops.HostFS{}, Platform: plat, Log: log}
 	ops.RegisterPHP(srv.Registry, store, host)
+	ops.RegisterVhosts(srv.Registry, store, host)
 
 	l, err := agent.Listen(*socket, gid)
 	if err != nil {

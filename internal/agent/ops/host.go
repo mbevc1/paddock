@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"sync"
+	"time"
 
 	"github.com/mbevc1/paddock/internal/api"
 	"github.com/mbevc1/paddock/internal/platform"
@@ -11,15 +13,76 @@ import (
 	"github.com/mbevc1/paddock/internal/system"
 )
 
-const systemctl = "/usr/bin/systemctl"
+// Programs the operations run. Paths are the same on every supported release.
+const (
+	systemctl       = "/usr/bin/systemctl"
+	systemdTmpfiles = "/usr/bin/systemd-tmpfiles"
+	setpriv         = "/usr/bin/setpriv"
+	tar             = "/usr/bin/tar"
+	groupadd        = "/usr/sbin/groupadd"
+	groupdel        = "/usr/sbin/groupdel"
+	useradd         = "/usr/sbin/useradd"
+	userdel         = "/usr/sbin/userdel"
+	xfsQuota        = "/usr/sbin/xfs_quota"
+	restorecon      = "/usr/sbin/restorecon"
+	httpd           = "/usr/sbin/httpd"
+	apachectl       = "/usr/sbin/apachectl"
+)
 
 // Host bundles what operations need to change the machine.
 type Host struct {
 	Run      system.Runner
 	Files    render.Writer
+	FS       *HostFS
 	Platform platform.Platform
 	// Log receives command failures in full; callers see a short message.
 	Log *slog.Logger
+	// Now defaults to time.Now.
+	Now func() time.Time
+	// WaitSocket waits for a vhost's FPM socket; nil polls the file system.
+	WaitSocket func(ctx context.Context, vhostID string) error
+
+	// mu serializes host changes, so two operations never interleave edits and reloads of
+	// shared services such as the front Apache.
+	mu sync.Mutex
+}
+
+func (h *Host) now() time.Time {
+	if h.Now == nil {
+		return time.Now()
+	}
+	return h.Now()
+}
+
+const socketTimeout = 15 * time.Second
+
+func (h *Host) waitSocket(ctx context.Context, vhostID string) error {
+	if h.WaitSocket != nil {
+		return h.WaitSocket(ctx, vhostID)
+	}
+	ctx, cancel := context.WithTimeout(ctx, socketTimeout)
+	defer cancel()
+	tick := time.NewTicker(100 * time.Millisecond)
+	defer tick.Stop()
+	for {
+		if ok, err := h.FS.Exists(BaseFPMRun, vhostID+"/php.sock"); err != nil || ok {
+			return err
+		}
+		select {
+		case <-ctx.Done():
+			return errors.New("FPM socket did not appear")
+		case <-tick.C:
+		}
+	}
+}
+
+// exitCode returns the exit code of a command that ran and failed, or -1.
+func exitCode(err error) int {
+	var exitErr *system.ExitError
+	if errors.As(err, &exitErr) {
+		return exitErr.ExitCode
+	}
+	return -1
 }
 
 func (h *Host) logger() *slog.Logger {
