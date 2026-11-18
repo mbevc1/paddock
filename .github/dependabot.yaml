@@ -1,26 +1,51 @@
+# Please see the documentation for all configuration options:
+# https://docs.github.com/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
+
 version: 2
 updates:
-  - package-ecosystem: gomod
-    directory: /
+  - package-ecosystem: "gomod"
+    open-pull-requests-limit: 10
+    directory: "/"
     schedule:
-      interval: weekly
-    commit-message:
-      prefix: build
-      include: scope
+      interval: "weekly"
+      day: "thursday"
+      time: "11:00"
+    cooldown:
+      default-days: 0
+    # Group minor and patch updates
     groups:
-      golang-x:
-        patterns:
-          - golang.org/x/*
-
-  # Workflows pin actions by commit SHA with the version in a comment; Dependabot updates both.
-  - package-ecosystem: github-actions
-    directory: /
-    schedule:
-      interval: weekly
-    commit-message:
-      prefix: ci
-      include: scope
-    groups:
-      actions:
+      go-dependencies:
         patterns:
           - "*"
+        update-types:
+          - "minor"
+          - "patch"
+    labels:
+      - "dependencies"
+      - "go"
+    commit-message:
+      prefix: "build"
+      include: "scope"
+  - package-ecosystem: "github-actions"
+    open-pull-requests-limit: 10
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "thursday"
+      time: "11:00"
+    cooldown:
+      default-days: 1
+    # Group minor and patch updates
+    groups:
+      github-actions-dependencies:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+    labels:
+      - "dependencies"
+      - "github_actions"
+    commit-message:
+      prefix: "ci"
+      include: "scope"
