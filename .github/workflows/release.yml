@@ -1,0 +1,115 @@
+name: Release
+
+on:
+  push:
+    tags: ['v[0-9]*.[0-9]*.[0-9]*']
+
+permissions: {}
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container: almalinux:9
+    permissions:
+      contents: read
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Install build tools
+        run: |
+          dnf -y install dnf-plugins-core epel-release
+          dnf config-manager --set-enabled crb
+          dnf -y install git tar gzip rpm-build systemd-rpm-macros rpmlint
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
+        with:
+          go-version-file: go.mod
+          cache: false
+      - run: go test ./...
+      - name: Build RPMs
+        env:
+          OWNER: ${{ github.repository_owner }}
+        run: |
+          version=${GITHUB_REF_NAME#v}
+          for arch in x86_64 aarch64; do
+            scripts/build-rpm.sh "$version" "$arch" "$OWNER"
+          done
+      - run: rpmlint -r packaging/paddock.rpmlintrc dist/*.rpm
+      - name: Checksums
+        run: |
+          cd dist
+          files=(*.rpm)
+          if [[ -f ../packaging/bootstrap.sh ]]; then
+            cp ../packaging/bootstrap.sh .
+            files+=(bootstrap.sh)
+          fi
+          sha256sum -- "${files[@]}" > SHA256SUMS
+          cat SHA256SUMS
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release
+          path: |
+            dist/*.rpm
+            dist/bootstrap.sh
+            dist/SHA256SUMS
+          if-no-files-found: error
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release
+          path: dist
+      - name: Publish the GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" dist/* \
+            --repo "$GITHUB_REPOSITORY" --verify-tag --generate-notes \
+            --title "Paddock $GITHUB_REF_NAME"
+
+  pages:
+    needs: release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - run: sudo apt-get update && sudo apt-get install -y createrepo-c
+      # Pages sites are limited to 1 GB, so the repository keeps the last five releases (§14.1).
+      - name: Build the dnf repository
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir rpms
+          gh release list --repo "$GITHUB_REPOSITORY" --limit 5 --exclude-drafts \
+            --exclude-pre-releases --json tagName --jq '.[].tagName' |
+            while read -r tag; do
+              gh release download "$tag" --repo "$GITHUB_REPOSITORY" --pattern '*.rpm' --dir rpms
+            done
+          for arch in x86_64 aarch64; do
+            mkdir -p "site/el9/$arch"
+            mv rpms/*.el9."$arch".rpm "site/el9/$arch/"
+            createrepo_c "site/el9/$arch"
+          done
+      - uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: site
+      - id: deploy
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1

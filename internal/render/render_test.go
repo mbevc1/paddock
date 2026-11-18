@@ -244,3 +244,18 @@ func TestSliceMemoryUnits(t *testing.T) {
 		t.Errorf("OwnerSlice = %q, %v", f.Data, err)
 	}
 }
+
+// TestDeployedBackendUnitMatches keeps the unit the RPM ships in step with the renderer.
+func TestDeployedBackendUnitMatches(t *testing.T) {
+	want, err := BackendUnit()
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := os.ReadFile(filepath.Join("..", "..", "deploy", "systemd", "paddock-httpd@.service"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != string(want.Data) {
+		t.Errorf("deploy/systemd/paddock-httpd@.service differs from render.BackendUnit:\n%s", got)
+	}
+}
