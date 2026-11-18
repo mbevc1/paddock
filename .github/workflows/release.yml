@@ -32,6 +32,9 @@ jobs:
         with:
           go-version-file: go.mod
           cache: false
+      # The checkout belongs to the runner's UID, not the container's root, and go build reads
+      # git for its VCS stamp.
+      - run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
       - run: go test ./...
       - name: Build RPMs
         env:
