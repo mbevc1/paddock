@@ -66,7 +66,8 @@ func (f *HostFS) Mkdir(base, rel string, mode fs.FileMode, uid, gid int) error {
 		return err
 	}
 	defer r.Close()
-	if err := r.Mkdir(rel, mode); err != nil && !errors.Is(err, fs.ErrExist) {
+	// os.Root.Mkdir takes permission bits only; Chmod below adds sticky and the like.
+	if err := r.Mkdir(rel, mode.Perm()); err != nil && !errors.Is(err, fs.ErrExist) {
 		return err
 	}
 	fi, err := r.Lstat(rel)
@@ -222,4 +223,31 @@ func (f *HostFS) PruneOlder(base string, cutoff time.Time) error {
 		}
 	}
 	return nil
+}
+
+// Symlink makes base/rel a symlink to target, replacing a different link. It refuses to
+// replace anything that is not a symlink.
+func (f *HostFS) Symlink(base, rel, target string) error {
+	if err := checkRel(rel); err != nil {
+		return err
+	}
+	r, err := f.open(base)
+	if err != nil {
+		return err
+	}
+	defer r.Close()
+	if fi, err := r.Lstat(rel); err == nil {
+		if fi.Mode()&fs.ModeSymlink == 0 {
+			return fmt.Errorf("%w: %s/%s exists and is not a symlink", validate.ErrInvalid, base, rel)
+		}
+		if cur, err := r.Readlink(rel); err == nil && cur == target {
+			return nil
+		}
+		if err := r.Remove(rel); err != nil {
+			return err
+		}
+	} else if !errors.Is(err, fs.ErrNotExist) {
+		return err
+	}
+	return r.Symlink(target, rel)
 }

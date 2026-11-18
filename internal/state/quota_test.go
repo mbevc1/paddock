@@ -131,3 +131,46 @@ func TestDatabaseAccessors(t *testing.T) {
 		t.Errorf("deleted user: %v", err)
 	}
 }
+
+func TestAccessAccessors(t *testing.T) {
+	ctx := context.Background()
+	s, _ := openTemp(t)
+	if err := s.AddPHPVersion(ctx, "8.3"); err != nil {
+		t.Fatal(err)
+	}
+	o, err := s.CreateOwner(ctx, "acme", DefaultLimits())
+	if err != nil {
+		t.Fatal(err)
+	}
+	v, err := s.CreateVhost(ctx, o.ID, "8.3", "a.example.com", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.AccessAccountOf(ctx, v.N); !errors.Is(err, ErrNotFound) {
+		t.Errorf("no account yet: %v", err)
+	}
+	if err := s.CreateAccessAccount(ctx, v.N, "v00001", AccessSFTP); err != nil {
+		t.Fatal(err)
+	}
+	if a, err := s.AccessAccountOf(ctx, v.N); err != nil || a.Name != "v00001" || a.Kind != AccessSFTP {
+		t.Errorf("AccessAccountOf = %+v, %v", a, err)
+	}
+	if err := s.AddSSHKey(ctx, "v00001", "ssh-ed25519 AAAA", "SHA256:x"); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.AddSSHKey(ctx, "v00001", "ssh-ed25519 AAAA", "SHA256:x"); !errors.Is(err, ErrConflict) {
+		t.Errorf("duplicate key: %v", err)
+	}
+	if keys, err := s.ListSSHKeys(ctx, "v00001"); err != nil || len(keys) != 1 {
+		t.Errorf("ListSSHKeys = %+v, %v", keys, err)
+	}
+	if err := s.RemoveSSHKey(ctx, "v00001", "SHA256:nope"); !errors.Is(err, ErrNotFound) {
+		t.Errorf("removing a missing key: %v", err)
+	}
+	if err := s.DeleteAccessAccount(ctx, "v00001"); err != nil {
+		t.Fatal(err)
+	}
+	if keys, _ := s.ListSSHKeys(ctx, "v00001"); len(keys) != 0 {
+		t.Error("keys survive account deletion")
+	}
+}

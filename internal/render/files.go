@@ -197,22 +197,43 @@ func JailMounts(v Vhost, shell bool) ([]File, error) {
 	return out, nil
 }
 
-// JailEtc renders the shell jail's passwd and group, which list only the vhost user.
+// JailEtc renders the shell jail's passwd and group, which list only the vhost user, and a
+// profile that puts the vhost's php and wp first on PATH.
 func JailEtc(v Vhost) ([]File, error) {
 	if err := v.valid(); err != nil {
 		return nil, err
 	}
 	data := v.data()
 	data["Shell"] = "/bin/bash"
-	passwd, err := file("/srv/jail/"+v.id+"/etc/passwd", "jail-passwd.tmpl", data)
-	if err != nil {
-		return nil, err
+	var out []File
+	for _, f := range []struct{ name, tmpl string }{
+		{"passwd", "jail-passwd.tmpl"}, {"group", "jail-group.tmpl"}, {"profile", "jail-profile.tmpl"},
+	} {
+		rendered, err := file("/srv/jail/"+v.id+"/etc/"+f.name, f.tmpl, data)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, rendered)
 	}
-	group, err := file("/srv/jail/"+v.id+"/etc/group", "jail-group.tmpl", data)
-	if err != nil {
-		return nil, err
+	return out, nil
+}
+
+// AuthorizedKeys renders the vhost's authorized_keys file for sshd; each key is validated
+// again here.
+func AuthorizedKeys(v Vhost, keys []string) (File, error) {
+	if err := v.valid(); err != nil {
+		return File{}, err
 	}
-	return []File{passwd, group}, nil
+	var b strings.Builder
+	for _, k := range keys {
+		canon, err := validate.SSHPublicKey(k)
+		if err != nil {
+			return File{}, err
+		}
+		b.WriteString(canon)
+		b.WriteByte('\n')
+	}
+	return File{Path: "/etc/ssh/authorized_keys/" + v.id, Data: []byte(b.String()), Mode: fileMode}, nil
 }
 
 // Tmpfiles renders the tmpfiles.d entry that recreates the vhost's FPM socket directory at

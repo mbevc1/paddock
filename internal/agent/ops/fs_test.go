@@ -146,3 +146,24 @@ func TestHostFSPruneOlder(t *testing.T) {
 		t.Errorf("new archive removed: %v", err)
 	}
 }
+
+func TestHostFSSymlink(t *testing.T) {
+	f, _ := testFS(t)
+	if err := f.Mkdir(BaseJail, "v00001", 0o755, 0, 0); err != nil {
+		t.Fatal(err)
+	}
+	for _, target := range []string{"usr/bin", "usr/bin", "usr/sbin"} {
+		if err := f.Symlink(BaseJail, "v00001/bin", target); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if got, err := os.Readlink(filepath.Join(f.Root, BaseJail, "v00001", "bin")); err != nil || got != "usr/sbin" {
+		t.Errorf("link = %q, %v", got, err)
+	}
+	if err := f.Mkdir(BaseJail, "v00001/etc", 0o755, 0, 0); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Symlink(BaseJail, "v00001/etc", "/etc"); !errors.Is(err, validate.ErrInvalid) {
+		t.Errorf("replacing a directory = %v", err)
+	}
+}

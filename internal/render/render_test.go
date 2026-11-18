@@ -78,6 +78,7 @@ func goldenFiles(t *testing.T) map[string]File {
 		"nftables":        must(NFTables()),
 		"sysctl":          must(Sysctl()),
 		"tmpfiles":        must(Tmpfiles(v)),
+		"jail-profile":    etc[2],
 	}
 	return files
 }

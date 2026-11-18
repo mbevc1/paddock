@@ -52,6 +52,7 @@ func RegisterVhosts(r *agent.Registry, store *state.Store, h *Host) {
 	registerVhostState(r, store, h)
 	registerCerts(r, store, h)
 	registerDatabases(r, store, h)
+	registerAccess(r, store, h)
 	r.Register(agent.Op{Name: "vhost.create", Class: agent.ClassOwner, Long: true,
 		Handler: func(ctx context.Context, c *agent.Call) (any, error) {
 			args, err := agent.DecodeArgs[VhostCreateArgs](c)
@@ -497,6 +498,13 @@ func teardownVhost(ctx context.Context, store *state.Store, h *Host, sv state.Vh
 		return h.applyFailed("reloading systemd", err)
 	}
 
+	if acct, err := store.AccessAccountOf(ctx, sv.N); err == nil {
+		if err := teardownAccess(ctx, store, h, sv, v, acct); err != nil {
+			return err
+		}
+	} else if !errors.Is(err, state.ErrNotFound) {
+		return err
+	}
 	if err := h.FS.RemoveTree(BaseJail, id); err != nil {
 		return h.applyFailed("removing the jail", err)
 	}

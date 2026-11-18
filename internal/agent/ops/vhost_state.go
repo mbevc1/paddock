@@ -182,6 +182,12 @@ func switchPHP(ctx context.Context, store *state.Store, h *Host, actor *api.Acto
 	if err := step("reloading systemd", systemctl, "daemon-reload"); err != nil {
 		return fail(err)
 	}
+	if acct, err := store.AccessAccountOf(ctx, sv.N); err == nil && acct.Kind == state.AccessShell {
+		if err := linkJailPHP(h, sv.ID, args.Version); err != nil {
+			return fail(err)
+		}
+		undo.add(func(context.Context) error { return linkJailPHP(h, sv.ID, sv.PHPVersion) })
+	}
 	if err := store.SetVhostPHP(ctx, sv.N, args.Version); err != nil {
 		return fail(err)
 	}

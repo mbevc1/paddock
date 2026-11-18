@@ -125,3 +125,22 @@ func DisplayName(name string) error {
 	}
 	return nil
 }
+
+const (
+	minAccessPassword = 12
+	maxAccessPassword = 128
+)
+
+// AccessPassword checks an SFTP or shell password: 12 to 128 printable ASCII characters
+// without ":", which chpasswd uses as its separator. Errors never quote the password.
+func AccessPassword(pw string) error {
+	if len(pw) < minAccessPassword || len(pw) > maxAccessPassword {
+		return invalid("password must be %d to %d characters", minAccessPassword, maxAccessPassword)
+	}
+	for i := 0; i < len(pw); i++ {
+		if pw[i] < 0x20 || pw[i] > 0x7e || pw[i] == ':' {
+			return invalid("password must be printable ASCII without ':'")
+		}
+	}
+	return nil
+}

@@ -153,3 +153,16 @@ func TestDisplayName(t *testing.T) {
 		assertInvalid(t, DisplayName(bad))
 	}
 }
+
+func TestAccessPassword(t *testing.T) {
+	if err := AccessPassword("correct horse battery"); err != nil {
+		t.Error(err)
+	}
+	for _, bad := range []string{"short", strings.Repeat("a", 129), "has:colon-long", "new\nline-longer", "tab\there-long", "ümlaut-password"} {
+		err := AccessPassword(bad)
+		assertInvalid(t, err)
+		if err != nil && strings.Contains(err.Error(), bad) {
+			t.Errorf("error quotes the password: %v", err)
+		}
+	}
+}
