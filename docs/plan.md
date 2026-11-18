@@ -641,8 +641,9 @@ Throwaway shell scripts in `poc/`, run as root on a disposable AlmaLinux 9.4+ VM
     - Deferred: IDNA conversion of Unicode domain names. The standard library has no IDNA and `golang.org/x/net/idna` is not an allowed module, so `Domain` accepts ASCII names and `xn--` A-labels and rejects Unicode input until the owner decides on the dependency.
 - [x] **T1.3 System runner.** `internal/system.Runner` interface with `Run(ctx, argv []string, opts)`; real implementation via `os/exec` with a clean environment; fake implementation that records calls and returns scripted results.
     - Acceptance: no package outside `internal/system` imports `os/exec` (enforced by a test that scans imports).
-- [ ] **T1.4 State store.** `internal/state` with embedded migrations for the tables in §13 and typed accessors.
+- [x] **T1.4 State store.** `internal/state` with embedded migrations for the tables in §13 and typed accessors.
     - Acceptance: migrations apply to an empty file and are idempotent; accessor tests run against a temp database.
+    - Deferred: the schema covers every §13 table; accessors for `databases`, `db_users`, `access_accounts`, `ssh_keys`, and `certs` arrive with T1.12 to T1.14, which define how they are used. `go.mod` lists the indirect modules that `modernc.org/sqlite` and `golang.org/x/crypto` pull in; the direct requirements are only the allowed ones.
 - [ ] **T1.5 Renderer.** `internal/render` with templates for every file in §7; a `Root` field prefixes all output paths; atomic write helper (temp file, fsync, rename) and restore of the previous version.
     - Acceptance: golden-file tests match the reference outputs in §7 for vhost `v00012`; rendering rejects unvalidated input types.
 - [ ] **T1.6 Agent server.** Socket at `/run/paddock/agent.sock`, `SO_PEERCRED` check (UID 0 or `paddock`), newline JSON protocol from §4, op registry with class (owner, admin, system), audit log entries without secrets, job runner for long operations.
