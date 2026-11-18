@@ -52,6 +52,7 @@ jobs:
           persist-credentials: false
       - run: shellcheck -x scripts/*.sh poc/*.sh packaging/*.sh
       - run: packaging/bootstrap_test.sh
+      - run: scripts/conventional_test.sh
 
   rpm:
     runs-on: ubuntu-latest

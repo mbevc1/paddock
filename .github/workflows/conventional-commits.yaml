@@ -1,0 +1,50 @@
+name: Conventional Commits
+
+# Squash merges take the pull request title as the commit subject and other merges keep each
+# commit, so both must follow Conventional Commits as CLAUDE.md defines them.
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+
+permissions: {}
+
+concurrency:
+  group: conventional-commits-${{ github.event.pull_request.number }}-${{ github.event.action == 'edited' }}
+  cancel-in-progress: true
+
+jobs:
+  title:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: scripts/conventional.sh
+          sparse-checkout-cone-mode: false
+      - name: Check the title
+        env:
+          TITLE: ${{ github.event.pull_request.title }}
+        run: printf '%s\n' "$TITLE" | scripts/conventional.sh title
+
+  commits:
+    # Editing the title or description changes no commit.
+    if: github.event.action != 'edited'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: scripts/conventional.sh
+          sparse-checkout-cone-mode: false
+      - name: Check every commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          gh api --paginate "repos/$GITHUB_REPOSITORY/pulls/$PR/commits" \
+            --jq '.[].commit.message | split("\n")[0]' | scripts/conventional.sh commit

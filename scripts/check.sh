@@ -24,3 +24,4 @@ else
 fi
 go test -race ./...
 packaging/bootstrap_test.sh
+scripts/conventional_test.sh
