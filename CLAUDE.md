@@ -28,7 +28,7 @@ internal/auth/          argon2id, TOTP, OIDC, GitHub OAuth2
 internal/acme/          ACME HTTP-01 client for the panel certificate
 deploy/                 systemd units, sysusers, tmpfiles, default configs (sshd, sysctl, nftables, fail2ban, Apache)
 packaging/              paddock.spec, bootstrap.sh
-.github/workflows/      release.yml: build, GitHub Release, dnf repository on Pages (unsigned until T2.9)
+.github/workflows/      release.yaml: build, GitHub Release, dnf repository on Pages (unsigned until T2.9)
 poc/                    phase 0 scripts and test-VM definition, run on a test VM only
 test/integration/       tests that need a real AlmaLinux VM
 ```
@@ -65,6 +65,7 @@ Never break these. If a task seems to require breaking one, stop and ask.
 - **Integration tests** in `test/integration/` carry the build tag `integration`, skip unless `PADDOCK_INTEGRATION=1` is set and they run as root, and run on the VM only.
 - **Before finishing a task:** `gofmt -l .` prints nothing, `go vet ./...` passes, `go test ./...` passes.
 - **Comments:** only where they explain something the code cannot; keep them short.
+- **YAML files** use the `.yaml` extension, workflows included.
 - **Plan tracking:** tick the task's checkbox in `docs/plan.md` when its acceptance criteria pass, and note anything deferred under the task.
 
 ## Releases

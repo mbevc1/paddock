@@ -1,4 +1,4 @@
-# Repository labels, created or updated by .github/workflows/labels.yml when this file changes
+# Repository labels, created or updated by .github/workflows/labels.yaml when this file changes
 # on main. Labels missing here are left alone, never deleted.
 - name: dependencies
   color: "0366d6"

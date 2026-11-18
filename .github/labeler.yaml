@@ -1,4 +1,4 @@
-# Labels for pull requests by changed files, applied by .github/workflows/labeler.yml. With
+# Labels for pull requests by changed files, applied by .github/workflows/labeler.yaml. With
 # sync-labels, a label below is also removed once its rule stops matching.
 documentation:
   - changed-files:
