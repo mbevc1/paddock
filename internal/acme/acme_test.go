@@ -1,14 +1,19 @@
 package acme
 
 import (
+	"bytes"
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -148,4 +153,109 @@ func TestServeChallengesSocket(t *testing.T) {
 	if err := <-done; err != nil {
 		t.Errorf("ServeChallenges = %v", err)
 	}
+}
+
+// waitFetched waits until no certificate fetch is running.
+func waitFetched(t *testing.T, m *Manager) {
+	t.Helper()
+	deadline := time.Now().Add(20 * time.Second)
+	for m.fetching.Load() {
+		if time.Now().After(deadline) {
+			t.Fatal("certificate fetch still running")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+// The panel starts its first fetch before it serves challenges, so HTTP-01 must be on from New,
+// and TLS-ALPN-01, which fails behind the front Apache, must never be tried.
+func TestOnlyHTTP01TriedFromTheFirstFetch(t *testing.T) {
+	ca := newFakeCA(t)
+	m := New(Config{Hostname: "panel.example.com", CacheDir: t.TempDir(), DirectoryURL: ca.directory(), SelfSigned: selfPair(t, time.Now())})
+	m.Prefetch()
+	waitFetched(t, m)
+	if got := ca.acceptedTypes(); !slices.Equal(got, []string{"http-01"}) {
+		t.Errorf("challenges accepted = %q, want only http-01", got)
+	}
+}
+
+// autocert answers a repeat request within a minute of real time from its own record of the
+// failure, so the attempts are counted in Paddock's log rather than at the CA.
+func TestFailedFetchesBackOff(t *testing.T) {
+	ca := newFakeCA(t)
+	now := time.Date(2026, 11, 18, 22, 30, 0, 0, time.UTC)
+	var logs syncBuffer
+	m := New(Config{Hostname: "panel.example.com", CacheDir: t.TempDir(), DirectoryURL: ca.directory(),
+		SelfSigned: selfPair(t, now), Now: func() time.Time { return now }, Log: slog.New(slog.NewTextHandler(&logs, nil))})
+	attempts := func() int { return strings.Count(logs.String(), "obtaining the panel certificate failed") }
+	visit := func() {
+		_, _ = m.GetCertificate(&tls.ClientHelloInfo{ServerName: "panel.example.com"})
+		waitFetched(t, m)
+	}
+
+	visit()
+	if attempts() != 1 || ca.requestCount() == 0 {
+		t.Fatalf("first visit: %d failed attempts, %d CA requests", attempts(), ca.requestCount())
+	}
+	for i, wait := range []time.Duration{2, 4, 8, 16, 32, 60, 60} {
+		wait *= time.Minute
+		now = now.Add(wait - time.Second)
+		visit()
+		if attempts() != i+1 {
+			t.Fatalf("a visit %v after failure %d started another attempt", wait-time.Second, i+1)
+		}
+		now = now.Add(time.Second)
+		visit()
+		if attempts() != i+2 {
+			t.Fatalf("a visit %v after failure %d started no attempt", wait, i+1)
+		}
+	}
+}
+
+func TestRetryDelay(t *testing.T) {
+	for failures, want := range map[int]time.Duration{1: 2 * time.Minute, 2: 4 * time.Minute, 5: 32 * time.Minute,
+		6: time.Hour, 1000: time.Hour} {
+		if got := retryDelay(failures); got != want {
+			t.Errorf("retryDelay(%d) = %v, want %v", failures, got, want)
+		}
+	}
+}
+
+// Let's Encrypt allows five failed validations per hostname per hour.
+func TestRetriesStayWithinTheFailedValidationLimit(t *testing.T) {
+	var at []time.Duration
+	var now time.Duration
+	for n := 1; now < 48*time.Hour; n++ {
+		at = append(at, now)
+		now += retryDelay(n)
+	}
+	for i := range at {
+		in := 0
+		for _, a := range at[i:] {
+			if a-at[i] < time.Hour {
+				in++
+			}
+		}
+		if in > 5 {
+			t.Fatalf("%d attempts in the hour from %v", in, at[i])
+		}
+	}
+}
+
+// syncBuffer is a bytes.Buffer safe for the fetch goroutine to log into.
+type syncBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (b *syncBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.Write(p)
+}
+
+func (b *syncBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.String()
 }
