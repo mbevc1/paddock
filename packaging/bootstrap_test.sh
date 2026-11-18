@@ -59,7 +59,8 @@ gpg --batch --quiet --passphrase '' --quick-gen-key 'Test Key <test@example.com>
 gpg --batch --armor --export test@example.com >"$WORK/key.asc"
 fpr=$(gpg --batch --with-colons --list-keys test@example.com 2>/dev/null | awk -F: '$1 == "fpr" { print $10; exit }')
 expect key_pinned "$WORK/key.asc" 0000000000000000000000000000000000000000 "$fpr"
-reject key_pinned "$WORK/key.asc" "${fpr%?}0"
+if [[ ${fpr: -1} == 0 ]]; then other=${fpr%?}1; else other=${fpr%?}0; fi
+reject key_pinned "$WORK/key.asc" "$other"
 reject key_pinned "$WORK/key.asc"
 printf 'not a key\n' >"$WORK/junk"
 reject key_pinned "$WORK/junk" "$fpr"
