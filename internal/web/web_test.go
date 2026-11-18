@@ -1,10 +1,15 @@
 package web
 
 import (
+	"bytes"
 	"context"
+	"crypto/tls"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"log/slog"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -477,5 +482,41 @@ func TestSafeNext(t *testing.T) {
 		if got := safeNext(in); got != want {
 			t.Errorf("safeNext(%q) = %q, want %q", in, got, want)
 		}
+	}
+}
+
+type selfSignedOnly struct{}
+
+func (selfSignedOnly) GetCertificate(*tls.ClientHelloInfo) (*tls.Certificate, error) {
+	return nil, errors.New("no certificate in this test")
+}
+func (selfSignedOnly) Trusted() bool { return false }
+
+func TestRunReportsBusyPortBeforeListening(t *testing.T) {
+	var lc net.ListenConfig
+	busy, err := lc.Listen(context.Background(), "tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer busy.Close()
+	st, err := store.Open(context.Background(), filepath.Join(t.TempDir(), "web.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	var logs bytes.Buffer
+	srv, err := New(Config{Hostname: "panel.example.com", TLSAddr: "127.0.0.1:0", RedirectAddr: busy.Addr().String()},
+		Deps{Agent: &fakeAgent{}, Store: st, Certs: selfSignedOnly{}, Log: slog.New(slog.NewTextHandler(&logs, nil))})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	err = srv.Run(ctx)
+	if err == nil || !strings.Contains(err.Error(), "redirect address "+busy.Addr().String()) {
+		t.Fatalf("Run = %v, want an error naming the busy redirect address", err)
+	}
+	if strings.Contains(logs.String(), "panel listening") {
+		t.Errorf("logged that the panel listens although binding failed:\n%s", logs.String())
 	}
 }
