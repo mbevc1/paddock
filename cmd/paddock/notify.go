@@ -10,7 +10,7 @@ import (
 	"github.com/mbevc1/paddock/internal/agent/ops"
 )
 
-var errNotifyUsage = errors.New("usage: paddock agent-notify md-renewed DOMAIN...")
+var errNotifyUsage = errors.New("usage: paddock agent-notify md-renewed DOMAIN [DOMAIN ...]")
 
 // runAgentNotify is mod_md's MDNotifyCmd: it asks the agent to check and reload the front
 // Apache after a certificate renewal.
