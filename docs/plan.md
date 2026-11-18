@@ -545,7 +545,7 @@ Options: `--hostname` (required), `--www-device` (needed until `/srv/www` is mou
 3. On EL 9 only: `dnf module enable mariadb:10.11` (EL 10 ships MariaDB 10.11 as a plain package).
 4. Write `/etc/yum.repos.d/paddock.repo` with `baseurl=https://<owner>.github.io/paddock/el$releasever/$basearch/`, `gpgcheck=0`, `repo_gpgcheck=0`, and a comment pointing to T2.9.
 5. `dnf install paddock`.
-6. Check free ports 80, 81, 443, 8080, 8443; only `httpd` and `paddock` may hold them.
+6. Check free ports: 80, 81 and 443 may be held only by `httpd` or `paddock`, 8080 and 8443 only by `paddock`.
 7. Prepare `/srv/www` on the given XFS device with `prjquota` (format only if empty and confirmed with `--format`; never one holding a filesystem), or in the `--www-file` image (created once, never reformatted); create `/srv/www` (`0711`) and `/srv/jail` (`0755`); add the `semanage fcontext` rule and `restorecon`. Refuse a `/srv/www` holding anything but the `.paddock` marker and vhost directories.
 8. Install `/usr/share/paddock/etc/` into `/etc`, keeping files that contain `# paddock: keep`; fill the panel hostname into `paddock-01-panel.conf`; write `MDContactEmail` to `/etc/httpd/conf.d/paddock-00-contact.conf` when `--email` is given; write `/etc/paddock/web.env` (`PADDOCK_HOSTNAME`, `PADDOCK_ACME_EMAIL`); comment out `mod_status` in `00-base.conf`; load the sysctl settings.
 9. Start MariaDB and verify `unix_socket` for root in `mysql.global_priv`.

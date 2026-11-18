@@ -12,7 +12,7 @@ Packages are not signed yet (planned as task T2.9), so install Paddock on dispos
   - a spare disk, partition or LVM volume (`--www-device`), which bootstrap formats when empty;
   - a disk image on the root file system (`--www-file`), loop-mounted; simplest on test machines, with some I/O overhead;
   - a `/srv/www` that is already XFS and mounted with `prjquota`.
-- **Free ports:** 80 and 443 for sites, 8443 for the panel and 8080 for its redirect, and 81 on loopback for internal use. Only Apache or Paddock may hold them.
+- **Free ports:** 80 and 443 for sites and 81 on loopback for internal use, which only Apache or Paddock may hold, and 8443 for the panel and 8080 for its redirect, which only Paddock may hold. Another panel's interface on 8080, such as ISPConfig's, has to go.
 - **Panel hostname:** a DNS name that resolves to the server. With a public name, the panel obtains a Let's Encrypt certificate on its own; otherwise it keeps a self-signed one.
 - **Network:** outbound HTTPS to GitHub, the AlmaLinux mirrors, EPEL and Remi's repository.
 

@@ -25,7 +25,10 @@ readonly KEEP='# paddock: keep'
 readonly MODULES_CONF=/etc/httpd/conf.modules.d/00-base.conf
 readonly STATUS_LINE='LoadModule status_module modules/mod_status.so'
 readonly PANEL_CERT=/var/lib/paddock/web/panel.crt
-readonly PORTS=(80 81 443 8080 8443)
+# Apache serves the sites and mod_md's status on these, so it may already hold them.
+readonly APACHE_PORTS=(80 81 443)
+# paddock-web alone listens on these.
+readonly PANEL_PORTS=(8080 8443)
 # Vhost UIDs and GIDs are 1000000000 + N for N up to 65535, above the subordinate ID pool.
 readonly VHOST_ID_MIN=1000000001
 readonly VHOST_ID_MAX=1000065535
@@ -266,9 +269,15 @@ then rerun bootstrap."
 check_ports() {
 	step "checking ports"
 	local port user
-	for port in "${PORTS[@]}"; do
+	for port in "${APACHE_PORTS[@]}"; do
 		while read -r user; do
 			[[ -z $user || $user == httpd || $user == paddock ]] || die "port $port is in use by $user"
+		done < <(port_users "$port")
+	done
+	for port in "${PANEL_PORTS[@]}"; do
+		while read -r user; do
+			[[ -z $user || $user == paddock ]] ||
+				die "port $port is in use by $user; Paddock's panel needs ports ${PANEL_PORTS[*]} for itself"
 		done < <(port_users "$port")
 	done
 }
