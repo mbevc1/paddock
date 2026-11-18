@@ -4,8 +4,6 @@ package integration
 
 import (
 	"context"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -15,38 +13,11 @@ import (
 	"github.com/mbevc1/paddock/internal/system"
 )
 
-var sshOpts = []string{"-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null", "-o", "LogLevel=ERROR"}
-
-// sshKey writes a new ed25519 key pair and returns the private key path and public key.
-func sshKey(t *testing.T) (string, string) {
-	t.Helper()
-	key := filepath.Join(t.TempDir(), "id")
-	if _, err := (system.Exec{}).Run(context.Background(), []string{"/usr/bin/ssh-keygen", "-q", "-t", "ed25519", "-N", "", "-f", key}, system.Opts{}); err != nil {
-		t.Fatal(err)
-	}
-	pub, err := os.ReadFile(key + ".pub")
-	if err != nil {
-		t.Fatal(err)
-	}
-	return key, strings.TrimSpace(string(pub))
-}
-
-func sshRun(t *testing.T, key, user, stdin string, argv ...string) string {
-	t.Helper()
-	full := append([]string{"/usr/bin/ssh", "-i", key}, sshOpts...)
-	full = append(full, user+"@127.0.0.1")
-	full = append(full, argv...)
-	res, _ := (system.Exec{}).Run(context.Background(), full, system.Opts{Stdin: strings.NewReader(stdin)})
-	return strings.TrimSpace(string(res.Stdout) + string(res.Stderr))
-}
-
 func TestSFTPAccount(t *testing.T) {
 	h := newAgent(t)
 	id, _ := newVhost(t, h, "8.3")
 	key, pub := sshKey(t)
-	if job := h.job("access.create", ops.AccessCreateArgs{VhostID: id, Kind: state.AccessSFTP, Keys: []string{pub}}, time.Minute); job.Status != state.JobSucceeded {
-		t.Fatalf("access.create: %+v", job)
-	}
+	h.mustJob(t, "access.create", ops.AccessCreateArgs{VhostID: id, Kind: state.AccessSFTP, Keys: []string{pub}}, time.Minute)
 	argv := append([]string{"/usr/bin/sftp", "-i", key, "-b", "-"}, sshOpts...)
 	argv = append(argv, id+"@127.0.0.1")
 	res, err := (system.Exec{}).Run(context.Background(), argv, system.Opts{Stdin: strings.NewReader("pwd\nls -1a /\n")})
@@ -66,16 +37,11 @@ func TestSFTPAccount(t *testing.T) {
 
 func TestShellAccount(t *testing.T) {
 	h := newAgent(t)
-	ctx := context.Background()
 	id, _ := newVhost(t, h, "8.3")
 	sv := mustVhost(t, h, id)
-	if err := h.client.Call(ctx, "owner.limits.set", h.admin, "", ops.OwnerLimitsArgs{OwnerID: sv.OwnerID, Limits: ops.LimitsArgs{ShellAllowed: ptrTo(true)}}, nil); err != nil {
-		t.Fatal(err)
-	}
+	h.mustCall(t, "owner.limits.set", ops.OwnerLimitsArgs{OwnerID: sv.OwnerID, Limits: ops.LimitsArgs{ShellAllowed: ptrTo(true)}}, nil)
 	key, pub := sshKey(t)
-	if job := h.job("access.create", ops.AccessCreateArgs{VhostID: id, Kind: state.AccessShell, Keys: []string{pub}}, time.Minute); job.Status != state.JobSucceeded {
-		t.Fatalf("access.create: %+v", job)
-	}
+	h.mustJob(t, "access.create", ops.AccessCreateArgs{VhostID: id, Kind: state.AccessShell, Keys: []string{pub}}, time.Minute)
 	shell := func(cmd string) string { return sshRun(t, key, id, "", "bash -lc '"+cmd+"'") }
 	if got := shell("ps -eo uid= | tr -d \" \" | sort -u"); got != uidOf(t, id) {
 		t.Errorf("processes visible: %q", got)
@@ -93,31 +59,3 @@ func TestShellAccount(t *testing.T) {
 		t.Errorf("privilege escalation: %q", got)
 	}
 }
-
-func mustVhost(t *testing.T, h *agentHarness, id string) state.Vhost {
-	t.Helper()
-	for _, v := range listVhosts(t, h) {
-		if v.ID == id {
-			return v
-		}
-	}
-	t.Fatalf("vhost %s not in state", id)
-	return state.Vhost{}
-}
-
-func listVhosts(t *testing.T, h *agentHarness) []state.Vhost {
-	t.Helper()
-	vs, err := h.store.ListVhosts(context.Background(), 0)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return vs
-}
-
-// uidOf returns the vhost's UID, 100000 + N, which is "1" followed by the five digits.
-func uidOf(t *testing.T, id string) string {
-	t.Helper()
-	return "1" + strings.TrimPrefix(id, "v")
-}
-
-func ptrTo[T any](v T) *T { return &v }

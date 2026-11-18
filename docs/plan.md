@@ -725,6 +725,8 @@ Throwaway shell scripts in `poc/`, run as root on a disposable AlmaLinux 9.4+ VM
     - Pinned Remi key: `B1ABF71E14C9D74897E198A8B19527F1478F8947`, the key ID `b19527f1478f8947` that `remi-release-9.rpm` downloaded from rpms.remirepo.net was signed with on 2026-11-17. The VM run is still to do.
 - [ ] **T1.27 Integration suite and red team.** Collect integration tests; port `poc/90-redteam.sh` to run against panel-created vhosts.
     - Acceptance: full suite passes on a fresh VM; red team finds no cross-tenant access.
+    - Status: `test/integration/` runs every test through one in-process agent on the host's own `state.db`, so test vhosts take the next free numbers and never collide with vhosts the panel created; the installed `paddock-agent` and `paddock-web` are stopped for the run and started again afterwards. Each test creates its owners and vhosts through agent operations, as the panel does, and deletes them when it ends. `TestRedTeam` ports `poc/90-redteam.sh`: every §7.7 row, tried from A's PHP (sandbox, SELinux, UID) and, where the PoC did, as A's UID in the host namespaces, the front Apache user, or A's shell account. `TestVhostCreateWithDatabase` covers the optional empty database. `make integration` runs the suite (`RUN=` selects tests). Open: the run on a fresh VM after `bootstrap.sh`.
+    - Choices to confirm: the suite enrols an admin `itest` with user ID 2^40 in `state.db` and keeps it between runs (a rerun resets its TOTP secret); with no `web.db` user it cannot log in to the panel.
 
 ## Phase 2: comfort
 

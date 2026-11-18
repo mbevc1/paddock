@@ -57,9 +57,9 @@ bootstrap-test: ## test bootstrap.sh's host-independent functions
 check: ## run every check a change must pass (scripts/check.sh)
 	scripts/check.sh
 
-integration: ## run the integration tests: as root on the test VM only
+integration: ## run the integration tests, or those matching RUN: as root on the test VM only
 	@if [[ $${PADDOCK_INTEGRATION:-} != 1 ]]; then echo "set PADDOCK_INTEGRATION=1 and run as root on the test VM"; exit 1; fi
-	go test -tags integration -count=1 ./test/integration/...
+	go test -tags integration -count=1 -v -timeout 2h ./test/integration/... $(if $(RUN),-run $(RUN))
 
 rpm: ## build dist/paddock-RPM_VERSION-1.el9.ARCH.rpm (needs rpmbuild)
 	scripts/build-rpm.sh $(RPM_VERSION) $(ARCH) $(OWNER)

@@ -31,7 +31,13 @@ vagrant ssh -c 'sudo /vagrant/poc/00-setup.sh --device /dev/vdb --format'
 vagrant snapshot save clean
 ```
 
-See `poc/README.md` for the phase 0 checks.
+See `poc/README.md` for the phase 0 checks. After `bootstrap.sh`, the integration suite and red team run as root on the VM:
+
+```bash
+sudo PADDOCK_INTEGRATION=1 make integration
+```
+
+It stops `paddock-agent` and `paddock-web` while it runs and creates and removes its own owners and vhosts. `RUN=TestRedTeam` runs one test.
 
 ## License
 
