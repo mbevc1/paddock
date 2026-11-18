@@ -140,9 +140,21 @@ func (s *Server) Run(ctx context.Context) error {
 		Handler:           securityHeaders(redirectHandler(s.origin), nil),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
+	var lc net.ListenConfig
+	tlsLn, err := lc.Listen(ctx, "tcp", s.cfg.TLSAddr)
+	if err != nil {
+		return fmt.Errorf("panel HTTPS address %s: %w", s.cfg.TLSAddr, err)
+	}
+	redirectLn, err := lc.Listen(ctx, "tcp", s.cfg.RedirectAddr)
+	if err != nil {
+		_ = tlsLn.Close()
+		return fmt.Errorf("panel redirect address %s: %w", s.cfg.RedirectAddr, err)
+	}
+	s.log.Info("panel listening", "hostname", s.cfg.Hostname, "https", tlsLn.Addr().String(),
+		"redirect", redirectLn.Addr().String(), "version", Version)
 	errs := make(chan error, 2)
-	go func() { errs <- tlsSrv.ListenAndServeTLS("", "") }()
-	go func() { errs <- redirect.ListenAndServe() }()
+	go func() { errs <- tlsSrv.ServeTLS(tlsLn, "", "") }()
+	go func() { errs <- redirect.Serve(redirectLn) }()
 	go s.cleanupLoop(ctx)
 	select {
 	case <-ctx.Done():

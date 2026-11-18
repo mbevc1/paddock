@@ -25,7 +25,10 @@ readonly KEEP='# paddock: keep'
 readonly MODULES_CONF=/etc/httpd/conf.modules.d/00-base.conf
 readonly STATUS_LINE='LoadModule status_module modules/mod_status.so'
 readonly PANEL_CERT=/var/lib/paddock/web/panel.crt
-readonly PORTS=(80 81 443 8080 8443)
+# Apache serves the sites and mod_md's status on these, so it may already hold them.
+readonly APACHE_PORTS=(80 81 443)
+# paddock-web alone listens on these.
+readonly PANEL_PORTS=(8080 8443)
 # Vhost UIDs and GIDs are 1000000000 + N for N up to 65535, above the subordinate ID pool.
 readonly VHOST_ID_MIN=1000000001
 readonly VHOST_ID_MAX=1000065535
@@ -249,12 +252,32 @@ repo_gpgcheck=0" "$REPO_FILE"
 	dnf -y -q install paddock firewalld
 }
 
+# check_apache stops before anything changes when an Apache already installed has an invalid
+# configuration, which would otherwise fail bootstrap's own reload halfway through.
+check_apache() {
+	command -v apachectl >/dev/null || return 0
+	step "checking the existing Apache configuration"
+	local out
+	if ! out=$(apachectl configtest 2>&1); then
+		die "the existing Apache configuration is invalid, so bootstrap could not reload Apache:
+$out
+Fix or remove the file named above (Apache loads only *.conf files from /etc/httpd/conf.d),
+then rerun bootstrap."
+	fi
+}
+
 check_ports() {
 	step "checking ports"
 	local port user
-	for port in "${PORTS[@]}"; do
+	for port in "${APACHE_PORTS[@]}"; do
 		while read -r user; do
 			[[ -z $user || $user == httpd || $user == paddock ]] || die "port $port is in use by $user"
+		done < <(port_users "$port")
+	done
+	for port in "${PANEL_PORTS[@]}"; do
+		while read -r user; do
+			[[ -z $user || $user == paddock ]] ||
+				die "port $port is in use by $user; Paddock's panel needs ports ${PANEL_PORTS[*]} for itself"
 		done < <(port_users "$port")
 	done
 }
@@ -414,6 +437,7 @@ main() {
 	WORK=$(mktemp -d)
 	trap 'rm -rf "$WORK"' EXIT
 	fence_subids
+	check_apache
 	install_packages
 	check_ports
 	prepare_www

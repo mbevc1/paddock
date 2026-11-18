@@ -106,6 +106,26 @@ if grep -E '^[[:space:]]*firewall-cmd .*--add-service.*--add-port|^[[:space:]]*f
 	fail "a firewall-cmd call mixes --add-service and --add-port, which firewall-cmd refuses"
 fi
 
+apachectl() {
+	echo "AH00526: Syntax error on line 16 of /etc/httpd/conf.d/old.conf"
+	return 1
+}
+out=$( (check_apache) 2>&1) && fail "check_apache passed a failing configtest"
+[[ $out == *AH00526*old.conf* ]] || fail "check_apache does not show Apache's error: $out"
+apachectl() { echo "Syntax OK"; }
+(check_apache) >/dev/null 2>&1 || fail "check_apache failed a passing configtest"
+unset -f apachectl
+(PATH=/nonexistent check_apache) >/dev/null 2>&1 || fail "check_apache failed without Apache installed"
+
+port_users() { [[ $1 == "$BUSY_PORT" ]] && echo "$BUSY_BY"; }
+ports_with() { BUSY_PORT=$1 BUSY_BY=$2 check_ports; }
+(ports_with 443 httpd) >/dev/null 2>&1 || fail "check_ports refused httpd on 443"
+(ports_with 8443 paddock) >/dev/null 2>&1 || fail "check_ports refused paddock on 8443"
+(ports_with 80 nginx) >/dev/null 2>&1 && fail "check_ports accepted nginx on 80"
+out=$( (ports_with 8080 httpd) 2>&1) && fail "check_ports accepted httpd on 8080"
+[[ $out == *"port 8080 is in use by httpd"* ]] || fail "check_ports message for 8080: $out"
+unset -f port_users ports_with
+
 [[ ${#REMI_FINGERPRINTS[@]} -gt 0 ]] || fail "no Remi fingerprint pinned"
 for f in "${REMI_FINGERPRINTS[@]}"; do
 	[[ $f =~ ^[0-9A-F]{40}$ ]] || fail "Remi fingerprint $f is not 40 uppercase hex digits"

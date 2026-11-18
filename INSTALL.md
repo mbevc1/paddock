@@ -12,7 +12,7 @@ Packages are not signed yet (planned as task T2.9), so install Paddock on dispos
   - a spare disk, partition or LVM volume (`--www-device`), which bootstrap formats when empty;
   - a disk image on the root file system (`--www-file`), loop-mounted; simplest on test machines, with some I/O overhead;
   - a `/srv/www` that is already XFS and mounted with `prjquota`.
-- **Free ports:** 80 and 443 for sites, 8443 for the panel and 8080 for its redirect, and 81 on loopback for internal use. Only Apache or Paddock may hold them.
+- **Free ports:** 80 and 443 for sites and 81 on loopback for internal use, which only Apache or Paddock may hold, and 8443 for the panel and 8080 for its redirect, which only Paddock may hold. Another panel's interface on 8080, such as ISPConfig's, has to go.
 - **Panel hostname:** a DNS name that resolves to the server. With a public name, the panel obtains a Let's Encrypt certificate on its own; otherwise it keeps a self-signed one.
 - **Network:** outbound HTTPS to GitHub, the AlmaLinux mirrors, EPEL and Remi's repository.
 
@@ -52,7 +52,7 @@ sudo bash bootstrap.sh --hostname panel.example.com --www-file 20G
 
 ### What bootstrap changes
 
-1. Checks the OS, SELinux and root, and that no subordinate ID range overlaps the vhost IDs.
+1. Checks the OS, SELinux and root, that no subordinate ID range overlaps the vhost IDs, and that an Apache already installed has a valid configuration.
 2. Adds EPEL, Remi's repository (its signing key is pinned in the script) and Paddock's repository, enables MariaDB 10.11, and installs `paddock` and `firewalld`.
 3. Checks that the ports above are free.
 4. Prepares `/srv/www` with project quotas, on the device or in the image, adds it to `/etc/fstab`, and creates `/srv/jail` for SFTP and shell accounts.
@@ -103,6 +103,8 @@ Run these as root on the server:
 ## Troubleshooting
 
 **Subordinate ID ranges overlap vhost IDs.** Vhost users get UIDs and GIDs from 1000000001 to 1000065535, above the range `useradd` hands out for rootless containers, so this does not happen on a stock system. Bootstrap stops if a user was given a range overlapping those IDs by hand, or if `SUB_UID_MAX` or `SUB_GID_MAX` in `/etc/login.defs` was raised past 1000000000, because such a user could map vhost IDs inside a user namespace. Move the listed ranges below 1000000001 with `usermod --del-subuids`/`--add-subuids` (and the `subgids` equivalents), or lower the setting, then rerun bootstrap.
+
+**The existing Apache configuration is invalid.** Bootstrap runs `apachectl configtest` before changing anything and stops if it fails, for example on a site file that points at a deleted certificate. Fix or remove the file Apache names; it loads only `*.conf` files from `/etc/httpd/conf.d`, so renaming one to `.conf.disabled` turns it off. Then rerun bootstrap.
 
 **A port is in use.** Bootstrap names the port and the program holding it. Stop or reconfigure that program, then rerun bootstrap.
 

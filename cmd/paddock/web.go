@@ -78,7 +78,6 @@ func runWeb(ctx context.Context, args []string, _, stderr io.Writer) error {
 	}()
 	certs.Prefetch()
 	go srv.PollEvents(ctx, eventsInterval)
-	log.Info("panel listening", "hostname", host, "https", *listen, "redirect", *redirect, "version", version)
 	return srv.Run(ctx)
 }
 
