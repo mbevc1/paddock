@@ -1,6 +1,10 @@
-# paddock
+<p align="center"><img src="docs/assets/logo/paddock-logo.svg" alt="" width="96" height="96"></p>
 
-Paddock is a simple web hosting panel for AlmaLinux 9.4+. It runs PHP sites in isolated vhosts: each vhost has its own Linux user, its own sandboxed Apache and PHP-FPM, and cannot see or touch another vhost's files or processes. Owners manage several vhosts within limits an admin sets.
+<h1 align="center">Paddock</h1>
+
+<p align="center">Isolated PHP hosting</p>
+
+Paddock is a simple web hosting panel. It runs PHP sites in isolated vhosts: each vhost has its own Linux user, its own sandboxed Apache and PHP-FPM, and cannot see or touch another vhost's files or processes. Owners manage several vhosts within limits an admin sets.
 
 ## Status
 

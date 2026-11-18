@@ -1,6 +1,6 @@
 # Paddock
 
-Paddock is a hosting panel for AlmaLinux 9.4+ that runs PHP sites in vhosts that cannot see or touch each other's files or processes. Owners manage several vhosts within limits set by an admin.
+Paddock is a hosting panel that runs PHP sites in vhosts that cannot see or touch each other's files or processes. Owners manage several vhosts within limits set by an admin.
 
 Read `docs/plan.md`: part 1 is the full specification, part 2 the task list. Work through the tasks in order unless told otherwise. Where the plan leaves a choice open, use the defaults in §15; ignore §16 (AlmaLinux 10) until phase 3.
 
