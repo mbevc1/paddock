@@ -26,7 +26,7 @@ type command struct {
 func commands() []command {
 	return []command{
 		{"agent", "run the root agent on /run/paddock/agent.sock", runAgent},
-		{"web", "run the web panel", notImplemented},
+		{"web", "run the web panel (as user paddock)", runWeb},
 		{"setup", "configure this host for Paddock", notImplemented},
 		{"teardown", "remove all vhosts and Paddock's host configuration", notImplemented},
 		{"reconcile", "re-render and re-apply everything from state.db (root)", runReconcile},

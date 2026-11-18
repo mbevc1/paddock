@@ -1,0 +1,10 @@
+{{define "content"}}
+<h1>Server status</h1>
+<dl>
+  <dt>Paddock</dt><dd>{{.Data.Version}}</dd>
+  <dt>Agent</dt><dd>{{if .Data.AgentOK}}reachable{{else}}not reachable{{end}}</dd>
+  <dt>PHP versions</dt><dd>{{join .Data.PHPVersions ", "}}</dd>
+  <dt>Owners</dt><dd>{{.Data.Owners}}</dd>
+  <dt>Panel users</dt><dd>{{.Data.Users}}</dd>
+</dl>
+{{end}}

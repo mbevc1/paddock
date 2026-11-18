@@ -1,0 +1,53 @@
+{{define "content"}}
+{{$d := .Data}}
+<h1>Security</h1>
+<p>Signed in as <strong>{{.Identity.User.Username}}</strong> ({{.Identity.User.Role}}).</p>
+
+{{with $d.RecoveryCodes}}
+<section class="secret">
+  <h2>Recovery codes</h2>
+  <p>Each works once if you lose your authenticator. They are shown only now.</p>
+  <ul>{{range .}}<li><code>{{.}}</code></li>{{end}}</ul>
+</section>
+{{end}}
+
+<section>
+  <h2>Password</h2>
+  <form method="post" action="/security/password" class="stack">
+    <input type="hidden" name="csrf" value="{{.CSRF}}">
+    <label>Current password <input name="current" type="password" autocomplete="current-password" required></label>
+    <label>New password <input name="new" type="password" autocomplete="new-password" minlength="12" required></label>
+    <label>Repeat it <input name="confirm" type="password" autocomplete="new-password" minlength="12" required></label>
+    <button type="submit">Change password</button>
+  </form>
+</section>
+
+<section>
+  <h2>Second factor</h2>
+  {{if $d.IsAdmin}}
+  <p>Admin codes are checked by the agent. Reset them on the server with <code>paddock admin totp-reset</code>.</p>
+  {{else if $d.TOTPEnrolled}}
+  <p>An authenticator is set up. {{$d.RecoveryLeft}} recovery codes left.</p>
+  <form method="post" action="/security/recovery" class="inline">
+    <input type="hidden" name="csrf" value="{{.CSRF}}"><button type="submit">New recovery codes</button>
+  </form>
+  {{if not $d.TOTPRequired}}
+  <form method="post" action="/security/totp/disable" class="inline">
+    <input type="hidden" name="csrf" value="{{.CSRF}}"><button type="submit">Turn off</button>
+  </form>
+  {{end}}
+  {{else if $d.PendingURI}}
+  <p>Add this to your authenticator app, then enter the code it shows:</p>
+  <p><code class="wrap">{{$d.PendingURI}}</code></p>
+  <form method="post" action="/security/totp/confirm" class="inline">
+    <input type="hidden" name="csrf" value="{{.CSRF}}">
+    <input name="code" inputmode="numeric" pattern="[0-9]{6}" required autocomplete="one-time-code">
+    <button type="submit">Confirm</button>
+  </form>
+  {{else}}
+  <form method="post" action="/security/totp/begin" class="inline">
+    <input type="hidden" name="csrf" value="{{.CSRF}}"><button type="submit">Set up an authenticator</button>
+  </form>
+  {{end}}
+</section>
+{{end}}

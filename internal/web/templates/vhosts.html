@@ -1,0 +1,11 @@
+{{define "content"}}
+<h1>Vhosts</h1>
+{{if .Can "vhost.manage"}}<p><a class="button" href="/vhosts/new">New vhost</a></p>{{end}}
+<table>
+  <thead><tr><th>ID</th><th>Domain</th><th>PHP</th><th>Status</th></tr></thead>
+  <tbody>
+  {{range .Data}}<tr><td>{{.ID}}</td><td><a href="/vhosts/{{.ID}}">{{.Primary}}</a></td><td>{{.PHPVersion}}</td><td>{{.Status}}</td></tr>
+  {{else}}<tr><td colspan="4">No vhosts.</td></tr>{{end}}
+  </tbody>
+</table>
+{{end}}

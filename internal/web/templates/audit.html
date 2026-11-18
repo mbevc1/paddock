@@ -1,0 +1,9 @@
+{{define "content"}}
+<h1>Audit log</h1>
+<table>
+  <thead><tr><th>Time</th><th>Actor</th><th>Operation</th><th>Arguments</th><th>Result</th></tr></thead>
+  <tbody>{{range .Data.Entries}}<tr><td>{{time .Time}}</td><td><code>{{.Actor}}</code></td><td>{{.Op}}</td><td><code>{{.Args}}</code></td><td>{{.Result}}</td></tr>
+  {{else}}<tr><td colspan="5">No entries.</td></tr>{{end}}</tbody>
+</table>
+{{with .Data.Older}}<p><a href="/admin/audit?before={{.}}">Older entries</a></p>{{end}}
+{{end}}

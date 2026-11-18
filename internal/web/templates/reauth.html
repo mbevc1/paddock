@@ -1,0 +1,10 @@
+{{define "content"}}
+<h1>Confirm it is you</h1>
+<p>This action needs your password again.</p>
+<form method="post" action="/reauth" class="stack">
+  <input type="hidden" name="csrf" value="{{.CSRF}}">
+  <input type="hidden" name="next" value="{{.Data}}">
+  <label>Password <input name="password" type="password" autocomplete="current-password" required autofocus></label>
+  <button type="submit">Confirm</button>
+</form>
+{{end}}

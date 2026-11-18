@@ -1,0 +1,49 @@
+{{define "layout"}}<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="htmx-config" content='{"includeIndicatorStyles":false}'>
+<title>{{.Title}} · Paddock</title>
+<link rel="stylesheet" href="/static/app.css">
+<script src="/static/htmx.min.js" defer></script>
+<script src="/static/app.js" defer></script>
+</head>
+<body{{if .Identity}} hx-headers="{{.HXHeaders}}"{{end}}>
+<header>
+  <a class="brand" href="/">Paddock</a>
+  {{if .Can "self"}}
+  <nav>
+    <a href="/dashboard">Dashboard</a>
+    {{if .Can "vhost.manage"}}<a href="/vhosts">Vhosts</a>{{end}}
+    {{if .Can "owner.manage"}}<a href="/admin/owners">Owners</a>{{end}}
+    {{if .Can "php.manage"}}<a href="/admin/php">PHP</a>{{end}}
+    {{if .Can "server.view"}}<a href="/admin/status">Status</a>{{end}}
+    {{if .Can "audit.view"}}<a href="/admin/audit">Audit</a>{{end}}
+    <a href="/notifications">Notifications <span id="unread" data-stream="/notifications/stream">{{if .Unread}}{{.Unread}}{{end}}</span></a>
+    <a href="/security">Security</a>
+    <form method="post" action="/logout" class="inline">
+      <input type="hidden" name="csrf" value="{{.CSRF}}">
+      <button type="submit">Sign out</button>
+    </form>
+  </nav>
+  {{end}}
+</header>
+{{if and .Identity (.Identity.Impersonating)}}
+<div class="banner">
+  Acting as owner {{.Identity.Impersonating}}. Every action is recorded under your name and theirs.
+  {{if .Can "impersonate"}}
+  <form method="post" action="/admin/impersonate/stop" class="inline">
+    <input type="hidden" name="csrf" value="{{.CSRF}}">
+    <button type="submit">Stop</button>
+  </form>
+  {{end}}
+</div>
+{{end}}
+<main>
+{{if .Flash}}<p class="flash" role="status">{{.Flash}}</p>{{end}}
+{{if .Error}}<p class="error" role="alert">{{.Error}}</p>{{end}}
+{{template "content" .}}
+</main>
+</body>
+</html>{{end}}

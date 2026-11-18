@@ -1,0 +1,127 @@
+{{define "content"}}
+{{$v := .Data.Vhost}}{{$p := .}}
+<h1>{{$v.Primary}}</h1>
+<p>{{$v.ID}} · PHP {{$v.PHPVersion}} · {{$v.Status}}</p>
+
+{{with .Data.Secret}}
+<section class="secret">
+  <h2>New password</h2>
+  <p>User <code>{{.User}}</code>, password <code>{{.Password}}</code>. It is shown only once.</p>
+</section>
+{{end}}
+
+<section>
+  <h2>Domains</h2>
+  <p>Primary: {{$v.Primary}}</p>
+  {{if .Can "vhost.manage"}}
+  <form method="post" action="/vhosts/{{$v.ID}}/aliases" class="stack">
+    <input type="hidden" name="csrf" value="{{.CSRF}}">
+    <label>Aliases <textarea name="aliases" rows="2">{{join $v.Aliases "\n"}}</textarea></label>
+    <button type="submit">Save aliases</button>
+  </form>
+  {{else}}<p>Aliases: {{join $v.Aliases ", "}}</p>{{end}}
+</section>
+
+<section>
+  <h2>PHP</h2>
+  {{if .Can "vhost.manage"}}
+  <form method="post" action="/vhosts/{{$v.ID}}/php" class="inline">
+    <input type="hidden" name="csrf" value="{{.CSRF}}">
+    <select name="php">{{range .Data.PHPVersions}}<option{{if eq . $v.PHPVersion}} selected{{end}}>{{.}}</option>{{end}}</select>
+    <button type="submit">Switch PHP</button>
+  </form>
+  {{end}}
+</section>
+
+<section>
+  <h2>Databases</h2>
+  <ul>{{range $v.Databases}}<li><code>{{.}}</code>
+    {{if $p.Can "db.manage"}}<form method="post" action="/vhosts/{{$v.ID}}/databases/{{suffix . $v.ID}}/delete" class="inline">
+      <input type="hidden" name="csrf" value="{{$p.CSRF}}"><button type="submit">Delete</button></form>{{end}}
+  </li>{{else}}<li>None.</li>{{end}}</ul>
+  {{if .Can "db.manage"}}
+  <form method="post" action="/vhosts/{{$v.ID}}/databases" class="inline">
+    <input type="hidden" name="csrf" value="{{.CSRF}}">
+    <label>{{$v.ID}}_<input name="suffix" pattern="[a-z0-9]{1,20}" required size="10"></label>
+    <button type="submit">Create database</button>
+  </form>
+  <form method="post" action="/vhosts/{{$v.ID}}/dbpassword" class="inline">
+    <input type="hidden" name="csrf" value="{{.CSRF}}">
+    <button type="submit">New password for {{$v.ID}}</button>
+  </form>
+  {{end}}
+  <h3>Extra DB users</h3>
+  <ul>{{range $v.DBUsers}}<li><code>{{.Name}}</code> ({{.Grants}})
+    {{if $p.Can "db.manage"}}
+    <form method="post" action="/vhosts/{{$v.ID}}/dbusers/{{suffix .Name $v.ID}}/password" class="inline">
+      <input type="hidden" name="csrf" value="{{$p.CSRF}}"><button type="submit">New password</button></form>
+    <form method="post" action="/vhosts/{{$v.ID}}/dbusers/{{suffix .Name $v.ID}}/delete" class="inline">
+      <input type="hidden" name="csrf" value="{{$p.CSRF}}"><button type="submit">Delete</button></form>
+    {{end}}
+  </li>{{else}}<li>None.</li>{{end}}</ul>
+  {{if .Can "db.manage"}}
+  <form method="post" action="/vhosts/{{$v.ID}}/dbusers" class="inline">
+    <input type="hidden" name="csrf" value="{{.CSRF}}">
+    <label>{{$v.ID}}_<input name="suffix" pattern="[a-z0-9]{1,8}" required size="8"></label>
+    <select name="grants"><option value="read">read</option><option value="all">all</option></select>
+    <button type="submit">Create DB user</button>
+  </form>
+  {{end}}
+</section>
+
+<section>
+  <h2>SFTP and shell</h2>
+  {{with $v.Access}}
+  <p>Account <code>{{.Account}}</code> ({{.Kind}}).</p>
+  <ul>{{range .Keys}}<li><code>{{.Fingerprint}}</code>
+    {{if $p.Can "access.manage"}}<form method="post" action="/vhosts/{{$v.ID}}/keys/remove" class="inline">
+      <input type="hidden" name="csrf" value="{{$p.CSRF}}"><input type="hidden" name="key" value="{{.PublicKey}}">
+      <button type="submit">Remove</button></form>{{end}}
+  </li>{{else}}<li>No keys.</li>{{end}}</ul>
+  {{if $p.Can "access.manage"}}
+  <form method="post" action="/vhosts/{{$v.ID}}/keys" class="stack">
+    <input type="hidden" name="csrf" value="{{$p.CSRF}}">
+    <label>Public key <textarea name="key" rows="2" required></textarea></label>
+    <button type="submit">Add key</button>
+  </form>
+  <form method="post" action="/vhosts/{{$v.ID}}/access/delete" class="inline">
+    <input type="hidden" name="csrf" value="{{$p.CSRF}}"><button type="submit">Remove account</button>
+  </form>
+  {{end}}
+  {{else}}
+  {{if .Can "access.manage"}}
+  <form method="post" action="/vhosts/{{$v.ID}}/access" class="stack">
+    <input type="hidden" name="csrf" value="{{.CSRF}}">
+    <label>Kind <select name="kind"><option value="sftp">SFTP</option><option value="shell">Shell</option></select></label>
+    <label>Password <input name="password" type="password" autocomplete="new-password" minlength="12"></label>
+    <label>Public key <textarea name="key" rows="2"></textarea></label>
+    <button type="submit">Create account</button>
+  </form>
+  {{else}}<p>No account.</p>{{end}}
+  {{end}}
+</section>
+
+<section>
+  <h2>Certificate</h2>
+  <p>Source: {{$v.Cert.Source}}{{with $v.Cert.NotAfter}}, valid until {{time .}}{{end}}.</p>
+  {{if .Can "cert.manage"}}
+  <form method="post" action="/vhosts/{{$v.ID}}/cert" class="stack">
+    <input type="hidden" name="csrf" value="{{.CSRF}}">
+    <label>Certificate chain (PEM, leaf first) <textarea name="chain" rows="4" required></textarea></label>
+    <label>Private key (PEM) <textarea name="key" rows="4" required></textarea></label>
+    <button type="submit">Upload certificate</button>
+  </form>
+  {{end}}
+</section>
+
+{{if .Can "vhost.manage"}}
+<section class="danger">
+  <h2>Delete vhost</h2>
+  <form method="post" action="/vhosts/{{$v.ID}}/delete" class="stack">
+    <input type="hidden" name="csrf" value="{{.CSRF}}">
+    <label>Type the primary domain to confirm <input name="confirm" required></label>
+    <button type="submit">Delete vhost</button>
+  </form>
+</section>
+{{end}}
+{{end}}

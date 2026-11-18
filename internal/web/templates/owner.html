@@ -1,0 +1,57 @@
+{{define "content"}}
+{{$o := .Data.Owner}}{{$l := $o.Limits}}
+<h1>{{$o.Name}}</h1>
+{{if .Can "impersonate"}}
+<form method="post" action="/admin/owners/{{$o.ID}}/impersonate" class="inline">
+  <input type="hidden" name="csrf" value="{{.CSRF}}"><button type="submit">Act as owner</button>
+</form>
+{{end}}
+<section>
+  <h2>Users</h2>
+  <ul>{{range .Data.Users}}<li>{{.Username}}{{if .TOTPSecret}} · second factor set{{end}}{{if .TOTPRequired}} · second factor required{{end}}</li>{{else}}<li>None.</li>{{end}}</ul>
+  {{if .Can "owner.manage"}}
+  <form method="post" action="/admin/owners/{{$o.ID}}/totp" class="inline">
+    <input type="hidden" name="csrf" value="{{.CSRF}}">
+    <label><input type="checkbox" name="required"> Require a second factor</label>
+    <button type="submit">Save</button>
+  </form>
+  {{end}}
+</section>
+<section>
+  <h2>Vhosts</h2>
+  <ul>{{range .Data.Vhosts}}<li>{{.ID}} {{.Primary}} · {{.Status}}</li>{{else}}<li>None.</li>{{end}}</ul>
+</section>
+{{if .Can "owner.manage"}}
+<section>
+  <h2>Limits</h2>
+  <form method="post" action="/admin/owners/{{$o.ID}}/limits" class="grid">
+    <input type="hidden" name="csrf" value="{{.CSRF}}">
+    <label>Vhosts <input name="max_vhosts" type="number" min="0" value="{{$l.MaxVhosts}}"></label>
+    <label>Disk (MB) <input name="disk_mb" type="number" min="0" value="{{$l.DiskMB}}"></label>
+    <label>Databases <input name="max_databases" type="number" min="0" value="{{$l.MaxDatabases}}"></label>
+    <label>DB users <input name="max_db_users" type="number" min="0" value="{{$l.MaxDBUsers}}"></label>
+    <label>Access accounts <input name="max_access_accounts" type="number" min="0" value="{{$l.MaxAccessAccounts}}"></label>
+    <label>Memory (MB) <input name="memory_max_mb" type="number" min="1" value="{{$l.MemoryMaxMB}}"></label>
+    <label>CPU (%) <input name="cpu_quota_pct" type="number" min="1" value="{{$l.CPUQuotaPct}}"></label>
+    <label>Tasks <input name="tasks_max" type="number" min="1" value="{{$l.TasksMax}}"></label>
+    <label>FPM children <input name="pm_max_children" type="number" min="1" value="{{$l.PMMaxChildren}}"></label>
+    <label>DB connections <input name="max_user_connections" type="number" min="1" value="{{$l.MaxUserConnections}}"></label>
+    <label><input type="checkbox" name="shell_allowed"{{if $l.ShellAllowed}} checked{{end}}> Shell accounts</label>
+    <fieldset><legend>PHP versions (none ticked: all installed)</legend>
+      {{range .Data.PHPVersions}}<label><input type="checkbox" name="php_versions" value="{{.}}"{{if has $l.PHPVersions .}} checked{{end}}> {{.}}</label>{{end}}
+    </fieldset>
+    <label>Your TOTP code (optional) <input name="totp" inputmode="numeric" pattern="[0-9]{6}" autocomplete="one-time-code"></label>
+    <button type="submit">Save limits</button>
+  </form>
+</section>
+<section class="danger">
+  <h2>Delete owner</h2>
+  <p>Only owners without vhosts can be deleted.</p>
+  <form method="post" action="/admin/owners/{{$o.ID}}/delete" class="inline">
+    <input type="hidden" name="csrf" value="{{.CSRF}}">
+    <input name="totp" inputmode="numeric" pattern="[0-9]{6}" placeholder="TOTP code" autocomplete="one-time-code">
+    <button type="submit">Delete owner</button>
+  </form>
+</section>
+{{end}}
+{{end}}
