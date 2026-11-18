@@ -1,4 +1,4 @@
-# path: /etc/systemd/system/user-100012.slice.d/limits.conf
+# path: /etc/systemd/system/user-1000000012.slice.d/limits.conf
 [Slice]
 MemoryMax=2G
 CPUQuota=200%

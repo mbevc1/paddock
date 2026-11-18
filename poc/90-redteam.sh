@@ -136,5 +136,5 @@ check "user namespaces are disabled" test "$(sysctl -n user.max_user_namespaces)
 refute "A's PHP cannot create a user namespace" test -n "$(php_probe 1 'unshare -U true && echo created')"
 
 # Subordinate ID ranges that cover vhost UIDs would let their holder map into a tenant.
-overlaps=$(awk -F: '$2 <= 165535 && $2 + $3 > 100000 {print $1 ":" $2 ":" $3}' /etc/subuid /etc/subgid | sort -u | tr '\n' ' ')
-check "no subordinate ID range covers vhost UIDs 100001-165535 (${overlaps:-none})" test -z "$overlaps"
+overlaps=$(awk -F: '$2 <= 1000065535 && $2 + $3 > 1000000001 {print $1 ":" $2 ":" $3}' /etc/subuid /etc/subgid | sort -u | tr '\n' ' ')
+check "no subordinate ID range covers vhost UIDs 1000000001-1000065535 (${overlaps:-none})" test -z "$overlaps"

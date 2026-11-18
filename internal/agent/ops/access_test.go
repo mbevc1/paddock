@@ -88,7 +88,7 @@ func TestAccessSFTP(t *testing.T) {
 	if v := runJob(t, web, "access.delete", owner, VhostIDArgs{VhostID: "v00001"}); v.Status != state.JobSucceeded {
 		t.Fatalf("delete: %+v", v)
 	}
-	want := []string{"/usr/sbin/usermod -s /sbin/nologin -G  -L v00001", "/usr/bin/pkill --uid 100001 --exact sshd"}
+	want := []string{"/usr/sbin/usermod -s /sbin/nologin -G  -L v00001", "/usr/bin/pkill --uid 1000000001 --exact sshd"}
 	if got := e.run.Commands()[mark:]; !slices.Equal(got, want) {
 		t.Errorf("delete commands = %q", got)
 	}
@@ -164,7 +164,7 @@ func TestAccessShell(t *testing.T) {
 		t.Errorf("tmp mode = %v, %v", fi.Mode(), err)
 	}
 	passwd, err := os.ReadFile(filepath.Join(e.root, shellJail, "etc/passwd"))
-	if err != nil || string(passwd) != "v00001:x:100001:100001::/site:/bin/bash\n" {
+	if err != nil || string(passwd) != "v00001:x:1000000001:1000000001::/site:/bin/bash\n" {
 		t.Errorf("jail passwd = %q, %v", passwd, err)
 	}
 	for _, unit := range []string{"srv-jail-v00001-usr.mount", "srv-jail-v00001-opt-remi.mount", "srv-jail-v00001-proc.mount"} {

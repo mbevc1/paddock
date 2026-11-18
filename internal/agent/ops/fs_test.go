@@ -40,20 +40,20 @@ func testFS(t *testing.T) (*HostFS, *[]chownCall) {
 
 func TestHostFSMkdirAndRemove(t *testing.T) {
 	f, calls := testFS(t)
-	if err := f.Mkdir(BaseWWW, "v00012", 0o700, 100012, 100012); err != nil {
+	if err := f.Mkdir(BaseWWW, "v00012", 0o700, 1000000012, 1000000012); err != nil {
 		t.Fatal(err)
 	}
-	if err := f.Mkdir(BaseWWW, "v00012/public", 0o750, 100012, 100012); err != nil {
+	if err := f.Mkdir(BaseWWW, "v00012/public", 0o750, 1000000012, 1000000012); err != nil {
 		t.Fatal(err)
 	}
-	if err := f.Mkdir(BaseWWW, "v00012", 0o700, 100012, 100012); err != nil {
+	if err := f.Mkdir(BaseWWW, "v00012", 0o700, 1000000012, 1000000012); err != nil {
 		t.Errorf("Mkdir on an existing directory: %v", err)
 	}
 	fi, err := os.Stat(filepath.Join(f.Root, BaseWWW, "v00012", "public"))
 	if err != nil || fi.Mode().Perm() != 0o750 {
 		t.Errorf("public mode = %v, %v", fi.Mode().Perm(), err)
 	}
-	if len(*calls) != 3 || (*calls)[1] != (chownCall{"v00012/public", 100012, 100012}) {
+	if len(*calls) != 3 || (*calls)[1] != (chownCall{"v00012/public", 1000000012, 1000000012}) {
 		t.Errorf("chown calls = %v", *calls)
 	}
 	if ok, err := f.Exists(BaseWWW, "v00012/public"); !ok || err != nil {

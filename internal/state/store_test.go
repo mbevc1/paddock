@@ -129,7 +129,7 @@ func TestVhosts(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if v1.N != 1 || v1.ID != "v00001" || v1.UID != 100001 || v1.Status != VhostCreating {
+	if v1.N != 1 || v1.ID != "v00001" || v1.UID != 1000000001 || v1.Status != VhostCreating {
 		t.Errorf("first vhost = %+v", v1)
 	}
 	if _, err := s.CreateVhost(ctx, o.ID, "8.3", "www.a.example.com", nil); !errors.Is(err, ErrConflict) {

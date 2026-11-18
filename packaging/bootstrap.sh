@@ -26,12 +26,12 @@ readonly MODULES_CONF=/etc/httpd/conf.modules.d/00-base.conf
 readonly STATUS_LINE='LoadModule status_module modules/mod_status.so'
 readonly PANEL_CERT=/var/lib/paddock/web/panel.crt
 readonly PORTS=(80 81 443 8080 8443)
-# Vhost UIDs and GIDs are 100000 + N for N up to 65535.
-readonly VHOST_ID_MIN=100001
-readonly VHOST_ID_MAX=165535
-# useradd hands out subordinate ID ranges from here up, clear of the vhost IDs.
-readonly SUBID_MIN=200000
+# Vhost UIDs and GIDs are 1000000000 + N for N up to 65535, above the subordinate ID pool.
+readonly VHOST_ID_MIN=1000000001
+readonly VHOST_ID_MAX=1000065535
 readonly LOGIN_DEFS=/etc/login.defs
+# shadow-utils' SUB_UID_MAX and SUB_GID_MAX when login.defs does not set them.
+readonly SUBID_MAX_DEFAULT=600100000
 
 HOSTNAME_ARG=
 DEVICE=
@@ -168,29 +168,11 @@ subid_overlaps() {
 	awk -F: -v lo="$VHOST_ID_MIN" -v hi="$VHOST_ID_MAX" 'NF == 3 && $2 <= hi && $2 + $3 > lo' "$1"
 }
 
-# raise_login_def sets KEY in a login.defs file to VALUE when it is lower or missing, through a
-# temporary file in the same directory.
-raise_login_def() {
-	local file=$1 key=$2 value=$3 tmp
-	tmp=$(mktemp "$file.XXXXXX")
-	awk -v k="$key" -v v="$value" '
-		$1 == k { found = 1; if ($2 + 0 < v) { print k "\t\t" v; next } }
-		{ print }
-		END { if (!found) print k "\t\t" v }' "$file" >"$tmp"
-	if cmp -s "$tmp" "$file"; then
-		rm -f "$tmp"
-		return
-	fi
-	chmod --reference="$file" "$tmp"
-	chown --reference="$file" "$tmp"
-	mv -f "$tmp" "$file"
-	restorecon -F "$file" 2>/dev/null || true
-	CHANGED+=("$file")
-	echo "    set $key to $value in $file"
-}
+# login_def prints KEY's value from a login.defs file, or nothing when it is not set.
+login_def() { awk -v k="$2" '$1 == k { v = $2 } END { print v }' "$1"; }
 
-# fence_subids refuses subordinate ID ranges that would let their holder map vhost UIDs in a user
-# namespace, and keeps the ranges useradd hands out later above the vhost IDs.
+# fence_subids refuses subordinate ID ranges that would let their holder map vhost IDs in a user
+# namespace, now or for users added later.
 fence_subids() {
 	step "checking subordinate ID ranges"
 	local overlaps
@@ -201,14 +183,17 @@ fence_subids() {
 	if [[ -n $overlaps ]]; then
 		die "these subordinate ID ranges overlap vhost IDs $VHOST_ID_MIN-$VHOST_ID_MAX:
 $overlaps
-Move each above $SUBID_MIN, for example for NAME:START:COUNT:
-  usermod --del-subuids START-END --del-subgids START-END NAME
-  usermod --add-subuids NEW-NEWEND --add-subgids NEW-NEWEND NAME
-with END = START + COUNT - 1, then rerun bootstrap."
+Move each below $VHOST_ID_MIN with usermod --del-subuids/--del-subgids and
+--add-subuids/--add-subgids, then rerun bootstrap."
 	fi
-	local key
-	for key in SUB_UID_MIN SUB_GID_MIN; do
-		raise_login_def "$LOGIN_DEFS" "$key" "$SUBID_MIN"
+	local key value
+	for key in SUB_UID_MAX SUB_GID_MAX; do
+		value=$(login_def "$LOGIN_DEFS" "$key")
+		value=${value:-$SUBID_MAX_DEFAULT}
+		if [[ ! $value =~ ^[0-9]+$ ]] || ((value >= VHOST_ID_MIN)); then
+			die "$key in $LOGIN_DEFS is $value, so useradd could give a new user subordinate IDs
+overlapping vhost IDs from $VHOST_ID_MIN. Set it below $VHOST_ID_MIN and rerun bootstrap."
+		fi
 	done
 }
 

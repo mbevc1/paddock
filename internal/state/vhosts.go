@@ -11,7 +11,7 @@ import (
 )
 
 // UIDBase is added to the vhost number to give its UID and GID.
-const UIDBase = 100000
+const UIDBase = validate.VhostUIDBase
 
 // VhostStatus is a vhost's lifecycle state.
 type VhostStatus string

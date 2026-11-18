@@ -61,15 +61,15 @@ func regularFiles(t *testing.T, root string) []string {
 }
 
 var wantCreateCommands = []string{
-	"/usr/sbin/groupadd -g 100001 v00001",
-	"/usr/sbin/useradd -u 100001 -g 100001 -M -d /srv/www/v00001 -s /sbin/nologin -K SUB_UID_COUNT=0 -K SUB_GID_COUNT=0 v00001",
+	"/usr/sbin/groupadd -g 1000000001 v00001",
+	"/usr/sbin/useradd -u 1000000001 -g 1000000001 -M -d /srv/www/v00001 -s /sbin/nologin -K SUB_UID_COUNT=0 -K SUB_GID_COUNT=0 v00001",
 	"/usr/sbin/xfs_quota -x -c project -s -p /srv/www/v00001 1 /srv/www",
 	"/usr/sbin/xfs_quota -x -c limit -p bhard=10240m 1 /srv/www",
 	"/usr/sbin/restorecon -RF /srv/www/v00001",
 	"/usr/bin/systemd-tmpfiles --create /etc/tmpfiles.d/paddock-v00001.conf",
-	"/usr/bin/setpriv --reuid=100001 --regid=100001 --clear-groups -- /opt/remi/php83/root/usr/sbin/php-fpm -t --fpm-config /etc/paddock/fpm/v00001.conf",
+	"/usr/bin/setpriv --reuid=1000000001 --regid=1000000001 --clear-groups -- /opt/remi/php83/root/usr/sbin/php-fpm -t --fpm-config /etc/paddock/fpm/v00001.conf",
 	"/usr/sbin/httpd -t -f /etc/paddock/httpd/v00001.conf",
-	"/usr/bin/systemctl mask user@100001.service",
+	"/usr/bin/systemctl mask user@1000000001.service",
 	"/usr/bin/systemctl daemon-reload",
 	"/usr/bin/systemctl enable --now srv-jail-v00001-site.mount",
 	"/usr/bin/systemctl enable --now paddock-php83-fpm@v00001.service",
@@ -89,7 +89,7 @@ var wantVhostFiles = []string{
 	"etc/systemd/system/paddock-owner-1.slice",
 	"etc/systemd/system/paddock-php83-fpm@v00001.service.d/10-sandbox.conf",
 	"etc/systemd/system/srv-jail-v00001-site.mount",
-	"etc/systemd/system/user-100001.slice.d/limits.conf",
+	"etc/systemd/system/user-1000000001.slice.d/limits.conf",
 	"etc/tmpfiles.d/paddock-v00001.conf",
 }
 
@@ -116,7 +116,7 @@ func TestVhostCreate(t *testing.T) {
 			t.Errorf("%s: %v, %v", dir, fi, err)
 		}
 	}
-	if !slices.Contains(*e.chowns, chownCall{"v00001/public", 100001, 100001}) ||
+	if !slices.Contains(*e.chowns, chownCall{"v00001/public", 1000000001, 1000000001}) ||
 		!slices.Contains(*e.chowns, chownCall{"v00001/site", 0, 0}) {
 		t.Errorf("chowns = %v", *e.chowns)
 	}
@@ -140,11 +140,11 @@ func prefixAll(prefix string, in []string) []string {
 
 // undoOf maps a create command to the command that reverses it.
 var undoOf = map[string]string{
-	"/usr/sbin/groupadd -g 100001 v00001":                              "/usr/sbin/groupdel v00001",
+	"/usr/sbin/groupadd -g 1000000001 v00001":                          "/usr/sbin/groupdel v00001",
 	wantCreateCommands[1]:                                              "/usr/sbin/userdel v00001",
 	wantCreateCommands[2]:                                              "/usr/sbin/xfs_quota -x -c project -C -p /srv/www/v00001 1 /srv/www",
 	wantCreateCommands[3]:                                              "/usr/sbin/xfs_quota -x -c limit -p bhard=0 1 /srv/www",
-	"/usr/bin/systemctl mask user@100001.service":                      "/usr/bin/systemctl unmask user@100001.service",
+	"/usr/bin/systemctl mask user@1000000001.service":                  "/usr/bin/systemctl unmask user@1000000001.service",
 	"/usr/bin/systemctl enable --now srv-jail-v00001-site.mount":       "/usr/bin/systemctl disable --now srv-jail-v00001-site.mount",
 	"/usr/bin/systemctl enable --now paddock-php83-fpm@v00001.service": "/usr/bin/systemctl disable --now paddock-php83-fpm@v00001.service",
 	"/usr/bin/systemctl enable --now paddock-httpd@v00001.service":     "/usr/bin/systemctl disable --now paddock-httpd@v00001.service",
@@ -273,7 +273,7 @@ var wantDeleteCommands = []string{
 	"/usr/bin/systemctl disable --now srv-jail-v00001-site.mount",
 	"/usr/sbin/apachectl configtest",
 	"/usr/bin/systemctl reload httpd.service",
-	"/usr/bin/systemctl unmask user@100001.service",
+	"/usr/bin/systemctl unmask user@1000000001.service",
 	"/usr/bin/systemctl daemon-reload",
 	"/usr/bin/tar --create --gzip --numeric-owner --xattrs --selinux --acls --file /var/lib/paddock/agent/archive/v00001-20261117T120000Z.tar.gz --directory /srv/www v00001",
 	"/usr/sbin/xfs_quota -x -c limit -p bhard=0 1 /srv/www",

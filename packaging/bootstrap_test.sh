@@ -87,29 +87,20 @@ printf 'not a key\n' >"$WORK/junk"
 reject key_pinned "$WORK/junk" "$fpr"
 
 cat >"$WORK/subuid" <<'EOF'
-vagrant:100000:65536
-low:10000:1000
-below:90000:10001
-touching:90000:10002
-above:165536:65536
+mare:100000:65536
+ispconfig:231072:65536
+below:999934465:65536
+covering:999934465:65537
+inside:1000000100:10
+above:1000065536:65536
 EOF
-[[ $(subid_overlaps "$WORK/subuid" | tr '\n' ' ') == "vagrant:100000:65536 touching:90000:10002 " ]] ||
+[[ $(subid_overlaps "$WORK/subuid" | tr '\n' ' ') == "covering:999934465:65537 inside:1000000100:10 " ]] ||
 	fail "subid_overlaps = $(subid_overlaps "$WORK/subuid")"
 [[ -z $(subid_overlaps "$WORK/missing") ]] || fail "subid_overlaps on a missing file"
 
-printf 'PASS_MAX_DAYS\t99999\nSUB_UID_MIN\t\t   100000\nSUB_UID_MAX\t\t600100000\n' >"$WORK/login.defs"
-CHANGED=()
-raise_login_def "$WORK/login.defs" SUB_UID_MIN 200000 >/dev/null
-raise_login_def "$WORK/login.defs" SUB_GID_MIN 200000 >/dev/null
-[[ $(awk '$1 == "SUB_UID_MIN" { print $2 }' "$WORK/login.defs") == 200000 ]] || fail "SUB_UID_MIN not raised"
-[[ $(awk '$1 == "SUB_GID_MIN" { print $2 }' "$WORK/login.defs") == 200000 ]] || fail "missing SUB_GID_MIN not added"
-grep -qx 'PASS_MAX_DAYS	99999' "$WORK/login.defs" || fail "other settings changed"
-[[ ${#CHANGED[@]} -eq 2 ]] || fail "changes recorded: ${CHANGED[*]}"
-raise_login_def "$WORK/login.defs" SUB_UID_MIN 200000 >/dev/null
-[[ ${#CHANGED[@]} -eq 2 ]] || fail "rerun changed login.defs"
-printf 'SUB_UID_MIN\t300000\n' >"$WORK/login.defs.high"
-raise_login_def "$WORK/login.defs.high" SUB_UID_MIN 200000 >/dev/null
-grep -qx 'SUB_UID_MIN	300000' "$WORK/login.defs.high" || fail "a higher SUB_UID_MIN was lowered"
+printf 'SUB_UID_MIN\t\t   100000\nSUB_UID_MAX\t\t600100000\n# SUB_GID_MAX 2000000000\n' >"$WORK/login.defs"
+[[ $(login_def "$WORK/login.defs" SUB_UID_MAX) == 600100000 ]] || fail "login_def SUB_UID_MAX"
+[[ -z $(login_def "$WORK/login.defs" SUB_GID_MAX) ]] || fail "login_def read a commented-out key"
 
 [[ ${#REMI_FINGERPRINTS[@]} -gt 0 ]] || fail "no Remi fingerprint pinned"
 for f in "${REMI_FINGERPRINTS[@]}"; do

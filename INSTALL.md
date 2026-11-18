@@ -102,15 +102,7 @@ Run these as root on the server:
 
 ## Troubleshooting
 
-**Subordinate ID ranges overlap vhost IDs.** Bootstrap stops if a user holds a subordinate UID or GID range overlapping 100001 to 165535, because that user could map vhost IDs inside a user namespace. On many images the first login user (for example `vagrant`) holds `100000:65536`. The message lists the entries; move each above 200000 and rerun bootstrap:
-
-```bash
-sudo usermod --del-subuids 100000-165535 --del-subgids 100000-165535 vagrant
-```
-
-```bash
-sudo usermod --add-subuids 200000-265535 --add-subgids 200000-265535 vagrant
-```
+**Subordinate ID ranges overlap vhost IDs.** Vhost users get UIDs and GIDs from 1000000001 to 1000065535, above the range `useradd` hands out for rootless containers, so this does not happen on a stock system. Bootstrap stops if a user was given a range overlapping those IDs by hand, or if `SUB_UID_MAX` or `SUB_GID_MAX` in `/etc/login.defs` was raised past 1000000000, because such a user could map vhost IDs inside a user namespace. Move the listed ranges below 1000000001 with `usermod --del-subuids`/`--add-subuids` (and the `subgids` equivalents), or lower the setting, then rerun bootstrap.
 
 **A port is in use.** Bootstrap names the port and the program holding it. Stop or reconfigure that program, then rerun bootstrap.
 
