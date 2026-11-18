@@ -21,6 +21,9 @@ Requires:       fail2ban
 Requires:       nftables
 Requires:       xfsprogs
 Requires:       policycoreutils-python-utils
+Requires(post): policycoreutils
+Requires(post): selinux-policy-targeted
+Requires(postun): policycoreutils
 Requires:       openssh-server
 %{?sysusers_requires_compat}
 
@@ -42,6 +45,7 @@ for unit in paddock-agent.service paddock-web.service paddock-nft.service paddoc
 done
 install -D -m 0644 deploy/sysusers.d/paddock.conf %{buildroot}%{_sysusersdir}/paddock.conf
 install -D -m 0644 deploy/tmpfiles.d/paddock.conf %{buildroot}%{_tmpfilesdir}/paddock.conf
+install -D -m 0644 deploy/selinux/paddock.cil %{buildroot}%{_datadir}/selinux/packages/paddock.cil
 (cd deploy && find etc -type f) | while read -r f; do
     install -D -m 0644 "deploy/$f" "%{buildroot}%{_datadir}/paddock/$f"
 done
@@ -54,13 +58,18 @@ install -d -m 0700 %{buildroot}/var/lib/paddock/web
 
 %post
 %systemd_post paddock-agent.service paddock-web.service paddock-nft.service
+semodule -i %{_datadir}/selinux/packages/paddock.cil || :
 %tmpfiles_create %{_tmpfilesdir}/paddock.conf
+restorecon -R /run/paddock/acme || :
 
 %preun
 %systemd_preun paddock-agent.service paddock-web.service paddock-nft.service
 
 %postun
 %systemd_postun_with_restart paddock-agent.service paddock-web.service
+if [ $1 -eq 0 ]; then
+    semodule -r paddock || :
+fi
 
 %files
 %license LICENSE
@@ -73,6 +82,7 @@ install -d -m 0700 %{buildroot}/var/lib/paddock/web
 %{_sysusersdir}/paddock.conf
 %{_tmpfilesdir}/paddock.conf
 %{_datadir}/paddock
+%{_datadir}/selinux/packages/paddock.cil
 %dir %attr(0755,root,root) /var/lib/paddock
 %dir %attr(0700,root,root) /var/lib/paddock/agent
 %dir %attr(0700,paddock,paddock) /var/lib/paddock/web

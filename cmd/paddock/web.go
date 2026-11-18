@@ -23,7 +23,7 @@ import (
 
 const (
 	defaultWebDir  = "/var/lib/paddock/web"
-	defaultACMESck = "/run/paddock/acme.sock"
+	defaultACMESck = "/run/paddock/acme/acme.sock"
 	eventsInterval = 5 * time.Second
 )
 

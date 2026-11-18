@@ -78,3 +78,10 @@ jobs:
       - run: scripts/build-rpm.sh 0.0.0 x86_64
       - run: rpmlint -f packaging/paddock.rpmlintrc dist/*.rpm
       - run: rpm -qp --scripts dist/*.rpm
+      # Builds the module against the targeted policy store without loading it, which catches
+      # unknown types and syntax errors.
+      - name: Check the SELinux module
+        run: |
+          dnf -y install selinux-policy-targeted policycoreutils
+          semodule -n -i deploy/selinux/paddock.cil
+          semodule -n -l | grep -qx paddock
