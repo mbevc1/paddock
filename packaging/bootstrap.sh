@@ -9,9 +9,11 @@ readonly OWNER='@OWNER@'
 readonly REPO_FILE=/etc/yum.repos.d/paddock.repo
 readonly REMI_RELEASE_URL=https://rpms.remirepo.net/enterprise/remi-release-9.rpm
 # Primary key fingerprints Remi signs remi-release-9 with, checked against the keys the package
-# carries before rpm trusts any of them. Fill in from https://rpms.remirepo.net/ after checking
-# them out of band; the run aborts while this is empty.
-readonly REMI_FINGERPRINTS=()
+# carries before rpm trusts any of them. Remi rotates keys; add the new fingerprint when
+# remi-release-9 is signed with another key.
+readonly REMI_FINGERPRINTS=(
+	B1ABF71E14C9D74897E198A8B19527F1478F8947 # Remi's RPM repository (EL 9), created 2021-01-04
+)
 
 readonly WWW=/srv/www
 readonly JAIL=/srv/jail

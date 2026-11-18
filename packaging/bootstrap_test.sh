@@ -65,9 +65,10 @@ reject key_pinned "$WORK/key.asc"
 printf 'not a key\n' >"$WORK/junk"
 reject key_pinned "$WORK/junk" "$fpr"
 
-rpm() { return 1; }
-(install_remi >/dev/null 2>&1) && fail "install_remi ran with no pinned fingerprint"
-unset -f rpm
+[[ ${#REMI_FINGERPRINTS[@]} -gt 0 ]] || fail "no Remi fingerprint pinned"
+for f in "${REMI_FINGERPRINTS[@]}"; do
+	[[ $f =~ ^[0-9A-F]{40}$ ]] || fail "Remi fingerprint $f is not 40 uppercase hex digits"
+done
 
 if [[ $failures -gt 0 ]]; then
 	echo "bootstrap_test: $failures failures"
