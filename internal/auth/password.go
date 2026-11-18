@@ -154,3 +154,19 @@ func CheckPasswordPolicy(password, username string) error {
 	}
 	return nil
 }
+
+const randomPasswordLength = 20
+
+// RandomPassword returns a 20-character password of letters and digits without look-alikes,
+// for accounts whose first password is shown once.
+func RandomPassword() (string, error) {
+	const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789"
+	b := make([]byte, randomPasswordLength)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	for i := range b {
+		b[i] = alphabet[int(b[i])%len(alphabet)]
+	}
+	return string(b), nil
+}

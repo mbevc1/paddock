@@ -41,6 +41,8 @@ func RegisterPHP(r *agent.Registry, store *state.Store, h *Host) {
 			if err != nil {
 				return nil, err
 			}
+			h.mu.Lock()
+			defer h.mu.Unlock()
 			if err := installPHP(ctx, store, h, p); err != nil {
 				return nil, err
 			}
@@ -53,6 +55,8 @@ func RegisterPHP(r *agent.Registry, store *state.Store, h *Host) {
 			if err != nil {
 				return nil, err
 			}
+			h.mu.Lock()
+			defer h.mu.Unlock()
 			if err := removePHP(ctx, store, h, p); err != nil {
 				return nil, err
 			}
@@ -148,4 +152,15 @@ func removePHP(ctx context.Context, store *state.Store, h *Host, p render.PHP) e
 		return h.applyFailed("removing PHP "+p.Version(), err)
 	}
 	return nil
+}
+
+// InstallPHP installs a PHP version as php.version.install does; paddock setup uses it.
+func InstallPHP(ctx context.Context, store *state.Store, h *Host, version string) error {
+	p, err := render.NewPHP(version)
+	if err != nil {
+		return err
+	}
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return installPHP(ctx, store, h, p)
 }

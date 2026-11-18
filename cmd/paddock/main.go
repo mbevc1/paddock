@@ -27,10 +27,10 @@ func commands() []command {
 	return []command{
 		{"agent", "run the root agent on /run/paddock/agent.sock", runAgent},
 		{"web", "run the web panel (as user paddock)", runWeb},
-		{"setup", "configure this host for Paddock", notImplemented},
+		{"setup", "configure this host for Paddock (root)", runSetup},
 		{"teardown", "remove all vhosts and Paddock's host configuration", notImplemented},
 		{"reconcile", "re-render and re-apply everything from state.db (root)", runReconcile},
-		{"admin", "add an admin or reset an admin's TOTP secret (root)", runAdmin},
+		{"admin", "add an admin, reset an admin's TOTP, or reset a password (root)", runAdmin},
 		{"agent-notify", "tell the agent mod_md renewed certificates (MDNotifyCmd)", runAgentNotify},
 		{"version", "print the version", printVersion},
 	}

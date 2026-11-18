@@ -6,15 +6,30 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/mbevc1/paddock/internal/agent"
 	"github.com/mbevc1/paddock/internal/agent/ops"
+	"github.com/mbevc1/paddock/internal/auth"
+	"github.com/mbevc1/paddock/internal/setup"
+	"github.com/mbevc1/paddock/internal/validate"
+	"github.com/mbevc1/paddock/internal/web/store"
 )
 
-const agentCallTimeout = 30 * time.Second
+const agentCallTimeout = 30 * time.Minute
 
-var errAdminUsage = errors.New("usage: paddock admin add -user-id N -username NAME | paddock admin totp-reset -user-id N")
+var errAdminUsage = errors.New("usage: paddock admin add|totp-reset|reset-password USERNAME")
+
+// adminEnv is what the admin commands touch; tests replace the web user and chown.
+type adminEnv struct {
+	webDir  string
+	socket  string
+	out     io.Writer
+	webUser func() (int, int, error)
+	chown   func(string, int, int) error
+}
 
 func runAdmin(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 	if len(args) == 0 {
@@ -23,40 +38,136 @@ func runAdmin(ctx context.Context, args []string, stdout, stderr io.Writer) erro
 	fs := flag.NewFlagSet("admin "+args[0], flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	socket := fs.String("socket", agent.SocketPath, "agent socket path")
-	userID := fs.Int64("user-id", 0, "panel user ID of the admin")
-	var username *string
-	if args[0] == "add" {
-		username = fs.String("username", "", "panel username of the admin")
-	}
+	webDir := fs.String("web-dir", setup.WebDir, "directory holding web.db")
 	if err := fs.Parse(args[1:]); err != nil {
 		return err
 	}
-	if fs.NArg() > 0 || *userID < 1 || username != nil && *username == "" {
+	if fs.NArg() != 1 {
 		return errAdminUsage
 	}
-
-	var op string
-	var callArgs any
+	username := fs.Arg(0)
+	if err := validate.Username(username); err != nil {
+		return err
+	}
+	env := adminEnv{webDir: *webDir, socket: *socket, out: stdout, chown: os.Lchown,
+		webUser: func() (int, int, error) {
+			uid, gid, err := lookupUser("paddock")
+			return int(uid), gid, err
+		}}
 	switch args[0] {
 	case "add":
-		op, callArgs = "admin.add", ops.AdminAddArgs{UserID: *userID, Username: *username}
+		return env.add(ctx, username)
 	case "totp-reset":
-		op, callArgs = "admin.totp.reset", ops.AdminUserArgs{UserID: *userID}
-	default:
-		return errAdminUsage
+		return env.totpReset(ctx, username)
+	case "reset-password":
+		return env.resetPassword(ctx, username)
 	}
+	return errAdminUsage
+}
 
-	ctx, cancel := context.WithTimeout(ctx, agentCallTimeout)
-	defer cancel()
-	client, err := agent.Dial(ctx, *socket)
+// withWebStore opens web.db as root and hands its files back to user paddock afterwards.
+func (e adminEnv) withWebStore(ctx context.Context, fn func(*store.Store) error) error {
+	uid, gid, err := e.webUser()
 	if err != nil {
 		return err
 	}
-	defer client.Close()
-	var enrolled ops.TOTPEnrollment
-	if err := client.Call(ctx, op, nil, "", callArgs, &enrolled); err != nil {
+	s, err := store.Open(ctx, filepath.Join(e.webDir, "web.db"))
+	if err != nil {
 		return err
 	}
-	_, err = fmt.Fprintf(stdout, "Add this TOTP secret to the admin's authenticator app. It is shown only once:\n%s\n", enrolled.TOTPURI)
+	err = fn(s)
+	if cerr := s.Close(); err == nil {
+		err = cerr
+	}
+	setup.ChownWebFiles(e.chown, e.webDir, uid, gid)
 	return err
+}
+
+func (e adminEnv) agentCall(ctx context.Context, op string, args, result any) error {
+	ctx, cancel := context.WithTimeout(ctx, agentCallTimeout)
+	defer cancel()
+	c, err := agent.Dial(ctx, e.socket)
+	if err != nil {
+		return err
+	}
+	defer c.Close()
+	return c.Call(ctx, op, nil, "", args, result)
+}
+
+// add creates an admin in web.db and registers it with the agent, which holds its TOTP
+// secret. If the agent refuses, the web.db user is removed again.
+func (e adminEnv) add(ctx context.Context, username string) error {
+	return e.withWebStore(ctx, func(s *store.Store) error {
+		password, err := auth.RandomPassword()
+		if err != nil {
+			return err
+		}
+		hash, err := auth.HashPassword(password)
+		if err != nil {
+			return err
+		}
+		u, err := s.CreateUser(ctx, username, store.RoleAdmin, 0, hash)
+		if err != nil {
+			return err
+		}
+		var enrolled ops.TOTPEnrollment
+		if err := e.agentCall(ctx, "admin.add", ops.AdminAddArgs{UserID: u.ID, Username: username}, &enrolled); err != nil {
+			if derr := s.DeleteUser(ctx, u.ID); derr != nil {
+				return errors.Join(err, derr)
+			}
+			return err
+		}
+		_, err = fmt.Fprintf(e.out, "Admin %s created. Shown only now:\n  password:  %s\n  TOTP URI:  %s\n", username, password, enrolled.TOTPURI)
+		return err
+	})
+}
+
+func (e adminEnv) totpReset(ctx context.Context, username string) error {
+	var id int64
+	err := e.withWebStore(ctx, func(s *store.Store) error {
+		u, err := s.GetUserByName(ctx, username)
+		if err != nil {
+			return err
+		}
+		if u.Role != store.RoleAdmin {
+			return fmt.Errorf("%s is not an admin; owners reset their second factor in the panel", username)
+		}
+		id = u.ID
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	var enrolled ops.TOTPEnrollment
+	if err := e.agentCall(ctx, "admin.totp.reset", ops.AdminUserArgs{UserID: id}, &enrolled); err != nil {
+		return err
+	}
+	_, err = fmt.Fprintf(e.out, "Add this TOTP secret to the admin's authenticator app. It is shown only once:\n%s\n", enrolled.TOTPURI)
+	return err
+}
+
+// resetPassword sets a random password for any user and ends all their sessions.
+func (e adminEnv) resetPassword(ctx context.Context, username string) error {
+	return e.withWebStore(ctx, func(s *store.Store) error {
+		u, err := s.GetUserByName(ctx, username)
+		if err != nil {
+			return err
+		}
+		password, err := auth.RandomPassword()
+		if err != nil {
+			return err
+		}
+		hash, err := auth.HashPassword(password)
+		if err != nil {
+			return err
+		}
+		if err := s.SetPasswordHash(ctx, u.ID, hash); err != nil {
+			return err
+		}
+		if err := s.DeleteUserSessions(ctx, u.ID, ""); err != nil {
+			return err
+		}
+		_, err = fmt.Fprintf(e.out, "New password for %s, shown only now: %s\nAll of the user's sessions were ended.\n", username, password)
+		return err
+	})
 }

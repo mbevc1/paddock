@@ -1,0 +1,3 @@
+# path: /etc/paddock/web.env
+PADDOCK_HOSTNAME=panel.example.com
+PADDOCK_ACME_EMAIL=ops@example.com

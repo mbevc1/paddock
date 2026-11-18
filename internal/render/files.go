@@ -125,11 +125,15 @@ func Front(v Vhost, opts FrontOptions) (File, error) {
 	return file("/etc/httpd/conf.d/paddock-"+v.id+".conf", "front.tmpl", data)
 }
 
-// FrontGlobal renders the front Apache settings shared by all vhosts.
+// FrontGlobal renders the front Apache settings shared by all vhosts. An empty contact email
+// leaves MDContactEmail out.
 func FrontGlobal(contactEmail string) (File, error) {
-	email, err := validate.Email(contactEmail)
-	if err != nil {
-		return File{}, err
+	email := ""
+	if contactEmail != "" {
+		var err error
+		if email, err = validate.Email(contactEmail); err != nil {
+			return File{}, err
+		}
 	}
 	return file("/etc/httpd/conf.d/paddock-00-global.conf", "front-global.tmpl", map[string]string{"ContactEmail": email})
 }
@@ -258,4 +262,28 @@ func NFTables() (File, error) {
 // Sysctl renders the kernel settings.
 func Sysctl() (File, error) {
 	return file("/etc/sysctl.d/90-paddock.conf", "sysctl.tmpl", nil)
+}
+
+// Fail2ban renders the jail that bans repeated sshd failures.
+func Fail2ban() (File, error) {
+	return file("/etc/fail2ban/jail.d/paddock.conf", "fail2ban.tmpl", nil)
+}
+
+// MariaDB renders the server settings that keep MariaDB on loopback (§9).
+func MariaDB() (File, error) {
+	return file("/etc/my.cnf.d/paddock.cnf", "mariadb.tmpl", nil)
+}
+
+// WebEnv renders the environment file the paddock-web unit reads.
+func WebEnv(hostname, email string) (File, error) {
+	h, err := validate.Domain(hostname)
+	if err != nil {
+		return File{}, err
+	}
+	if email != "" {
+		if email, err = validate.Email(email); err != nil {
+			return File{}, err
+		}
+	}
+	return file("/etc/paddock/web.env", "web-env.tmpl", map[string]string{"Hostname": h, "Email": email})
 }

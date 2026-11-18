@@ -1,5 +1,5 @@
-MDContactEmail {{.ContactEmail}}
-MDCertificateAgreement accepted
+{{if .ContactEmail}}MDContactEmail {{.ContactEmail}}
+{{end}}MDCertificateAgreement accepted
 MDNotifyCmd /usr/bin/paddock agent-notify md-renewed
 
 <Directory />

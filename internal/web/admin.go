@@ -1,7 +1,6 @@
 package web
 
 import (
-	"crypto/rand"
 	"errors"
 	"net/http"
 	"strconv"
@@ -17,8 +16,6 @@ import (
 
 // Version is the running panel's version, shown on the status page.
 var Version = "dev"
-
-const initialPasswordLength = 20
 
 func (s *Server) adminRoutes(rt *Router) {
 	rt.Handle(Route{Method: "POST", Pattern: "/admin/unlock", Perm: PermServer, Handler: s.adminUnlock})
@@ -103,18 +100,6 @@ func (s *Server) ownersPage(w http.ResponseWriter, r *http.Request) {
 	s.render(w, r, http.StatusOK, "owners.html", Page{Title: "Owners", Data: OwnersData{Owners: owners}})
 }
 
-func randomPassword() (string, error) {
-	const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789"
-	b := make([]byte, initialPasswordLength)
-	if _, err := rand.Read(b); err != nil {
-		return "", err
-	}
-	for i := range b {
-		b[i] = alphabet[int(b[i])%len(alphabet)]
-	}
-	return string(b), nil
-}
-
 // createOwner creates the owner in the agent and the owner's first panel user here, with a
 // random password shown once.
 func (s *Server) createOwner(w http.ResponseWriter, r *http.Request) {
@@ -137,7 +122,7 @@ func (s *Server) createOwner(w http.ResponseWriter, r *http.Request) {
 		s.agentFailed(w, r, "/admin/owners", err)
 		return
 	}
-	password, err := randomPassword()
+	password, err := auth.RandomPassword()
 	if err != nil {
 		s.serverError(w, r, err)
 		return

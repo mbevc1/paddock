@@ -30,13 +30,13 @@ const (
 func runWeb(ctx context.Context, args []string, _, stderr io.Writer) error {
 	fs := flag.NewFlagSet("web", flag.ContinueOnError)
 	fs.SetOutput(stderr)
-	hostname := fs.String("hostname", "", "panel hostname (required)")
+	hostname := fs.String("hostname", os.Getenv("PADDOCK_HOSTNAME"), "panel hostname (default $PADDOCK_HOSTNAME)")
 	dir := fs.String("dir", defaultWebDir, "directory holding web.db, the panel key, and the ACME cache")
 	socket := fs.String("socket", agent.SocketPath, "agent socket path")
 	listen := fs.String("listen", ":8443", "HTTPS listen address")
 	redirect := fs.String("redirect", ":8080", "plain HTTP redirect listen address")
 	acmeSocket := fs.String("acme-socket", defaultACMESck, "socket answering ACME HTTP-01 challenges")
-	acmeEmail := fs.String("acme-email", "", "contact address for Let's Encrypt")
+	acmeEmail := fs.String("acme-email", os.Getenv("PADDOCK_ACME_EMAIL"), "contact address for Let's Encrypt (default $PADDOCK_ACME_EMAIL)")
 	acmeDirectory := fs.String("acme-directory", "", "ACME directory URL (default Let's Encrypt production)")
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -97,10 +97,10 @@ func loadOrCreateSelfSigned(dir, host string, log *slog.Logger) (tls.Certificate
 	if err != nil {
 		return tls.Certificate{}, err
 	}
-	if err := os.WriteFile(keyPath, keyPEM, 0o600); err != nil {
+	if err := os.WriteFile(keyPath, keyPEM, 0o600); err != nil { // #nosec G703 -- the directory is the operator's -dir.
 		return tls.Certificate{}, err
 	}
-	if err := os.WriteFile(certPath, certPEM, 0o644); err != nil { // #nosec G306 -- a public certificate.
+	if err := os.WriteFile(certPath, certPEM, 0o644); err != nil { // #nosec G306 G703 -- a public certificate in the operator's -dir.
 		return tls.Certificate{}, err
 	}
 	log.Info("created a self-signed panel certificate", "sha256", fp)
