@@ -153,14 +153,3 @@ func removePHP(ctx context.Context, store *state.Store, h *Host, p render.PHP) e
 	}
 	return nil
 }
-
-// InstallPHP installs a PHP version as php.version.install does; paddock setup uses it.
-func InstallPHP(ctx context.Context, store *state.Store, h *Host, version string) error {
-	p, err := render.NewPHP(version)
-	if err != nil {
-		return err
-	}
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	return installPHP(ctx, store, h, p)
-}

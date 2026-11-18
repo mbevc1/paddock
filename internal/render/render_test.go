@@ -55,34 +55,25 @@ func goldenFiles(t *testing.T) map[string]File {
 		return f
 	}
 	files := map[string]File{
-		"httpd-unit":            must(BackendUnit()),
-		"fpm-unit-83":           must(FPMUnit(php83)),
-		"sandbox-httpd":         dropIns[0],
-		"sandbox-fpm":           dropIns[1],
-		"owner-slice":           must(OwnerSlice(l)),
-		"user-slice":            must(UserSliceDropIn(v, l)),
-		"backend-httpd":         must(BackendHTTPD(v)),
-		"fpm":                   must(FPM(v)),
-		"front-acme":            must(Front(v, FrontOptions{TLS: TLSACME})),
-		"front-upload":          must(Front(v, FrontOptions{TLS: TLSUpload})),
-		"front-suspended":       must(Front(v, FrontOptions{TLS: TLSACME, Suspended: true})),
-		"front-global":          must(FrontGlobal("ops@example.com")),
-		"panel-http":            must(PanelHTTP("panel.example.com")),
-		"mount-site":            mounts[0],
-		"mount-usr":             mounts[1],
-		"mount-remi":            mounts[2],
-		"mount-proc":            mounts[3],
-		"jail-passwd":           etc[0],
-		"jail-group":            etc[1],
-		"sshd":                  must(SSHDDropIn()),
-		"nftables":              must(NFTables()),
-		"sysctl":                must(Sysctl()),
-		"tmpfiles":              must(Tmpfiles(v)),
-		"fail2ban":              must(Fail2ban()),
-		"mariadb":               must(MariaDB()),
-		"web-env":               must(WebEnv("panel.example.com", "ops@example.com")),
-		"front-global-no-email": must(FrontGlobal("")),
-		"jail-profile":          etc[2],
+		"httpd-unit":      must(BackendUnit()),
+		"fpm-unit-83":     must(FPMUnit(php83)),
+		"sandbox-httpd":   dropIns[0],
+		"sandbox-fpm":     dropIns[1],
+		"owner-slice":     must(OwnerSlice(l)),
+		"user-slice":      must(UserSliceDropIn(v, l)),
+		"backend-httpd":   must(BackendHTTPD(v)),
+		"fpm":             must(FPM(v)),
+		"front-acme":      must(Front(v, FrontOptions{TLS: TLSACME})),
+		"front-upload":    must(Front(v, FrontOptions{TLS: TLSUpload})),
+		"front-suspended": must(Front(v, FrontOptions{TLS: TLSACME, Suspended: true})),
+		"mount-site":      mounts[0],
+		"mount-usr":       mounts[1],
+		"mount-remi":      mounts[2],
+		"mount-proc":      mounts[3],
+		"jail-passwd":     etc[0],
+		"jail-group":      etc[1],
+		"tmpfiles":        must(Tmpfiles(v)),
+		"jail-profile":    etc[2],
 	}
 	return files
 }
@@ -113,8 +104,8 @@ func TestGolden(t *testing.T) {
 
 var fence = regexp.MustCompile("(?s)```[a-z]*\n(.*?)```")
 
-// TestMatchesSpecification compares the reference renders with the code blocks in
-// docs/plan.md §7, so the specification and the templates cannot drift apart.
+// TestMatchesSpecification compares the reference renders and the host configs in deploy/ with
+// the code blocks in docs/plan.md §7, so the specification and the files cannot drift apart.
 func TestMatchesSpecification(t *testing.T) {
 	plan, err := os.ReadFile(filepath.Join("..", "..", "docs", "plan.md"))
 	if err != nil {
@@ -136,7 +127,7 @@ func TestMatchesSpecification(t *testing.T) {
 	backend = regexp.MustCompile(`(?m)^LoadModule .*\n`).ReplaceAllString(backend, "")
 	backend = strings.TrimPrefix(backend, "\n")
 
-	for name, got := range map[string]string{
+	specs := map[string]string{
 		"httpd-unit":    string(files["httpd-unit"].Data),
 		"fpm-unit-83":   string(files["fpm-unit-83"].Data),
 		"sandbox":       string(files["sandbox-fpm"].Data),
@@ -144,12 +135,21 @@ func TestMatchesSpecification(t *testing.T) {
 		"backend-httpd": backend,
 		"fpm":           string(files["fpm"].Data),
 		"front-acme":    string(files["front-acme"].Data),
-		"panel-http":    string(files["panel-http"].Data),
 		"mount-site":    string(files["mount-site"].Data),
-		"sshd":          string(files["sshd"].Data),
-		"nftables":      string(files["nftables"].Data),
-		"sysctl":        string(files["sysctl"].Data),
+	}
+	for name, path := range map[string]string{
+		"panel-http": "etc/httpd/conf.d/paddock-01-panel.conf",
+		"sshd":       "etc/ssh/sshd_config.d/50-paddock.conf",
+		"nftables":   "etc/paddock/nftables.conf",
+		"sysctl":     "etc/sysctl.d/90-paddock.conf",
 	} {
+		b, err := os.ReadFile(filepath.Join("..", "..", "deploy", path))
+		if err != nil {
+			t.Fatal(err)
+		}
+		specs[name] = strings.ReplaceAll(string(b), "@HOSTNAME@", "panel.example.com")
+	}
+	for name, got := range specs {
 		found := false
 		for _, b := range blocks {
 			if b == got {
@@ -215,12 +215,6 @@ func TestRejectsUnvalidatedInput(t *testing.T) {
 		if _, err := NewVhost(tc.n, tc.owner, tc.php, tc.primary, tc.aliases, tc.max); !errors.Is(err, validate.ErrInvalid) {
 			t.Errorf("%s: err = %v, want ErrInvalid", tc.name, err)
 		}
-	}
-	if _, err := FrontGlobal("ops@example.com\nMDCAChallenges x"); !errors.Is(err, validate.ErrInvalid) {
-		t.Errorf("FrontGlobal with newline = %v", err)
-	}
-	if _, err := WebEnv("panel.example.com\nPADDOCK_X=1", ""); !errors.Is(err, validate.ErrInvalid) {
-		t.Errorf("WebEnv with newline = %v", err)
 	}
 	if _, err := NewLimits(3, 0, 200, 512); !errors.Is(err, validate.ErrInvalid) {
 		t.Errorf("NewLimits(0 MB) = %v", err)

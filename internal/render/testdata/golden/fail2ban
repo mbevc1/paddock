@@ -1,4 +1,0 @@
-# path: /etc/fail2ban/jail.d/paddock.conf
-[sshd]
-enabled = true
-backend = systemd

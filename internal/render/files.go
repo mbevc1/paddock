@@ -125,28 +125,6 @@ func Front(v Vhost, opts FrontOptions) (File, error) {
 	return file("/etc/httpd/conf.d/paddock-"+v.id+".conf", "front.tmpl", data)
 }
 
-// FrontGlobal renders the front Apache settings shared by all vhosts. An empty contact email
-// leaves MDContactEmail out.
-func FrontGlobal(contactEmail string) (File, error) {
-	email := ""
-	if contactEmail != "" {
-		var err error
-		if email, err = validate.Email(contactEmail); err != nil {
-			return File{}, err
-		}
-	}
-	return file("/etc/httpd/conf.d/paddock-00-global.conf", "front-global.tmpl", map[string]string{"ContactEmail": email})
-}
-
-// PanelHTTP renders the port 80 vhost that serves ACME challenges for the panel hostname.
-func PanelHTTP(hostname string) (File, error) {
-	h, err := validate.Domain(hostname)
-	if err != nil {
-		return File{}, err
-	}
-	return file("/etc/httpd/conf.d/paddock-01-panel.conf", "panel-http.tmpl", map[string]string{"Hostname": h})
-}
-
 // MountUnitName returns the systemd mount unit name for an absolute path, as
 // systemd-escape --path --suffix=mount does.
 func MountUnitName(path string) string {
@@ -247,43 +225,4 @@ func Tmpfiles(v Vhost) (File, error) {
 		return File{}, err
 	}
 	return file("/etc/tmpfiles.d/paddock-"+v.id+".conf", "tmpfiles.tmpl", v.data())
-}
-
-// SSHDDropIn renders the sshd settings for jailed accounts.
-func SSHDDropIn() (File, error) {
-	return file("/etc/ssh/sshd_config.d/50-paddock.conf", "sshd.tmpl", nil)
-}
-
-// NFTables renders the loopback rule that reserves backends for the apache user.
-func NFTables() (File, error) {
-	return file("/etc/paddock/nftables.conf", "nftables.tmpl", nil)
-}
-
-// Sysctl renders the kernel settings.
-func Sysctl() (File, error) {
-	return file("/etc/sysctl.d/90-paddock.conf", "sysctl.tmpl", nil)
-}
-
-// Fail2ban renders the jail that bans repeated sshd failures.
-func Fail2ban() (File, error) {
-	return file("/etc/fail2ban/jail.d/paddock.conf", "fail2ban.tmpl", nil)
-}
-
-// MariaDB renders the server settings that keep MariaDB on loopback (§9).
-func MariaDB() (File, error) {
-	return file("/etc/my.cnf.d/paddock.cnf", "mariadb.tmpl", nil)
-}
-
-// WebEnv renders the environment file the paddock-web unit reads.
-func WebEnv(hostname, email string) (File, error) {
-	h, err := validate.Domain(hostname)
-	if err != nil {
-		return File{}, err
-	}
-	if email != "" {
-		if email, err = validate.Email(email); err != nil {
-			return File{}, err
-		}
-	}
-	return file("/etc/paddock/web.env", "web-env.tmpl", map[string]string{"Hostname": h, "Email": email})
 }

@@ -483,7 +483,7 @@ Both use numbered SQL migrations embedded in the binary and applied at start.
 
 ## 14. Packaging and installation
 
-Paddock ships as an RPM from a dnf repository hosted on the project's GitHub Pages. Packages are unsigned for now; signing is task T2.9 and must be done before production use. A short bootstrap script prepares repositories and installs the RPM; `paddock setup`, compiled into the binary, configures the host. Upgrades are `dnf upgrade paddock`.
+Paddock ships as an RPM from a dnf repository hosted on the project's GitHub Pages. Packages are unsigned for now; signing is task T2.9 and must be done before production use. A short bootstrap script prepares repositories, installs the RPM, and configures the host; `paddock setup`, compiled into the binary, creates Paddock's databases and first admin. Upgrades are `dnf upgrade paddock`.
 
 ### 14.1 Build and publish (GitHub only)
 
@@ -508,12 +508,12 @@ Everything is hosted in the GitHub repository `github.com/<owner>/paddock`: sour
 | `/usr/lib/systemd/system/paddock-httpd@.service` | backend Apache template |
 | `/usr/lib/sysusers.d/paddock.conf` | user `paddock`, groups `paddock-sftp`, `paddock-shell` |
 | `/usr/lib/tmpfiles.d/paddock.conf` | `/run/paddock` and `/run/paddock/fpm` |
-| `/usr/share/paddock/` | default configs that `paddock setup` installs: sshd drop-in, sysctl, nftables, fail2ban jail, front Apache global config |
+| `/usr/share/paddock/etc/` | default configs that `bootstrap.sh` installs into `/etc` at the same relative paths: sshd drop-in, sysctl, nftables, fail2ban jail, MariaDB, front Apache global config, panel port 80 vhost |
 | `/var/lib/paddock/`, `agent/`, `web/` | state directories with the owners and modes from §6 (`%dir`) |
 
 Per-version FPM unit templates (`paddock-phpNN-fpm@.service`) are written by the agent when a PHP version is installed, since the set of versions differs per server.
 
-RPM dependencies: `httpd mod_ssl mod_md mariadb-server fail2ban nftables xfsprogs policycoreutils-python-utils openssh-server`. Scriptlets use `%sysusers_create_compat`, `%systemd_post`, `%systemd_preun`, and `%systemd_postun_with_restart` for `paddock-agent` and `paddock-web`. The RPM never changes sshd, sysctl, firewall, or Apache settings itself; `paddock setup` does that explicitly.
+RPM dependencies: `httpd mod_ssl mod_md mariadb-server fail2ban nftables xfsprogs policycoreutils-python-utils openssh-server`. Scriptlets use `%sysusers_create_compat`, `%systemd_post`, `%systemd_preun`, and `%systemd_postun_with_restart` for `paddock-agent` and `paddock-web`. The RPM never changes sshd, sysctl, firewall, or Apache settings itself; `bootstrap.sh` does that explicitly.
 
 ### 14.3 Bootstrap script
 
@@ -525,28 +525,27 @@ BASE=https://github.com/<owner>/paddock/releases/download/$VER
 curl -fsSLO $BASE/bootstrap.sh
 curl -fsSLO $BASE/SHA256SUMS
 sha256sum -c --ignore-missing SHA256SUMS
-sudo bash bootstrap.sh --hostname panel.example.com --www-device /dev/vdb --php 8.3,8.4
+sudo bash bootstrap.sh --hostname panel.example.com --www-device /dev/vdb --format
 ```
+
+Options: `--hostname` (required), `--www-device` (needed until `/srv/www` is mounted), `--format` (create XFS on an empty device), `--email` (ACME contact, optional), `--admin` (first admin's username, default `admin`). Rerunning the script is safe; it changes nothing that is already in place.
 
 1. Check OS (EL 9.4+), SELinux enforcing, root.
 2. `dnf install epel-release`; install `remi-release-9` after checking its GPG key fingerprint against the value pinned in the script (EPEL and Remi packages stay signature-checked).
 3. On EL 9 only: `dnf module enable mariadb:10.11` (EL 10 ships MariaDB 10.11 as a plain package).
 4. Write `/etc/yum.repos.d/paddock.repo` with `baseurl=https://<owner>.github.io/paddock/el$releasever/$basearch/`, `gpgcheck=0`, `repo_gpgcheck=0`, and a comment pointing to T2.9.
 5. `dnf install paddock`.
-6. `paddock setup` with the given arguments.
+6. Check free ports 80, 443, 8080, 8443; only `httpd` and `paddock` may hold them.
+7. Prepare `/srv/www` on the given XFS device with `prjquota` (format only if empty and confirmed with `--format`; never one holding a filesystem); create `/srv/www` (`0711`) and `/srv/jail` (`0755`); add the `semanage fcontext` rule and `restorecon`. Refuse a `/srv/www` holding anything but the `.paddock` marker and vhost directories.
+8. Install `/usr/share/paddock/etc/` into `/etc`, keeping files that contain `# paddock: keep`; fill the panel hostname into `paddock-01-panel.conf`; write `MDContactEmail` to `/etc/httpd/conf.d/paddock-00-contact.conf` when `--email` is given; write `/etc/paddock/web.env` (`PADDOCK_HOSTNAME`, `PADDOCK_ACME_EMAIL`); comment out `mod_status` in `00-base.conf`; load the sysctl settings.
+9. Start MariaDB and verify `unix_socket` for root in `mysql.global_priv`.
+10. Open firewalld ports 80, 443, 8080, 8443; enable `paddock-nft`, `fail2ban`, `httpd`, `mariadb`; reload Apache after `apachectl configtest` and sshd after `sshd -t`.
+11. `paddock setup --admin NAME`.
+12. Enable and start `paddock-agent` and `paddock-web`; print the panel URL and the panel certificate fingerprint that `paddock-web` logs at first start.
 
 ### 14.4 `paddock setup`
 
-Runs as root, idempotent, safe to rerun after upgrades. It refuses to run on a host where `/srv/www` holds data it did not create.
-
-1. Check free ports 80, 443, 8080, 8443.
-2. Prepare `/srv/www` on the given XFS device with `prjquota` (format only if empty and confirmed with `--format`); create `/srv/www` (`0711`) and `/srv/jail` (`0755`); add the `semanage fcontext` rule and `restorecon`.
-3. Install the files from `/usr/share/paddock/` into `/etc` (sysctl, nftables, sshd drop-in, fail2ban jail, front Apache global config), keeping local edits marked with `# paddock: keep`.
-4. Configure MariaDB (`bind-address=127.0.0.1`), start it, verify `unix_socket` for root in `mysql.global_priv`.
-5. Install the requested PHP versions through the same code path as `php.version.install`.
-6. Open firewalld ports 80, 443, 8080, 8443; enable `paddock-nft`, `fail2ban`, `httpd`, `mariadb`; reload sshd after `sshd -t`.
-7. On first run only: create `state.db` and `web.db`, the first admin (random password in `web.db`, TOTP secret in `state.db`), and the self-signed panel certificate; print password, TOTP URI, and certificate fingerprint once.
-8. Enable and start `paddock-agent` and `paddock-web`; print the panel URL.
+Runs as root, idempotent. It creates `state.db` and `web.db` (migrations included, `web.db` owned by `paddock`) and, on the first run only, the first admin: a random password in `web.db` and a TOTP secret in `state.db`. It prints the username, password, and TOTP URI once; later runs find an admin and print nothing secret. It changes nothing else: `bootstrap.sh` prepares the host, `paddock web` creates its self-signed certificate at first start, and the admin installs PHP versions from the panel.
 
 ### 14.5 Upgrade and removal
 
@@ -562,10 +561,10 @@ Use a disposable AlmaLinux 9.4+ VM with a second disk for `/srv/www`, for exampl
 Use these until told otherwise; each is a setting, not a code path.
 
 - **New owners:** SFTP only; shell accounts need `shell_allowed` set by an admin.
-- **PHP:** `paddock setup` installs 8.3 and 8.4 unless `--php` says otherwise; new vhosts default to 8.3.
+- **PHP:** the admin installs versions from the panel after the first login (8.3 and 8.4 suggested); new vhosts default to 8.3.
 - **Admin IP allowlist:** off by default, configurable in server settings; when set, admin logins from other addresses are refused by the web process.
 - **Backups (phase 2):** local, under `/var/backups/paddock/`, 7 daily copies per vhost; off-host targets come later.
-- **Panel hostname:** given to `paddock setup --hostname`; for the test VM use any name that resolves to it.
+- **Panel hostname:** given to `bootstrap.sh --hostname`; for the test VM use any name that resolves to it.
 - **Repository owner:** `<owner>` stays a placeholder until set.
 
 ## 16. AlmaLinux 10 readiness (not in scope before phase 3)
@@ -575,7 +574,7 @@ Paddock targets EL 9 first but must not block a later move to EL 10. Rules that 
 - **Platform layer:** all OS-specific choices (package names, module commands, repository URLs, Remi release package) live in `internal/platform`, keyed on the major version from `/etc/os-release`. No other package hard-codes `el9`.
 - **MariaDB:** EL 10 drops dnf modules and ships MariaDB 10.11 as the default `mariadb-server` package, the same version Paddock uses on EL 9, so database files carry over unchanged.
 - **PHP:** Remi publishes the same `phpNN` collections for EL 10 under the same `/opt/remi/phpNN` paths, so units and configs stay identical.
-- **CPU:** AlmaLinux 10 defaults to x86-64-v3 and offers an x86_64_v2 variant for older CPUs; `paddock setup` and the upgrade check report which one applies.
+- **CPU:** AlmaLinux 10 defaults to x86-64-v3 and offers an x86_64_v2 variant for older CPUs; `bootstrap.sh` and the upgrade check report which one applies.
 - **Packages:** the same static binary goes into an el9 and an el10 RPM; the repository path uses `$releasever`.
 
 ### 16.1 Upgrade paths
@@ -586,7 +585,7 @@ Paddock targets EL 9 first but must not block a later move to EL 10. Rules that 
 
 1. `paddock os-upgrade prepare`: check CPU level and free space, back up `/var/lib/paddock`, and all databases, record each vhost's PHP version, stop all vhost units, remove Remi packages and `remi-release-9`, disable the Paddock repository.
 2. `leapp preupgrade`, resolve inhibitors, `leapp upgrade`, reboot (all sites down for the duration).
-3. `paddock os-upgrade finish`: install `remi-release-10` and the recorded PHP versions, re-enable the Paddock repository (now `el10`), `dnf upgrade paddock`, run `paddock setup`, `paddock reconcile --all`, start vhosts, run the red-team checks.
+3. `paddock os-upgrade finish`: install `remi-release-10` and the recorded PHP versions, re-enable the Paddock repository (now `el10`), `dnf upgrade paddock`, rerun `bootstrap.sh`, `paddock reconcile --all`, start vhosts, run the red-team checks.
 
 The in-place path is only offered once phase 0 checks pass on EL 10 and the procedure has been rehearsed on a snapshot of a real server.
 
@@ -641,7 +640,7 @@ Throwaway shell scripts in `poc/`, run as root on a disposable AlmaLinux 9.4+ VM
 - [x] **T1.5 Renderer.** `internal/render` with templates for every file in §7; a `Root` field prefixes all output paths; atomic write helper (temp file, fsync, rename) and restore of the previous version.
     - Acceptance: golden-file tests match the reference outputs in §7 for vhost `v00012`; rendering rejects unvalidated input types.
     - Done: a test also compares the reference renders with the §7 code blocks in this file, so a spec change fails the build until templates follow. Choices the spec leaves open, to confirm: uploaded certificates live at `/etc/pki/paddock/<vhost id>.crt` and `.key`, and their port 80 vhost redirects to HTTPS because `MDRequireHttps` applies only to managed domains; a suspended vhost answers `Redirect 503 /` on port 443; the global front config adds `MDCertificateAgreement accepted` (mod_md needs it for Let's Encrypt) and a `Require local` `md-status` location for §10.
-    - Deferred: disabling `mod_status` needs a change in `conf.modules.d`, so it belongs to `paddock setup` (T1.24). The PoC corrections to §7.2 (`DefaultRuntimeDir`, `combined` log format) wait for phase 0 results.
+    - Deferred: disabling `mod_status` needs a change in `conf.modules.d`, so it belongs to `bootstrap.sh` (T1.26). The PoC corrections to §7.2 (`DefaultRuntimeDir`, `combined` log format) wait for phase 0 results.
 - [x] **T1.6 Agent server.** Socket at `/run/paddock/agent.sock`, `SO_PEERCRED` check (UID 0 or `paddock`), newline JSON protocol from §4, op registry with class (owner, admin, system), audit log entries without secrets, job runner for long operations.
     - Acceptance: tests over a socketpair cover unknown op, malformed JSON, oversized request (limit 1 MiB), forbidden caller UID, audit content.
     - Done: besides the four classes of §4, a `root` class serves root CLI commands such as `paddock admin add` (T1.7). Audit arguments are redacted by name (`password`, `secret`, `token`, `totp`, `code`, `pem`, and per-operation extras); errors that are not protocol errors reach the caller as `internal` without detail. Admin operations are denied until T1.7 supplies the gate.
@@ -714,9 +713,8 @@ Throwaway shell scripts in `poc/`, run as root on a disposable AlmaLinux 9.4+ VM
     - Status: `PollEvents` turns agent events into notifications (owner's users, plus admins for apply failures and owner-less events), stores the cursor in `web.db`, and pushes them over Server-Sent Events; a test sees an apply failure arrive on an open stream. `static/app.js` updates the page from the stream; checking that in a real browser is still open.
 - [x] **T1.24 CLI.** `paddock setup` per §14.4; `paddock admin reset-password <user>`; `paddock reconcile --all`.
     - Acceptance: `setup` is idempotent and prints secrets only on first run; reset ends the user's sessions.
-    - Done: `internal/setup` runs the §14.4 steps through the system runner and render writer, so tests drive it with a fake host: a rerun prints no secrets and changes no file, and setup refuses foreign data in `/srv/www` (anything but `.paddock` and vhost directories), ports held by programs other than httpd or Paddock, and devices holding another filesystem. `paddock admin add NAME` now creates the `web.db` user too (removing it if the agent refuses), `paddock admin totp-reset NAME` looks the admin up by name, and `paddock admin reset-password NAME` ends the user's sessions; each hands `web.db` back to user `paddock`. A real run comes with T1.26 on the VM.
-    - Choices to confirm: setup writes `/etc/paddock/web.env` (`PADDOCK_HOSTNAME`, `PADDOCK_ACME_EMAIL`), which `paddock web` reads when no flags are given, so the RPM unit needs no arguments; `--email` is optional and leaves `MDContactEmail` out when empty; `mod_status` is disabled by commenting out its `LoadModule` line in `00-base.conf`; a fail2ban jail enables `sshd` with the systemd backend; setup asks `--format` before formatting an empty device and never formats one holding a filesystem.
-    - Deferred: on a rerun the running agent and setup both change the host without sharing a lock; stop `paddock-agent` first, or let setup call the agent, once the RPM exists.
+    - Done: `paddock setup [--admin NAME]` creates `state.db` and `web.db` and the first admin, and hands `web.db` to user `paddock`; a rerun prints no secrets. `paddock admin add NAME` creates the `web.db` user too (removing it if the agent refuses), `paddock admin totp-reset NAME` looks the admin up by name, and `paddock admin reset-password NAME` ends the user's sessions; each hands `web.db` back to user `paddock`.
+    - Changed: host preparation (ports, `/srv/www`, host configs, MariaDB, firewall, services) moved from `paddock setup` to `bootstrap.sh` (T1.26), the panel certificate to `paddock web`, and PHP installation to the admin panel. The host configs live in `deploy/etc/` and ship under `/usr/share/paddock/etc/`.
 - [ ] **T1.25 RPM and GitHub release pipeline.** `packaging/paddock.spec` per §14.2, sysusers and tmpfiles files, systemd units in `deploy/`, `.github/workflows/release.yml` per §14.1 (build in `almalinux:9`, publish the Release with `SHA256SUMS`, deploy the dnf repository to Pages), `scripts/build-rpm.sh` for local builds on the build VM.
     - Acceptance: `rpmlint` reports no errors; pushing a test tag produces a Release and an updated Pages repository; on a fresh VM, `dnf install paddock` from the Pages URL succeeds; `dnf remove` leaves vhosts and data intact.
 - [ ] **T1.26 Bootstrap.** `packaging/bootstrap.sh` per §14.3 with the pinned Remi key fingerprint.
@@ -735,7 +733,7 @@ Throwaway shell scripts in `poc/`, run as root on a disposable AlmaLinux 9.4+ VM
 - [ ] **T2.8 Outbound notifications.** SMTP relay and webhook forwarding, password reset by email.
 - [ ] **T2.8a Export and import.** `paddock export <vhost>` and `paddock import` with a final delta sync, per §16.1; also the basis for moving vhosts between servers.
     - Acceptance: a vhost with a database moves between two VMs with no data loss and under one minute of read-only time.
-- [ ] **T2.9 Package signing.** Signing key held outside GitHub or in a protected `release` environment with required reviewers; `rpmsign --addsign` for RPMs, detached signature for `repodata/repomd.xml` and `SHA256SUMS`; public key `RPM-GPG-KEY-paddock` on Pages with its fingerprint in `README.md` and pinned in `bootstrap.sh`; repo file switched to `gpgcheck=1`, `repo_gpgcheck=1`. Existing servers switch on their next `paddock setup`.
+- [ ] **T2.9 Package signing.** Signing key held outside GitHub or in a protected `release` environment with required reviewers; `rpmsign --addsign` for RPMs, detached signature for `repodata/repomd.xml` and `SHA256SUMS`; public key `RPM-GPG-KEY-paddock` on Pages with its fingerprint in `README.md` and pinned in `bootstrap.sh`; repo file switched to `gpgcheck=1`, `repo_gpgcheck=1`. Existing servers switch when `bootstrap.sh` is rerun.
     - Acceptance: a tampered RPM or repository metadata fails `dnf install` on a test VM.
 - [ ] **T2.10 Security review.** External review of agent and panel; fix findings before phase 3.
 

@@ -1,6 +1,0 @@
-# path: /etc/httpd/conf.d/paddock-01-panel.conf
-<VirtualHost *:80>
-    ServerName panel.example.com
-    ProxyPass /.well-known/acme-challenge/ "unix:/run/paddock/acme.sock|http://panel/.well-known/acme-challenge/"
-    RedirectMatch 301 ^/(?!\.well-known/acme-challenge/)(.*)$ https://panel.example.com:8443/$1
-</VirtualHost>

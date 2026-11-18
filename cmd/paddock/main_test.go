@@ -20,7 +20,7 @@ func TestRun(t *testing.T) {
 		{name: "version", args: []string{"version"}, wantCode: 0, wantStdout: "paddock dev\n"},
 		{name: "unknown command", args: []string{"bogus"}, wantCode: 2, wantStderr: `unknown command "bogus"`},
 		{name: "stub", args: []string{"teardown"}, wantCode: 1, wantStderr: "paddock teardown: not implemented yet"},
-		{name: "setup without hostname", args: []string{"setup"}, wantCode: 1, wantStderr: "--hostname is required"},
+		{name: "setup with arguments", args: []string{"setup", "extra"}, wantCode: 1, wantStderr: "unexpected arguments"},
 		{name: "web without hostname", args: []string{"web"}, wantCode: 1, wantStderr: "-hostname"},
 		{name: "admin without subcommand", args: []string{"admin"}, wantCode: 1, wantStderr: "usage: paddock admin"},
 		{name: "admin add without username", args: []string{"admin", "add"}, wantCode: 1, wantStderr: "usage: paddock admin"},

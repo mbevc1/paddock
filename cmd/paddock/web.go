@@ -82,8 +82,7 @@ func runWeb(ctx context.Context, args []string, _, stderr io.Writer) error {
 	return srv.Run(ctx)
 }
 
-// loadOrCreateSelfSigned reads the panel's self-signed certificate, making one if paddock
-// setup has not.
+// loadOrCreateSelfSigned reads the panel's self-signed certificate, making one on first start.
 func loadOrCreateSelfSigned(dir, host string, log *slog.Logger) (tls.Certificate, error) {
 	certPath, keyPath := filepath.Join(dir, "panel.crt"), filepath.Join(dir, "panel.key")
 	pair, err := tls.LoadX509KeyPair(certPath, keyPath)
