@@ -9,3 +9,9 @@
 - name: github_actions
   color: "000000"
   description: GitHub Actions updates
+- name: documentation
+  color: "0075ca"
+  description: Documentation changes
+- name: pipelines
+  color: "5319e7"
+  description: CI, release and repository automation changes

@@ -1,0 +1,21 @@
+# Labels for pull requests by changed files, applied by .github/workflows/labeler.yml. With
+# sync-labels, a label below is also removed once its rule stops matching.
+documentation:
+  - changed-files:
+      - any-glob-to-any-file:
+          - '**/*.md'
+          - 'docs/**'
+
+# Dependabot's branches match too, so its GitHub Actions updates, which change only .github/,
+# keep the label it set.
+dependencies:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'go.mod'
+          - 'go.sum'
+  - head-branch:
+      - '^dependabot/'
+
+pipelines:
+  - changed-files:
+      - any-glob-to-any-file: '.github/**'
