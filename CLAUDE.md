@@ -76,7 +76,9 @@ Never break these. If a task seems to require breaking one, stop and ask.
 
 - Commit as the git user configured in the repository. Never set or change the author.
 - Never add `Co-Authored-By` lines, "Generated with" footers, session links, or any other attribution.
-- One task per commit where practical; subject line in the imperative, under 72 characters, prefixed with the task ID (`T1.4 Add vhost directory creation`).
+- Follow [Conventional Commits](https://www.conventionalcommits.org/): `type(scope): summary`, for example `feat(agent): add vhost directory creation`. Types: `feat`, `fix`, `docs`, `test`, `refactor`, `perf`, `build`, `ci`, `chore`, `revert`; the scope names the area changed (`agent`, `web`, `render`, `bootstrap`, `deps`, ...). Mark a breaking change with `!` after the scope and a `BREAKING CHANGE:` footer.
+- Summary in the imperative and lowercase, with the whole subject under 72 characters. The body explains why and names the plan task it advances (`Task: T1.4`).
+- One task per commit where practical.
 
 ## Commands
 
