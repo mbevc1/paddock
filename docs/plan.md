@@ -310,7 +310,7 @@ MDRequireHttps permanent
 
 Request timeouts nest so the innermost layer ends a slow request first: PHP-FPM stops a script after 300 s of wall-clock time (`request_terminate_timeout`; PHP's own `max_execution_time` counts only CPU time), the backend waits 305 s for FPM (`ProxyTimeout`), and the front waits 310 s for the backend (`timeout=` on `ProxyPass`). A visitor whose request runs out of time gets a 504 only once PHP has already stopped, never while it keeps running.
 
-Global front settings in `/etc/httpd/conf.d/paddock-00-global.conf`: `MDContactEmail`, `MDNotifyCmd /usr/bin/paddock agent-notify md-renewed`, `AllowOverride None` everywhere, no `DocumentRoot` under `/srv/www`, `mod_status` disabled. Uploaded custom certificates replace `MDomain` with `SSLCertificateFile` and `SSLCertificateKeyFile` stored under `/etc/pki/paddock/`.
+Global front settings in `/etc/httpd/conf.d/paddock-00-global.conf`: `MDContactEmail`, `AllowOverride None` everywhere, no `DocumentRoot` under `/srv/www`, `mod_status` disabled. Uploaded custom certificates replace `MDomain` with `SSLCertificateFile` and `SSLCertificateKeyFile` stored under `/etc/pki/paddock/`.
 
 Panel hostname on port 80:
 
@@ -428,7 +428,7 @@ Known limits: a kernel exploit crosses every boundary; SELinux confines Apache a
 
 ## 10. TLS
 
-- **Vhosts:** `mod_md` in the front Apache. `MDNotifyCmd` calls the agent, which runs `apachectl configtest` and a graceful reload. The agent reads `md-status` for expiry notifications from a front listener on `127.0.0.1:81`, which the §7.6 rule keeps to root: the page lists every managed domain, so tenants must not read it.
+- **Vhosts:** `mod_md` in the front Apache. It stages a new or renewed certificate until the front reloads; the agent's 10-minute usage scan reads `md-status`, and for each finished renewal runs `apachectl configtest` and a graceful reload once and tells the owner. (`MDNotifyCmd` cannot do this: mod_md runs it as `apache`, whom the agent does not accept.) The agent reads `md-status` for expiry notifications from a front listener on `127.0.0.1:81`, which the §7.6 rule keeps to root: the page lists every managed domain, so tenants must not read it.
 - **Panel:** at install, a self-signed ECDSA P-256 certificate for the hostname and server IP; the SHA-256 fingerprint is printed. The web process then obtains a Let's Encrypt certificate with `golang.org/x/crypto/acme` using HTTP-01 only, served through `/run/paddock/acme/acme.sock`, which the front Apache reaches through the `paddock` SELinux module (`deploy/selinux/paddock.cil`). `GetCertificate` returns the Let's Encrypt certificate for SNI matches and the self-signed one otherwise. HSTS once a trusted certificate is active.
 
 ## 11. Panel
@@ -679,7 +679,8 @@ Throwaway shell scripts in `poc/`, run as root on a disposable AlmaLinux 9.4+ VM
 - [x] **T1.12 Front Apache and certificates.** Front vhost rendering, `MDNotifyCmd` handler (`paddock agent-notify md-renewed` asks the agent to validate and reload), `md-status` reader, custom certificate upload with key and chain validation.
     - Acceptance: `apachectl configtest` failure restores the previous file and reports `apply_failed`; uploaded certificate whose key does not match is rejected.
     - Done: `cert.upload` validates the chain and key (key matches the leaf, valid now, covers every domain, RSA of 2048 bits or more or ECDSA P-256/P-384), stores them re-encoded under `/etc/pki/paddock/` (key `0600`), and switches the front to them; `cert.status` merges the stored record with `md-status`; `paddock agent-notify md-renewed` calls the root-only `front.md-renewed`, which runs `configtest` and a graceful reload. Uploaded certificates survive suspend and resume.
-    - To verify on the VM (added to `docs/poc-results.md`): the user `MDNotifyCmd` runs as, the `md-status` JSON layout, and whether tenant PHP can read `md-status` on loopback.
+    - To verify on the VM (added to `docs/poc-results.md`): the `md-status` JSON layout, and whether tenant PHP can read `md-status` on loopback.
+    - Changed after a real host: mod_md runs `MDNotifyCmd` as `apache`, so `front.md-renewed` refused it and renewed certificates stayed staged until a reload. `MDNotifyCmd` is gone; the usage scan activates finished renewals (`renewal.finished` in `md-status`) once each. `paddock agent-notify md-renewed` remains for root.
     - Deferred: returning from an uploaded certificate to ACME has no operation yet.
 - [ ] **T1.13 MariaDB.** `internal/mariadb`: identifier quoting, grant escaping with the 64-character check, `db.*` and `dbuser.*` ops, usage query, quota enforcement per §9.
     - Acceptance: unit tests for escaping; integration test proves cross-vhost access is denied and quota revocation works.

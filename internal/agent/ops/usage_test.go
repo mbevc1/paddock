@@ -177,6 +177,48 @@ func TestCertExpiryEvents(t *testing.T) {
 	}
 }
 
+// mod_md stages a renewed certificate until the front Apache reloads, and its notify command
+// cannot reach the agent, so the scan reloads once per finished renewal.
+func TestScanActivatesStagedCertificates(t *testing.T) {
+	ctx := context.Background()
+	e, _, _, _ := activeVhost(t)
+	run := "Thu, 19 Nov 2026 19:34:36 GMT"
+	e.host.MDStatus = func(context.Context) ([]MDDomain, error) {
+		return []MDDomain{{Name: "shop.example.com", Staged: true, RenewalRun: run}, {Name: "other.example.com"}}, nil
+	}
+	reloads := func() int {
+		n := 0
+		for _, c := range e.run.Commands() {
+			if c == "/usr/bin/systemctl reload httpd.service" {
+				n++
+			}
+		}
+		return n
+	}
+	before := reloads()
+	for range 2 {
+		scriptUsage(e, 1, 0)
+		if err := ScanUsage(ctx, e.store, e.host); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if reloads() != before+1 {
+		t.Errorf("one finished renewal reloaded the front %d times", reloads()-before)
+	}
+	if kinds := eventKinds(t, e); !slices.Equal(kinds, []state.EventKind{state.EventCertRenewed}) {
+		t.Errorf("events = %v, want one renewal", kinds)
+	}
+
+	run = "Mon, 18 Jan 2027 19:34:36 GMT"
+	scriptUsage(e, 1, 0)
+	if err := ScanUsage(ctx, e.store, e.host); err != nil {
+		t.Fatal(err)
+	}
+	if reloads() != before+2 {
+		t.Errorf("a later renewal did not reload the front: %d reloads", reloads()-before)
+	}
+}
+
 func TestEventsListAndSources(t *testing.T) {
 	ctx := context.Background()
 	e, web, owner, _ := activeVhost(t)

@@ -172,7 +172,9 @@ func TestParseMDStatus(t *testing.T) {
 	   "cert":{"rsa":{"valid":{"from":"Tue, 17 Nov 2026 10:00:00 GMT","until":"Mon, 15 Feb 2027 10:00:00 GMT"}},
 	           "secp256r1":{"valid":{"until":"Sun, 14 Feb 2027 10:00:00 GMT"}}}},
 	  {"name":"new.example.com","state":1,
-	   "renewal":{"last":{"status":"error","problem":"urn:ietf:params:acme:error:dns"}}}]}`
+	   "renewal":{"last":{"status":"error","problem":"urn:ietf:params:acme:error:dns"}}},
+	  {"name":"staged.example.com","state":1,
+	   "renewal":{"finished":true,"last-run":"Thu, 19 Nov 2026 19:34:36 GMT","last":{"status":0}}}]}`
 	got, err := parseMDStatus([]byte(body))
 	if err != nil {
 		t.Fatal(err)
@@ -180,6 +182,7 @@ func TestParseMDStatus(t *testing.T) {
 	want := []MDDomain{
 		{Name: "shop.example.com", State: "certificate(rsa) is valid", NotAfter: time.Date(2027, 2, 14, 10, 0, 0, 0, time.UTC)},
 		{Name: "new.example.com", State: "1", Error: "urn:ietf:params:acme:error:dns"},
+		{Name: "staged.example.com", State: "1", Staged: true, RenewalRun: "Thu, 19 Nov 2026 19:34:36 GMT"},
 	}
 	if !slices.Equal(got, want) {
 		t.Errorf("parseMDStatus:\n got %+v\nwant %+v", got, want)
@@ -192,7 +195,7 @@ func TestParseMDStatus(t *testing.T) {
 		_, _ = w.Write([]byte(body))
 	}))
 	defer srv.Close()
-	if domains, err := fetchMDStatus(context.Background(), srv.Client(), srv.URL); err != nil || len(domains) != 2 {
+	if domains, err := fetchMDStatus(context.Background(), srv.Client(), srv.URL); err != nil || len(domains) != 3 {
 		t.Errorf("fetchMDStatus = %v, %v", domains, err)
 	}
 }
