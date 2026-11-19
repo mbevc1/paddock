@@ -535,10 +535,10 @@ BASE=https://github.com/<owner>/paddock/releases/download/$VER
 curl -fsSLO $BASE/bootstrap.sh
 curl -fsSLO $BASE/SHA256SUMS
 sha256sum -c --ignore-missing SHA256SUMS
-sudo bash bootstrap.sh --hostname panel.example.com --www-device /dev/vdb --format
+sudo bash bootstrap.sh --hostname panel.example.com --email ops@example.com --www-device /dev/vdb --format
 ```
 
-Options: `--hostname` (required), `--www-device` (needed until `/srv/www` is mounted), `--format` (create XFS on an empty device), `--www-file` (keep `/srv/www` in an XFS image of the given size at `/var/lib/paddock/www.img`, loop-mounted, instead of on a device), `--email` (ACME contact, optional), `--admin` (first admin's username, default `admin`), `--rpm` (install a local Paddock RPM instead of the repository, for testing a build before it is released). Rerunning the script is safe; it changes nothing that is already in place.
+Options: `--hostname` (required), `--www-device` (needed until `/srv/www` is mounted), `--format` (create XFS on an empty device), `--www-file` (keep `/srv/www` in an XFS image of the given size at `/var/lib/paddock/www.img`, loop-mounted, instead of on a device), `--email` (ACME contact, required: without it mod_md falls back to `ServerAdmin`, `root@localhost`, which Let's Encrypt refuses), `--admin` (first admin's username, default `admin`), `--rpm` (install a local Paddock RPM instead of the repository, for testing a build before it is released). Rerunning the script is safe; it changes nothing that is already in place.
 
 1. Check OS (EL 9.4+), SELinux enforcing, root. Refuse subordinate ID ranges in `/etc/subuid` or `/etc/subgid` that overlap the vhost IDs 1000000001 to 1000065535, since their holder could map vhost UIDs in a user namespace if `user.max_user_namespaces` were ever raised, and refuse a `SUB_UID_MAX` or `SUB_GID_MAX` in `/etc/login.defs` at or above 1000000001, which would let `useradd` hand out such a range later. Vhost IDs lie above the default pool (`SUB_UID_MAX` 600100000), so neither happens on a stock system. If Apache is already installed, refuse to start while `apachectl configtest` fails, before anything on the host changes.
 2. `dnf install epel-release`; install `remi-release-9` after checking its GPG key fingerprint against the value pinned in the script (EPEL and Remi packages stay signature-checked).
@@ -547,7 +547,7 @@ Options: `--hostname` (required), `--www-device` (needed until `/srv/www` is mou
 5. `dnf install paddock`.
 6. Check free ports: 80, 81 and 443 may be held only by `httpd` or `paddock`, 8080 and 8443 only by `paddock`.
 7. Prepare `/srv/www` on the given XFS device with `prjquota` (format only if empty and confirmed with `--format`; never one holding a filesystem), or in the `--www-file` image (created once, never reformatted); create `/srv/www` (`0711`) and `/srv/jail` (`0755`); add the `semanage fcontext` rule and `restorecon`. Refuse a `/srv/www` holding anything but the `.paddock` marker and vhost directories.
-8. Install `/usr/share/paddock/etc/` into `/etc`, keeping files that contain `# paddock: keep`; fill the panel hostname into `paddock-01-panel.conf`; write `MDContactEmail` to `/etc/httpd/conf.d/paddock-00-contact.conf` when `--email` is given; write `/etc/paddock/web.env` (`PADDOCK_HOSTNAME`, `PADDOCK_ACME_EMAIL`); comment out `mod_status` in `00-base.conf`; load the sysctl settings.
+8. Install `/usr/share/paddock/etc/` into `/etc`, keeping files that contain `# paddock: keep`; fill the panel hostname into `paddock-01-panel.conf`; write `MDContactEmail` to `/etc/httpd/conf.d/paddock-00-contact.conf`; write `/etc/paddock/web.env` (`PADDOCK_HOSTNAME`, `PADDOCK_ACME_EMAIL`); comment out `mod_status` in `00-base.conf`; load the sysctl settings.
 9. Start MariaDB and verify `unix_socket` for root in `mysql.global_priv`.
 10. Open firewalld ports 80, 443, 8080, 8443; enable `paddock-nft`, `fail2ban`, `httpd`, `mariadb`; reload Apache after `apachectl configtest` and sshd after `sshd -t`.
 11. `paddock setup --admin NAME`.

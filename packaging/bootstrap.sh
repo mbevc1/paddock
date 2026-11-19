@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Prepares an AlmaLinux 9.4+ host for Paddock and installs it (§14.3). Runs as root; safe to rerun.
-# Usage: bootstrap.sh --hostname NAME [--www-device DEV [--format] | --www-file SIZE]
-#                     [--email ADDR] [--admin NAME] [--rpm FILE]
+# Usage: bootstrap.sh --hostname NAME --email ADDR [--www-device DEV [--format] | --www-file SIZE]
+#                     [--admin NAME] [--rpm FILE]
 set -euo pipefail
 
 # The release workflow replaces @OWNER@; --rpm installs a local package instead of the repository.
@@ -143,7 +143,9 @@ parse_args() {
 	done
 	HOSTNAME_ARG=${HOSTNAME_ARG,,}
 	valid_hostname "$HOSTNAME_ARG" || die "--hostname must be a DNS name such as panel.example.com"
-	[[ -z $EMAIL ]] || valid_email "$EMAIL" || die "--email is not a valid address"
+	# Without it, mod_md uses Apache's ServerAdmin, root@localhost, which Let's Encrypt refuses.
+	[[ -n $EMAIL ]] || die "--email is required: the contact address for Let's Encrypt certificates"
+	valid_email "$EMAIL" || die "--email is not a valid address"
 	valid_admin "$ADMIN" || die "--admin must match ^[a-z][a-z0-9_-]{0,31}$"
 	[[ -z $DEVICE ]] || valid_device "$DEVICE" || die "--www-device must be a /dev path"
 	[[ -z $WWW_FILE ]] || valid_size "$WWW_FILE" || die "--www-file takes a size in G or T, such as 20G"
@@ -378,9 +380,7 @@ install_configs() {
 			install_file "$src" "/etc$rel"
 		fi
 	done < <(find "$SHARE" -type f -print0 | sort -z)
-	if [[ -n $EMAIL ]]; then
-		install_text "MDContactEmail $EMAIL" /etc/httpd/conf.d/paddock-00-contact.conf
-	fi
+	install_text "MDContactEmail $EMAIL" /etc/httpd/conf.d/paddock-00-contact.conf
 	install_text "PADDOCK_HOSTNAME=$HOSTNAME_ARG
 PADDOCK_ACME_EMAIL=$EMAIL" /etc/paddock/web.env
 	if [[ -f $MODULES_CONF ]] && grep -qxF "$STATUS_LINE" "$MODULES_CONF"; then
