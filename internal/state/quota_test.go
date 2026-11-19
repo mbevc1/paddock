@@ -56,13 +56,10 @@ func TestQuotas(t *testing.T) {
 	}
 	wantLimit(t, s.CreateDBUser(ctx, v1.N, "v00001_rw", "ALL"), ResourceDBUsers, 1)
 
-	if err := s.CreateAccessAccount(ctx, v1.N, "v00001", AccessShell); !errors.Is(err, ErrShellNotAllowed) {
-		t.Errorf("shell without shell_allowed: %v", err)
-	}
-	if err := s.CreateAccessAccount(ctx, v1.N, "v00001", AccessSFTP); err != nil {
+	if err := s.CreateAccessAccount(ctx, v1.N, "v00001"); err != nil {
 		t.Fatal(err)
 	}
-	wantLimit(t, s.CreateAccessAccount(ctx, v1.N, "v00001_b", AccessSFTP), ResourceAccessAccounts, 1)
+	wantLimit(t, s.CreateAccessAccount(ctx, v1.N, "v00001_b"), ResourceAccessAccounts, 1)
 	if err := s.CreateDatabase(ctx, 999, "v00999_x"); !errors.Is(err, ErrNotFound) {
 		t.Errorf("database for missing vhost: %v", err)
 	}
@@ -149,10 +146,10 @@ func TestAccessAccessors(t *testing.T) {
 	if _, err := s.AccessAccountOf(ctx, v.N); !errors.Is(err, ErrNotFound) {
 		t.Errorf("no account yet: %v", err)
 	}
-	if err := s.CreateAccessAccount(ctx, v.N, "v00001", AccessSFTP); err != nil {
+	if err := s.CreateAccessAccount(ctx, v.N, "v00001"); err != nil {
 		t.Fatal(err)
 	}
-	if a, err := s.AccessAccountOf(ctx, v.N); err != nil || a.Name != "v00001" || a.Kind != AccessSFTP {
+	if a, err := s.AccessAccountOf(ctx, v.N); err != nil || a.Name != "v00001" {
 		t.Errorf("AccessAccountOf = %+v, %v", a, err)
 	}
 	if err := s.AddSSHKey(ctx, "v00001", "ssh-ed25519 AAAA", "SHA256:x"); err != nil {

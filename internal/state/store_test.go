@@ -74,16 +74,16 @@ func TestOwnersAndLimits(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.MaxVhosts != 5 || got.DiskMB != 10240 || got.ShellAllowed || got.PHPVersions != nil {
+	if got.MaxVhosts != 5 || got.DiskMB != 10240 || got.PHPVersions != nil {
 		t.Errorf("default limits = %+v", got)
 	}
 
 	l := DefaultLimits()
-	l.MaxVhosts, l.ShellAllowed, l.PHPVersions = 9, true, []string{"8.3", "8.4"}
+	l.MaxVhosts, l.PHPVersions = 9, []string{"8.3", "8.4"}
 	if err := s.SetLimits(ctx, o.ID, l); err != nil {
 		t.Fatal(err)
 	}
-	if got, err = s.GetLimits(ctx, o.ID); err != nil || got.MaxVhosts != 9 || !got.ShellAllowed ||
+	if got, err = s.GetLimits(ctx, o.ID); err != nil || got.MaxVhosts != 9 ||
 		!slices.Equal(got.PHPVersions, []string{"8.3", "8.4"}) {
 		t.Errorf("updated limits = %+v, %v", got, err)
 	}

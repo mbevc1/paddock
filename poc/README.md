@@ -26,7 +26,6 @@ vagrant snapshot save clean
 | `05-mariadb.sh` | T0.5 | §9 `unix_socket` login from the sandbox; grant escaping |
 | `06-loopback.sh` | T0.6 | §7.6 nftables rule, including after `firewall-cmd --reload` |
 | `07-sftp.sh` | T0.7 | §7.5 SFTP chroot and forwarding limited to `127.0.0.1:3306` |
-| `08-shell.sh` | T0.8 | §7.5 shell jail, private procfs, masked `user@`, user slice |
 | `09-sysctl.sh` | T0.9 | §7.6 kernel settings, then reruns 02 to 08 |
 | `10-php-app.sh` | T0.10 | PHP application writing its own files, `open_basedir`, sessions, HTTPS detection |
 | `11-scale.sh` | T0.11 | `create [COUNT]`, reboot, `report`, `cleanup` |

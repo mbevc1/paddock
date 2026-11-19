@@ -30,11 +30,10 @@ type VhostDetail struct {
 	DBUsers   []DBUserView `json:"db_users"`
 }
 
-// AccessView is a vhost's access account.
+// AccessView is a vhost's SFTP account.
 type AccessView struct {
-	Account string           `json:"account"`
-	Kind    state.AccessKind `json:"kind"`
-	Keys    []KeyView        `json:"keys"`
+	Account string    `json:"account"`
+	Keys    []KeyView `json:"keys"`
 }
 
 // KeyView is one authorized key.
@@ -64,7 +63,6 @@ type LimitsView struct {
 	MaxDatabases       int      `json:"max_databases"`
 	MaxDBUsers         int      `json:"max_db_users"`
 	MaxAccessAccounts  int      `json:"max_access_accounts"`
-	ShellAllowed       bool     `json:"shell_allowed"`
 	PHPVersions        []string `json:"php_versions"`
 	MemoryMaxMB        int      `json:"memory_max_mb"`
 	CPUQuotaPct        int      `json:"cpu_quota_pct"`
@@ -95,7 +93,7 @@ func limitsView(l state.Limits) LimitsView {
 	if php == nil {
 		php = []string{}
 	}
-	return LimitsView{l.MaxVhosts, l.DiskMB, l.MaxDatabases, l.MaxDBUsers, l.MaxAccessAccounts, l.ShellAllowed, php,
+	return LimitsView{l.MaxVhosts, l.DiskMB, l.MaxDatabases, l.MaxDBUsers, l.MaxAccessAccounts, php,
 		l.MemoryMaxMB, l.CPUQuotaPct, l.TasksMax, l.PMMaxChildren, l.MaxUserConnections}
 }
 
@@ -181,7 +179,7 @@ func registerReads(r *agent.Registry, store *state.Store, h *Host) {
 			if err != nil {
 				return nil, err
 			}
-			av := &AccessView{Account: acct.Name, Kind: acct.Kind, Keys: []KeyView{}}
+			av := &AccessView{Account: acct.Name, Keys: []KeyView{}}
 			for _, k := range keys {
 				av.Keys = append(av.Keys, KeyView{Fingerprint: k.Fingerprint, PublicKey: k.PublicKey})
 			}

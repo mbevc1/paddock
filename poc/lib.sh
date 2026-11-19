@@ -461,7 +461,7 @@ remove_owner_slice() {
 	rm -f "$UNIT_DIR/$(owner_slice "$1")"
 }
 
-# §7.5. jail_create N KIND (sftp|shell): mount units, sshd groups, user slice, masked user@.
+# §7.5. jail_create N: SFTP mount unit, sshd group, user slice, masked user@.
 mount_unit_name() { systemd-escape --path --suffix=mount "$1"; }
 
 write_mount_unit() {
@@ -483,7 +483,7 @@ EOF
 }
 
 jail_create() {
-	local n=$1 kind=$2 id uid j
+	local n=$1 id uid j
 	id=$(vh_id "$n")
 	uid=$(vh_uid "$n")
 	j=$JAIL/$id
@@ -491,33 +491,7 @@ jail_create() {
 	install -d -o root -g root -m 0755 "$JAIL" "$j" "$j/site"
 	write_mount_unit "$WWW/$id" "$j/site" none bind
 
-	if [[ $kind == shell ]]; then
-		install -d -o root -g root -m 0755 "$j/usr" "$j/opt" "$j/opt/remi" "$j/opt/paddock/bin" \
-			"$j/etc" "$j/dev" "$j/proc"
-		install -d -o root -g root -m 1777 "$j/tmp"
-		write_mount_unit /usr "$j/usr" none bind,ro,nosuid,nodev
-		write_mount_unit /opt/remi "$j/opt/remi" none bind,ro,nosuid,nodev
-		write_mount_unit proc "$j/proc" proc hidepid=invisible,subset=pid
-		local l
-		for l in bin sbin lib lib64; do ln -sfn "usr/$l" "$j/$l"; done
-
-		getent passwd "$id" >"$j/etc/passwd"
-		getent group "$id" >"$j/etc/group"
-		cp -f /etc/resolv.conf /etc/ld.so.cache "$j/etc/"
-		rm -rf "$j/etc/pki"
-		cp -a /etc/pki "$j/etc/pki"
-		printf 'export PATH=/opt/paddock/bin:/usr/local/bin:/usr/bin\nexport HOME=/site\ncd /site\n' \
-			>"$j/etc/profile"
-		local dev name type major minor
-		for dev in "null c 1 3" "zero c 1 5" "urandom c 1 9" "tty c 5 0"; do
-			read -r name type major minor <<<"$dev"
-			[[ -e $j/dev/$name ]] || mknod -m 0666 "$j/dev/$name" "$type" "$major" "$minor"
-		done
-		ln -sfn "/opt/remi/php$(php_tag "$(vh_php "$n")")/root/usr/bin/php" "$j/opt/paddock/bin/php"
-		usermod -s /bin/bash -G paddock-shell "$id"
-	else
-		usermod -G paddock-sftp "$id"
-	fi
+	usermod -G paddock-sftp "$id"
 	restorecon -RF "$j" 2>/dev/null || true
 
 	systemctl mask "user@$uid.service"
@@ -530,15 +504,13 @@ jail_create() {
 }
 
 jail_destroy() {
-	local n=$1 j unit sub
+	local n=$1 j unit
 	j=$JAIL/$(vh_id "$n")
 	[[ -d $j ]] || return 0
-	for sub in proc opt/remi usr site; do
-		unit=$(mount_unit_name "$j/$sub")
-		systemctl disable --now "$unit" 2>/dev/null || true
-		rm -f "$UNIT_DIR/$unit"
-		mountpoint -q "$j/$sub" && umount -l "$j/$sub"
-	done
+	unit=$(mount_unit_name "$j/site")
+	systemctl disable --now "$unit" 2>/dev/null || true
+	rm -f "$UNIT_DIR/$unit"
+	mountpoint -q "$j/site" && umount -l "$j/site"
 	# Only remove the jail once nothing is mounted below it.
 	if ! findmnt -rn -o TARGET | grep -q "^$j/"; then
 		rm -rf --one-file-system "$j"
@@ -571,20 +543,17 @@ remove_sshd_dropin() {
 
 install_sshd_dropin() {
 	getent group paddock-sftp >/dev/null || groupadd -r paddock-sftp
-	getent group paddock-shell >/dev/null || groupadd -r paddock-shell
 	install -d -m 0755 /etc/ssh/authorized_keys
 	cat <<'EOF' | write_if_changed /etc/ssh/sshd_config.d/50-paddock.conf
 AuthorizedKeysFile /etc/ssh/authorized_keys/%u
 
-Match Group paddock-sftp,paddock-shell
+Match Group paddock-sftp
     ChrootDirectory /srv/jail/%u
+    ForceCommand internal-sftp -d /site
     AllowTcpForwarding local
     PermitOpen 127.0.0.1:3306
     X11Forwarding no
     AllowAgentForwarding no
-
-Match Group paddock-sftp
-    ForceCommand internal-sftp -d /site
 EOF
 	sshd -t
 	systemctl reload sshd

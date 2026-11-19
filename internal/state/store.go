@@ -113,6 +113,37 @@ func (s *Store) migrate(ctx context.Context) error {
 	return nil
 }
 
+// preconditions refuse a migration that would lose what the host still holds.
+var preconditions = map[int]func(context.Context, *sql.Tx) error{
+	3: noShellAccounts,
+}
+
+// noShellAccounts refuses to drop shell support while shell accounts exist: each has a
+// Linux user, a jail, and mount units that only the previous release can remove.
+func noShellAccounts(ctx context.Context, tx *sql.Tx) error {
+	rows, err := tx.QueryContext(ctx, `SELECT name FROM access_accounts WHERE kind = 'shell' ORDER BY name`)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	var names []string
+	for rows.Next() {
+		var n string
+		if err := rows.Scan(&n); err != nil {
+			return err
+		}
+		names = append(names, n)
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	if len(names) > 0 {
+		return fmt.Errorf("shell access accounts are no longer supported; delete %s with the previous release first",
+			strings.Join(names, ", "))
+	}
+	return nil
+}
+
 func (s *Store) apply(ctx context.Context, m migration) error {
 	return s.tx(ctx, func(tx *sql.Tx) error {
 		var n int
@@ -121,6 +152,11 @@ func (s *Store) apply(ctx context.Context, m migration) error {
 		}
 		if n > 0 {
 			return nil
+		}
+		if pre := preconditions[m.version]; pre != nil {
+			if err := pre(ctx, tx); err != nil {
+				return fmt.Errorf("migration %s: %w", m.name, err)
+			}
 		}
 		body, err := migrationFiles.ReadFile("migrations/" + m.name)
 		if err != nil {

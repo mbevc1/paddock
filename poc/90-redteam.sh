@@ -17,7 +17,7 @@ on_cleanup "remove_owner_slice 1"
 on_cleanup "remove_owner_slice 2"
 db_create_primary 1 app
 db_create_primary 2 app
-jail_create 1 shell
+jail_create 1
 key=$(ssh_key_for 1)
 
 A=$(vh_id 1)
@@ -109,14 +109,19 @@ no_token "A's PHP cannot log in as B's DB user" "$(mysqli "$B" "${B}_app" 'SELEC
 no_token "A's DB user cannot read B's database" "$(mysqli "$A" "${A}_app" "SELECT v FROM ${B}_app.secret")"
 no_token "A's PHP cannot log in as root" "$(mysqli root '' "SELECT v FROM ${B}_app.secret")"
 
-# 9. See B through SFTP or a shell.
-sh_jail() { ssh_as "$key" "$A" "bash -lc '$1'" 2>&1; }
-out=$(sh_jail 'ls -A / | tr "\n" " "')
-refute "A's shell has no /srv ($out)" grep -qw srv <<<"$out"
-check "A's shell lists only its own user" test "$(sh_jail 'getent passwd | cut -d: -f1')" = "$A"
-out=$(sh_jail 'ps -eo uid= | tr -d " " | sort -u | tr "\n" " "')
-check "A's shell sees only A's processes ($out)" test "$out" = "$(vh_uid 1) "
-no_token "A's shell cannot read B's file" "$(sh_jail "cat $WWW/$B/private/secret.txt /site/../../$B/private/secret.txt")"
+# 9. See B through SFTP.
+sftp_jail() {
+	sftp -i "$key" -o BatchMode=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+		-o LogLevel=ERROR -b - "$A@127.0.0.1" 2>&1
+}
+out=$(printf -- '-ls -1a /\n' | sftp_jail | tr '\n' ' ')
+refute "A's SFTP root has no /srv ($out)" grep -qw srv <<<"$out"
+got=$POC_TMP/redteam-get
+rm -f "$got"
+printf -- '-get %s %s\n-get %s %s\n' "$WWW/$B/private/secret.txt" "$got" "/site/../../$B/private/secret.txt" "$got" | sftp_jail >/dev/null
+no_token "A's SFTP cannot fetch B's file" "$(cat "$got" 2>/dev/null)"
+out=$(ssh_as "$key" "$A" id 2>&1) || true
+refute "A's SFTP account runs no commands" grep -q uid= <<<"$out"
 
 # 10. Starve B of CPU, memory, disk.
 for prop in MemoryMax CPUQuotaPerSecUSec TasksMax; do
@@ -131,7 +136,6 @@ check "B can still write after A filled its quota" grep -q written <<<"$out"
 # 11. Gain privileges.
 check "A's PHP runs with NoNewPrivs" grep -qE 'NoNewPrivs:[[:space:]]+1' <<<"$(php_probe 1 'cat /proc/self/status')"
 refute "sudo in A's PHP cannot reach root" test "$(php_probe 1 'sudo -n id -u')" = 0
-refute "su in A's shell cannot reach root" test "$(sh_jail 'su -c "id -u" root </dev/null')" = 0
 check "user namespaces are disabled" test "$(sysctl -n user.max_user_namespaces)" = 0
 refute "A's PHP cannot create a user namespace" test -n "$(php_probe 1 'unshare -U true && echo created')"
 

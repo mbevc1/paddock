@@ -26,9 +26,6 @@ type LimitError struct {
 
 func (e *LimitError) Error() string { return fmt.Sprintf("%s limit reached (%d)", e.Resource, e.Limit) }
 
-// ErrShellNotAllowed reports a shell account for an owner whose limits forbid shells.
-var ErrShellNotAllowed = errors.New("shell accounts are not allowed for this owner")
-
 var quotaQueries = map[Resource]struct{ limit, count string }{
 	ResourceVhosts: {"max_vhosts", `SELECT count(*) FROM vhosts WHERE owner_id = ?`},
 	ResourceDatabases: {"max_databases", `SELECT count(*) FROM databases d JOIN vhosts v ON v.n = d.vhost_n
@@ -120,39 +117,20 @@ func (s *Store) CreateDBUser(ctx context.Context, n int, name, grants string) er
 	})
 }
 
-// AccessKind is an access account's kind.
-type AccessKind string
-
-// Access account kinds.
-const (
-	AccessSFTP  AccessKind = "sftp"
-	AccessShell AccessKind = "shell"
-)
-
-// CreateAccessAccount records an SFTP or shell account of vhost n within its owner's limit;
-// shell accounts also need shell_allowed.
-func (s *Store) CreateAccessAccount(ctx context.Context, n int, name string, kind AccessKind) error {
+// CreateAccessAccount records the SFTP account of vhost n within its owner's limit.
+func (s *Store) CreateAccessAccount(ctx context.Context, n int, name string) error {
 	return s.tx(ctx, func(tx *sql.Tx) error {
 		owner, err := vhostOwner(ctx, tx, n)
 		if err != nil {
 			return err
 		}
-		if kind == AccessShell {
-			var allowed bool
-			if err := tx.QueryRowContext(ctx, `SELECT shell_allowed FROM limits WHERE owner_id = ?`, owner).Scan(&allowed); err != nil {
-				return err
-			}
-			if !allowed {
-				return ErrShellNotAllowed
-			}
-		}
 		if err := checkQuota(ctx, tx, owner, ResourceAccessAccounts); err != nil {
 			return err
 		}
-		_, err = tx.ExecContext(ctx, `INSERT INTO access_accounts (name, vhost_n, kind, created_at) VALUES (?, ?, ?, ?)`,
-			name, n, kind, s.timestamp())
+		_, err = tx.ExecContext(ctx, `INSERT INTO access_accounts (name, vhost_n, created_at) VALUES (?, ?, ?)`,
+			name, n, s.timestamp())
 		if isConstraint(err) {
-			return fmt.Errorf("%w: access account %s exists or kind %q is unknown", ErrConflict, name, kind)
+			return fmt.Errorf("%w: access account %s exists", ErrConflict, name)
 		}
 		return err
 	})

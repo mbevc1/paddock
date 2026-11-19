@@ -1,9 +1,0 @@
-# path: /etc/systemd/system/srv-jail-v00012-proc.mount
-[Mount]
-What=proc
-Where=/srv/jail/v00012/proc
-Type=proc
-Options=hidepid=invisible,subset=pid
-
-[Install]
-WantedBy=multi-user.target

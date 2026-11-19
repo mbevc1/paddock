@@ -19,7 +19,7 @@ func TestReadOperations(t *testing.T) {
 	if err := web.Call(ctx, "dbuser.create", owner, "", DBUserCreateArgs{VhostID: "v00001", Suffix: "ro", Grants: mariadb.PrivilegesRead}, nil); err != nil {
 		t.Fatal(err)
 	}
-	if v := runJob(t, web, "access.create", owner, AccessCreateArgs{VhostID: "v00001", Kind: state.AccessSFTP, Keys: []string{newSSHKey(t, "k")}}); v.Status != state.JobSucceeded {
+	if v := runJob(t, web, "access.create", owner, AccessCreateArgs{VhostID: "v00001", Keys: []string{newSSHKey(t, "k")}}); v.Status != state.JobSucceeded {
 		t.Fatal(v)
 	}
 	other, err := e.store.CreateOwner(ctx, "other", state.DefaultLimits())
@@ -42,7 +42,7 @@ func TestReadOperations(t *testing.T) {
 		t.Fatal(err)
 	}
 	if d.Cert.Source != state.CertACME || len(d.Databases) != 1 || len(d.DBUsers) != 1 || d.Access == nil ||
-		d.Access.Kind != state.AccessSFTP || len(d.Access.Keys) != 1 {
+		d.Access.Account != "v00001" || len(d.Access.Keys) != 1 {
 		t.Errorf("detail = %+v", d)
 	}
 	wantCode(t, web.Call(ctx, "vhost.get", stranger, "", VhostIDArgs{VhostID: "v00001"}, nil), api.CodeNotFound)

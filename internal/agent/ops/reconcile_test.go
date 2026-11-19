@@ -98,24 +98,20 @@ func TestReconcileRestoresDeletedConfigs(t *testing.T) {
 	}
 }
 
-func TestReconcileSuspendedAndShell(t *testing.T) {
+func TestReconcileSuspendedWithAccess(t *testing.T) {
 	ctx := context.Background()
 	e, web, owner, _ := activeVhost(t)
-	allowShell(t, e, owner.OwnerID)
-	if v := runJob(t, web, "access.create", owner, AccessCreateArgs{VhostID: "v00001", Kind: state.AccessShell, Keys: []string{newSSHKey(t, "k")}}); v.Status != state.JobSucceeded {
+	if v := runJob(t, web, "access.create", owner, AccessCreateArgs{VhostID: "v00001", Keys: []string{newSSHKey(t, "k")}}); v.Status != state.JobSucceeded {
 		t.Fatal(v)
 	}
 	admin := adminSession(t, e, web)
 	if v := runJob(t, web, "vhost.suspend", admin, VhostIDArgs{VhostID: "v00001"}); v.Status != state.JobSucceeded {
 		t.Fatal(v)
 	}
-	for _, rel := range []string{"etc/httpd/conf.d/paddock-v00001.conf", "etc/ssh/authorized_keys/v00001", "srv/jail/v00001/etc/passwd"} {
+	for _, rel := range []string{"etc/httpd/conf.d/paddock-v00001.conf", "etc/ssh/authorized_keys/v00001"} {
 		if err := os.Remove(filepath.Join(e.root, rel)); err != nil {
 			t.Fatal(err)
 		}
-	}
-	if err := os.Remove(filepath.Join(e.root, "srv/jail/v00001/opt/paddock/bin/php")); err != nil {
-		t.Fatal(err)
 	}
 	mark := len(e.run.Calls())
 	if res, err := Reconcile(ctx, e.store, e.host); err != nil || len(res.Errors) != 0 {
@@ -124,18 +120,13 @@ func TestReconcileSuspendedAndShell(t *testing.T) {
 	if !strings.Contains(frontConfig(t, e), "Redirect 503 /") {
 		t.Error("suspended front not restored as 503")
 	}
-	for _, rel := range []string{"etc/ssh/authorized_keys/v00001", "srv/jail/v00001/etc/passwd"} {
-		if !fileExists(e, rel) {
-			t.Errorf("%s not restored", rel)
-		}
-	}
-	if got, _ := os.Readlink(filepath.Join(e.root, "srv/jail/v00001/opt/paddock/bin/php")); got != "/opt/remi/php83/root/usr/bin/php" {
-		t.Errorf("php link = %q", got)
+	if !fileExists(e, "etc/ssh/authorized_keys/v00001") {
+		t.Error("authorized_keys not restored")
 	}
 	cmds := e.run.Commands()[mark:]
 	for _, want := range []string{
 		"/usr/bin/systemctl disable --now paddock-httpd@v00001.service",
-		"/usr/bin/systemctl enable --now srv-jail-v00001-proc.mount",
+		"/usr/bin/systemctl enable --now srv-jail-v00001-site.mount",
 	} {
 		if !slices.Contains(cmds, want) {
 			t.Errorf("missing %q in %q", want, cmds)

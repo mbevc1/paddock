@@ -1,9 +1,0 @@
-# path: /etc/systemd/system/srv-jail-v00012-opt-remi.mount
-[Mount]
-What=/opt/remi
-Where=/srv/jail/v00012/opt/remi
-Type=none
-Options=bind,ro,nosuid,nodev
-
-[Install]
-WantedBy=multi-user.target

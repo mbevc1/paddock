@@ -40,14 +40,6 @@ func goldenFiles(t *testing.T) map[string]File {
 	if err != nil {
 		t.Fatal(err)
 	}
-	mounts, err := JailMounts(v, true)
-	if err != nil {
-		t.Fatal(err)
-	}
-	etc, err := JailEtc(v)
-	if err != nil {
-		t.Fatal(err)
-	}
 	must := func(f File, err error) File {
 		t.Helper()
 		if err != nil {
@@ -67,14 +59,8 @@ func goldenFiles(t *testing.T) map[string]File {
 		"front-acme":      must(Front(v, FrontOptions{TLS: TLSACME})),
 		"front-upload":    must(Front(v, FrontOptions{TLS: TLSUpload})),
 		"front-suspended": must(Front(v, FrontOptions{TLS: TLSACME, Suspended: true})),
-		"mount-site":      mounts[0],
-		"mount-usr":       mounts[1],
-		"mount-remi":      mounts[2],
-		"mount-proc":      mounts[3],
-		"jail-passwd":     etc[0],
-		"jail-group":      etc[1],
+		"mount-site":      must(JailMount(v)),
 		"tmpfiles":        must(Tmpfiles(v)),
-		"jail-profile":    etc[2],
 	}
 	return files
 }
@@ -181,8 +167,8 @@ func TestRejectsUnvalidatedInput(t *testing.T) {
 	if _, err := Tmpfiles(zero); !errors.Is(err, ErrUnvalidated) {
 		t.Errorf("Tmpfiles(zero) = %v", err)
 	}
-	if _, err := JailMounts(zero, true); !errors.Is(err, ErrUnvalidated) {
-		t.Errorf("JailMounts(zero) = %v", err)
+	if _, err := JailMount(zero); !errors.Is(err, ErrUnvalidated) {
+		t.Errorf("JailMount(zero) = %v", err)
 	}
 	if _, err := OwnerSlice(Limits{}); !errors.Is(err, ErrUnvalidated) {
 		t.Errorf("OwnerSlice(zero) = %v", err)

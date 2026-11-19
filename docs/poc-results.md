@@ -26,7 +26,7 @@ Fill in each row after running the script on a fresh VM (see `poc/README.md`). P
 | T0.5 MariaDB from the sandbox | `05-mariadb.sh` | not run | |
 | T0.6 Loopback rule | `06-loopback.sh` | not run | |
 | T0.7 SFTP jail | `07-sftp.sh` | not run | |
-| T0.8 Shell jail | `08-shell.sh` | not run | |
+| T0.8 Shell jail | dropped | | access accounts are SFTP only |
 | T0.9 Kernel settings | `09-sysctl.sh` | not run | |
 | T0.10 PHP application | `10-php-app.sh` | not run | |
 | T0.11 Scale | `11-scale.sh` | not run | |
@@ -54,7 +54,7 @@ Raised while writing the scripts; each needs a VM result before part 1 changes.
 6. **`php-fpm -t` as root (invariant 6).** The config has no pool `user`, so `php-fpm -t` refuses to run as root; the agent must run it as the vhost user.
 7. **SFTP account names (§4, §5, §7.5).** `ChrootDirectory /srv/jail/%u` ties the login name to the vhost ID, yet `max_access_accounts` allows several accounts. The PoC logs in as the vhost user. Several accounts per vhost need either names that map to the jail (for example `ChrootDirectory` per `Match User`) or one jail per account.
 8. **nftables restarts (§7.6).** `nft -f` on the original §7.6 file appended a second rule on every load. The file now declares and deletes its table before defining it, so each load replaces the table in one transaction; a load that fails leaves the old rule in force. 06-loopback.sh checks both.
-9. **Shell jail `php` (§7.5).** The jail's `/usr` is a read-only bind, so the `php` link lives in `/opt/paddock/bin` inside the jail, with `PATH` set in the jail's `/etc/profile`. T0.8 shows whether Remi's `php` runs from there without the SCL `enable` script.
+9. **Shell jail `php` (§7.5).** Dropped with shell access: access accounts are SFTP only.
 10. **Long requests behind two proxies.** Front and backend Apache both defaulted to a 60 s proxy timeout, so a slow request could time out while PHP kept running. Decided: the timeouts nest, 300 s in PHP-FPM, 305 s in the backend, 310 s in the front (§7.4); a render test keeps them in order. The PoC scripts keep the defaults.
 11. **`MDNotifyCmd` user (§10, T1.12).** `front.md-renewed` accepts only root. If mod_md runs `MDNotifyCmd` as `apache`, the agent must also accept the `apache` UID for that one operation.
 12. **`md-status` layout and exposure (§10, T1.12).** The reader looks fields up leniently because the JSON layout varies between mod_md releases; record the VM's actual output. `Require local` also let tenant PHP read `md-status` on loopback, which lists every managed domain on the server. Decided: the page moved to its own front listener on `127.0.0.1:81` (privileged, so no tenant can squat it, and already an HTTP port for SELinux), and the §7.6 rule rejects any UID but root there. `TestRedTeam` checks that tenant PHP reaches neither that port nor `/md-status` on the vhost ports.

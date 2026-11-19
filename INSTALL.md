@@ -55,7 +55,7 @@ sudo bash bootstrap.sh --hostname panel.example.com --www-file 20G
 1. Checks the OS, SELinux and root, that no subordinate ID range overlaps the vhost IDs, and that an Apache already installed has a valid configuration.
 2. Adds EPEL, Remi's repository (its signing key is pinned in the script) and Paddock's repository, enables MariaDB 10.11, and installs `paddock` and `firewalld`.
 3. Checks that the ports above are free.
-4. Prepares `/srv/www` with project quotas, on the device or in the image, adds it to `/etc/fstab`, and creates `/srv/jail` for SFTP and shell accounts.
+4. Prepares `/srv/www` with project quotas, on the device or in the image, adds it to `/etc/fstab`, and creates `/srv/jail` for SFTP accounts.
 5. Installs host configuration: sshd, sysctl, nftables, fail2ban, MariaDB and front Apache settings. Files containing the line `# paddock: keep` are left alone.
 6. Starts MariaDB, opens the firewall ports, and enables `httpd`, `mariadb`, `fail2ban` and the loopback firewall rule.
 7. Runs `paddock setup`, which creates Paddock's databases and the first admin, then starts `paddock-agent` and `paddock-web`.
@@ -70,7 +70,7 @@ Bootstrap is safe to rerun: it changes only what differs and prints no secrets a
 4. **Create an owner** under Admin → Owners. The panel shows the owner's password once; pass it on securely. Set the owner's limits there, and require two-factor sign-in if you want it.
 5. **As the owner,** change the password and set up two-factor sign-in under Security, then create a vhost under Vhosts with its domain, PHP version and, optionally, an empty database.
 6. **Point the domain's DNS** at the server. The front Apache obtains a Let's Encrypt certificate for it once the name resolves.
-7. **Upload the site** through an SFTP account added on the vhost's page, into `public/`.
+7. **Upload the site** through an SFTP account added on the vhost's page, into `public/`. SCP clients work too, since they use the SFTP protocol; there is no shell or FTP access.
 
 ## Upgrade
 

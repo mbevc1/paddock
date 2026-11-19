@@ -173,11 +173,11 @@ func vhostFiles(v render.Vhost, l render.Limits) ([]render.File, error) {
 	if err := add(render.Tmpfiles(v)); err != nil {
 		return nil, err
 	}
-	mounts, err := render.JailMounts(v, false)
+	mount, err := render.JailMount(v)
 	if err != nil {
 		return nil, err
 	}
-	return append(files, mounts...), nil
+	return append(files, mount), nil
 }
 
 func renderInputs(v state.Vhost, primary string, aliases []string, l state.Limits) (render.Vhost, render.Limits, error) {
@@ -516,7 +516,7 @@ func teardownVhost(ctx context.Context, store *state.Store, h *Host, sv state.Vh
 	}
 
 	if acct, err := store.AccessAccountOf(ctx, sv.N); err == nil {
-		if err := teardownAccess(ctx, store, h, sv, v, acct); err != nil {
+		if err := teardownAccess(ctx, store, h, sv, acct); err != nil {
 			return err
 		}
 	} else if !errors.Is(err, state.ErrNotFound) {

@@ -20,7 +20,7 @@ or open an owner and act as them to work on their vhosts.</p>
   {{with .Data.Owner}}
   <section>
     <h2>Limits</h2>
-    <p>{{.Limits.MaxVhosts}} vhosts, {{.Limits.DiskMB}} MB disk, {{.Limits.MaxDatabases}} databases, {{.Limits.MaxAccessAccounts}} access accounts{{if .Limits.ShellAllowed}}, shell allowed{{end}}.</p>
+    <p>{{.Limits.MaxVhosts}} vhosts, {{.Limits.DiskMB}} MB disk, {{.Limits.MaxDatabases}} databases, {{.Limits.MaxAccessAccounts}} SFTP accounts.</p>
   </section>
   {{end}}
 {{end}}

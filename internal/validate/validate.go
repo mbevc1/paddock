@@ -135,7 +135,7 @@ const (
 	maxAccessPassword = 128
 )
 
-// AccessPassword checks an SFTP or shell password: 12 to 128 printable ASCII characters
+// AccessPassword checks an SFTP password: 12 to 128 printable ASCII characters
 // without ":", which chpasswd uses as its separator. Errors never quote the password.
 func AccessPassword(pw string) error {
 	if len(pw) < minAccessPassword || len(pw) > maxAccessPassword {

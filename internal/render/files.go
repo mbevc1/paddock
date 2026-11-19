@@ -153,51 +153,12 @@ func mountUnit(what, where, typ, options string) (File, error) {
 		map[string]string{"What": what, "Where": where, "Type": typ, "Options": options})
 }
 
-// JailMounts renders the vhost jail's mount units: the site bind for every jail, plus /usr,
-// /opt/remi, and a private procfs for shell jails.
-func JailMounts(v Vhost, shell bool) ([]File, error) {
+// JailMount renders the mount unit that binds the vhost's directory into its SFTP jail.
+func JailMount(v Vhost) (File, error) {
 	if err := v.valid(); err != nil {
-		return nil, err
+		return File{}, err
 	}
-	jail := "/srv/jail/" + v.id
-	specs := [][4]string{{"/srv/www/" + v.id, jail + "/site", "none", "bind"}}
-	if shell {
-		specs = append(specs,
-			[4]string{"/usr", jail + "/usr", "none", "bind,ro,nosuid,nodev"},
-			[4]string{"/opt/remi", jail + "/opt/remi", "none", "bind,ro,nosuid,nodev"},
-			[4]string{"proc", jail + "/proc", "proc", "hidepid=invisible,subset=pid"},
-		)
-	}
-	out := make([]File, 0, len(specs))
-	for _, s := range specs {
-		f, err := mountUnit(s[0], s[1], s[2], s[3])
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, f)
-	}
-	return out, nil
-}
-
-// JailEtc renders the shell jail's passwd and group, which list only the vhost user, and a
-// profile that puts the vhost's php first on PATH.
-func JailEtc(v Vhost) ([]File, error) {
-	if err := v.valid(); err != nil {
-		return nil, err
-	}
-	data := v.data()
-	data["Shell"] = "/bin/bash"
-	var out []File
-	for _, f := range []struct{ name, tmpl string }{
-		{"passwd", "jail-passwd.tmpl"}, {"group", "jail-group.tmpl"}, {"profile", "jail-profile.tmpl"},
-	} {
-		rendered, err := file("/srv/jail/"+v.id+"/etc/"+f.name, f.tmpl, data)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, rendered)
-	}
-	return out, nil
+	return mountUnit("/srv/www/"+v.id, "/srv/jail/"+v.id+"/site", "none", "bind")
 }
 
 // AuthorizedKeys renders the vhost's authorized_keys file for sshd; each key is validated

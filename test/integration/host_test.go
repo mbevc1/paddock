@@ -203,6 +203,16 @@ func sshKey(t *testing.T) (string, string) {
 	return key, strings.TrimSpace(string(pub))
 }
 
+// sftpBatch runs an sftp batch script as user and returns its combined output; commands that
+// fail do not stop the batch, since each line starts with "-".
+func sftpBatch(t *testing.T, key, user, script string) string {
+	t.Helper()
+	argv := append([]string{"/usr/bin/sftp", "-i", key, "-b", "-"}, sshOpts...)
+	argv = append(argv, user+"@127.0.0.1")
+	res, _ := (system.Exec{}).Run(context.Background(), argv, system.Opts{Stdin: strings.NewReader(script)})
+	return string(res.Stdout) + string(res.Stderr)
+}
+
 func sshRun(t *testing.T, key, user, stdin string, argv ...string) string {
 	t.Helper()
 	full := append([]string{"/usr/bin/ssh", "-i", key}, sshOpts...)

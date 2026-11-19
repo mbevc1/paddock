@@ -28,12 +28,12 @@ import (
 func TestRedTeam(t *testing.T) {
 	h := newAgent(t)
 	h.installPHP(t, "8.3")
-	ownerA := h.newOwner(t, ops.LimitsArgs{DiskMB: ptrTo(20), ShellAllowed: ptrTo(true)})
+	ownerA := h.newOwner(t, ops.LimitsArgs{DiskMB: ptrTo(20)})
 	ownerB := h.newOwner(t, ops.LimitsArgs{})
 	a, aDomain := h.createVhost(t, ops.VhostCreateArgs{OwnerID: ownerA, PHPVersion: "8.3", Database: "app"})
 	b, bDomain := h.createVhost(t, ops.VhostCreateArgs{OwnerID: ownerB, PHPVersion: "8.3", Database: "app"})
 	key, pub := sshKey(t)
-	h.mustJob(t, "access.create", ops.AccessCreateArgs{VhostID: a, Kind: state.AccessShell, Keys: []string{pub}}, time.Minute)
+	h.mustJob(t, "access.create", ops.AccessCreateArgs{VhostID: a, Keys: []string{pub}}, time.Minute)
 
 	token := "redteam-" + randomHex(t, 12)
 	secret := writeAs(t, b, "private/secret.txt", token+"\n", 0o600)
@@ -46,7 +46,6 @@ func TestRedTeam(t *testing.T) {
 			t.Errorf("%s: B's secret leaked: %.300s", desc, out)
 		}
 	}
-	shell := func(cmd string) string { return sshRun(t, key, a, "", "bash -lc '"+cmd+"'") }
 	sliceA := fmt.Sprintf("paddock-owner-%d.slice", ownerA)
 
 	t.Run("read B's files", func(t *testing.T) {
@@ -173,17 +172,18 @@ func TestRedTeam(t *testing.T) {
 		noToken(t, "A's PHP as root", query("root", "", "SELECT v FROM "+b+"_app.secret"))
 	})
 
-	t.Run("see B through SFTP or a shell", func(t *testing.T) {
-		if got := strings.Fields(shell("ls -A /")); containsWord(got, "srv") {
-			t.Errorf("A's shell root lists %q", got)
+	t.Run("see B through SFTP or SSH", func(t *testing.T) {
+		if got := strings.Fields(sftpBatch(t, key, a, "-ls -1a /\n")); containsWord(got, "srv") {
+			t.Errorf("A's SFTP root lists %q", got)
 		}
-		if got := shell("getent passwd | cut -d: -f1"); got != a {
-			t.Errorf("A's shell lists users %q", got)
+		local := filepath.Join(t.TempDir(), "got")
+		sftpBatch(t, key, a, "-get /srv/www/"+b+"/private/secret.txt "+local+"\n-get /site/../../"+b+"/private/secret.txt "+local+"\n")
+		if data, err := os.ReadFile(local); err == nil {
+			noToken(t, "A's SFTP fetching B's file", string(data))
 		}
-		if got := shell(`ps -eo uid= | tr -d " " | sort -u`); got != uidOf(t, a) {
-			t.Errorf("A's shell sees processes of UIDs %q", got)
+		if got := sshRun(t, key, a, "", "id"); strings.Contains(got, "uid=") {
+			t.Errorf("A's SFTP account ran a command: %q", got)
 		}
-		noToken(t, "A's shell reading B's file", shell("cat /srv/www/"+b+"/private/secret.txt /site/../../"+b+"/private/secret.txt"))
 	})
 
 	t.Run("starve B of CPU, memory or disk", func(t *testing.T) {
@@ -210,9 +210,6 @@ func TestRedTeam(t *testing.T) {
 		}
 		if got := phpShell(t, a, "sudo -n id -u"); got == "0" {
 			t.Error("sudo in A's PHP reached root")
-		}
-		if got := shell(`su -c "id -u" root </dev/null`); lastLine(got) == "0" {
-			t.Error("su in A's shell reached root")
 		}
 		if got := mustRun(t, "/usr/sbin/sysctl", "-n", "user.max_user_namespaces"); got != "0" {
 			t.Errorf("user.max_user_namespaces = %s", got)
@@ -276,11 +273,6 @@ func containsWord(words []string, w string) bool {
 		}
 	}
 	return false
-}
-
-func lastLine(s string) string {
-	lines := strings.Split(strings.TrimSpace(s), "\n")
-	return strings.TrimSpace(lines[len(lines)-1])
 }
 
 // subIDOverlaps returns the entries of a subuid or subgid file whose range meets [lo, hi].

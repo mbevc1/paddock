@@ -108,7 +108,6 @@ check "front certificate $POC_CERT exists" test -s "$POC_CERT"
 
 
 getent group paddock-sftp >/dev/null || groupadd -r paddock-sftp
-getent group paddock-shell >/dev/null || groupadd -r paddock-shell
 install_unit_templates
 pass "unit templates installed"
 
