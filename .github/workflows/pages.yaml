@@ -2,13 +2,10 @@ name: Pages
 
 # A Pages deployment replaces the whole site, so every run publishes the landing page and the
 # dnf repository together. release.yaml calls this after each release.
+# Pages keeps the first deployment of a commit and ignores later ones, so nothing else deploys
+# automatically: a push to main would deploy a commit that a release may tag next. A manual run
+# has the same effect on a commit that is tagged later.
 on:
-  push:
-    branches: [main]
-    paths:
-      - pages/**
-      - docs/assets/logo/**
-      - .github/workflows/pages.yaml
   workflow_dispatch:
   workflow_call:
 
