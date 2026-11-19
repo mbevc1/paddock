@@ -67,6 +67,12 @@ func (s *Store) OpenAdminWindow(ctx context.Context, userID int64, until time.Ti
 	return affectedOne(res, err, fmt.Sprintf("admin %d", userID))
 }
 
+// CloseAdminWindow ends an admin's window.
+func (s *Store) CloseAdminWindow(ctx context.Context, userID int64) error {
+	res, err := s.db.ExecContext(ctx, `UPDATE admins SET window_until = NULL WHERE user_id = ?`, userID)
+	return affectedOne(res, err, fmt.Sprintf("admin %d", userID))
+}
+
 // ResetAdminTOTP replaces an admin's secret and closes any open window.
 func (s *Store) ResetAdminTOTP(ctx context.Context, userID int64, secret []byte) error {
 	res, err := s.db.ExecContext(ctx, `UPDATE admins SET totp_secret = ?, last_used_step = 0, window_until = NULL

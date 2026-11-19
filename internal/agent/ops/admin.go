@@ -33,6 +33,12 @@ type TOTPVerifyArgs struct {
 	Code   string `json:"code"`
 }
 
+// AdminWindowArgs are the arguments of admin.window.open.
+type AdminWindowArgs struct {
+	UserID  int64 `json:"user_id"`
+	Seconds int64 `json:"seconds"`
+}
+
 // TOTPEnrollment carries a new secret's URI back to the root CLI, once.
 type TOTPEnrollment struct {
 	TOTPURI string `json:"totp_uri"`
@@ -43,7 +49,8 @@ type TOTPVerified struct {
 	WindowUntil time.Time `json:"window_until"`
 }
 
-// RegisterAdmin adds admin.add and admin.totp.reset (root CLI) and admin.totp.verify (gate).
+// RegisterAdmin adds admin.add, admin.totp.reset, admin.window.open and admin.window.close
+// (root CLI) and admin.totp.verify (gate).
 func RegisterAdmin(r *agent.Registry, store *state.Store, gate *agent.TOTPGate) {
 	r.Register(agent.Op{Name: "admin.add", Class: agent.ClassRoot, Handler: func(ctx context.Context, c *agent.Call) (any, error) {
 		args, err := agent.DecodeArgs[AdminAddArgs](c)
@@ -91,6 +98,26 @@ func RegisterAdmin(r *agent.Registry, store *state.Store, gate *agent.TOTPGate) 
 		return TOTPEnrollment{TOTPURI: auth.TOTPURI(TOTPIssuer, a.Username, secret)}, nil
 	}})
 
+	r.Register(agent.Op{Name: "admin.window.open", Class: agent.ClassRoot, Handler: func(ctx context.Context, c *agent.Call) (any, error) {
+		args, err := agent.DecodeArgs[AdminWindowArgs](c)
+		if err != nil {
+			return nil, err
+		}
+		until, err := gate.OpenWindow(ctx, args.UserID, time.Duration(args.Seconds)*time.Second)
+		if err != nil {
+			return nil, notFoundAdmin(err, args.UserID)
+		}
+		return TOTPVerified{WindowUntil: until.UTC()}, nil
+	}})
+
+	r.Register(agent.Op{Name: "admin.window.close", Class: agent.ClassRoot, Handler: func(ctx context.Context, c *agent.Call) (any, error) {
+		args, err := agent.DecodeArgs[AdminUserArgs](c)
+		if err != nil {
+			return nil, err
+		}
+		return nil, notFoundAdmin(gate.CloseWindow(ctx, args.UserID), args.UserID)
+	}})
+
 	r.Register(agent.Op{Name: "admin.totp.verify", Class: agent.ClassGate, Handler: func(ctx context.Context, c *agent.Call) (any, error) {
 		args, err := agent.DecodeArgs[TOTPVerifyArgs](c)
 		if err != nil {
@@ -102,4 +129,13 @@ func RegisterAdmin(r *agent.Registry, store *state.Store, gate *agent.TOTPGate) 
 		}
 		return TOTPVerified{WindowUntil: until.UTC()}, nil
 	}})
+}
+
+// notFoundAdmin reports an unknown admin to root as not found; the gate itself calls one
+// forbidden, which is the right answer for the web process.
+func notFoundAdmin(err error, userID int64) error {
+	if e := api.AsError(err); e != nil && e.Code == api.CodeForbidden {
+		return api.Errorf(api.CodeNotFound, "admin %d not found", userID)
+	}
+	return err
 }

@@ -98,6 +98,8 @@ Run these as root on the server:
 | `paddock admin totp-reset NAME` | Give an admin a new TOTP secret, for example after losing the phone. |
 | `paddock admin login-totp-off NAME` | Let an admin log in with the password alone. Admin actions still ask for a TOTP code, which opens a 10-minute admin window. |
 | `paddock admin login-totp-on NAME` | Ask for a TOTP code at the admin's login again, and end the admin's sessions. |
+| `paddock admin unlock -for DURATION NAME` | Let an admin run admin actions without a TOTP code for up to 24 hours, for example `-for 8h`. Anyone with the admin's password can act as that admin meanwhile. |
+| `paddock admin lock NAME` | End that window early; the next admin action asks for a TOTP code. |
 | `paddock admin reset-password NAME` | Set a new password for a panel user and end their sessions. |
 | `paddock reconcile -all` | Re-render and re-apply every vhost from Paddock's state. |
 | `paddock version` | Print the installed version. |

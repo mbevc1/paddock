@@ -13,6 +13,9 @@ import (
 // AdminWindow is how long an admin may run admin operations after a verified code.
 const AdminWindow = 10 * time.Minute
 
+// MaxRootWindow caps an admin window that root opens without a code.
+const MaxRootWindow = 24 * time.Hour
+
 // TOTPGate authorizes admin operations against the admins in state.db. A user is an admin
 // only if state.db says so, whatever role the web process claims.
 type TOTPGate struct {
@@ -60,6 +63,26 @@ func (g *TOTPGate) Verify(ctx context.Context, userID int64, code string) (time.
 		return time.Time{}, err
 	}
 	return until, nil
+}
+
+// OpenWindow opens an admin's window for d without a code, on root's authority.
+func (g *TOTPGate) OpenWindow(ctx context.Context, userID int64, d time.Duration) (time.Time, error) {
+	if d <= 0 || d > MaxRootWindow {
+		return time.Time{}, api.Errorf(api.CodeInvalidArgument, "window must be longer than 0 and at most %s", MaxRootWindow)
+	}
+	if _, err := g.admin(ctx, userID); err != nil {
+		return time.Time{}, err
+	}
+	until := g.now().Add(d)
+	return until, g.Store.OpenAdminWindow(ctx, userID, until)
+}
+
+// CloseWindow ends an admin's window, so the next admin operation needs a code.
+func (g *TOTPGate) CloseWindow(ctx context.Context, userID int64) error {
+	if _, err := g.admin(ctx, userID); err != nil {
+		return err
+	}
+	return g.Store.CloseAdminWindow(ctx, userID)
 }
 
 // Authorize implements AdminGate: a given code must verify; without one, the admin's window

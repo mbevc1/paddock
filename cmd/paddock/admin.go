@@ -20,7 +20,7 @@ import (
 
 const agentCallTimeout = 30 * time.Minute
 
-var errAdminUsage = errors.New("usage: paddock admin add|totp-reset|reset-password|login-totp-off|login-totp-on USERNAME")
+var errAdminUsage = errors.New("usage: paddock admin add|totp-reset|reset-password|login-totp-off|login-totp-on|lock USERNAME\n       paddock admin unlock -for DURATION USERNAME")
 
 // adminEnv is what the admin commands touch; tests replace the web user and chown.
 type adminEnv struct {
@@ -39,6 +39,7 @@ func runAdmin(ctx context.Context, args []string, stdout, stderr io.Writer) erro
 	fs.SetOutput(stderr)
 	socket := fs.String("socket", agent.SocketPath, "agent socket path")
 	webDir := fs.String("web-dir", setup.WebDir, "directory holding web.db")
+	window := fs.Duration("for", 0, "unlock only: how long the admin may act without a TOTP code (at most 24h)")
 	if err := fs.Parse(args[1:]); err != nil {
 		return err
 	}
@@ -65,6 +66,10 @@ func runAdmin(ctx context.Context, args []string, stdout, stderr io.Writer) erro
 		return env.setLoginTOTP(ctx, username, false)
 	case "login-totp-on":
 		return env.setLoginTOTP(ctx, username, true)
+	case "unlock":
+		return env.unlock(ctx, username, *window)
+	case "lock":
+		return env.lock(ctx, username)
 	}
 	return errAdminUsage
 }
@@ -126,7 +131,8 @@ func (e adminEnv) add(ctx context.Context, username string) error {
 	})
 }
 
-func (e adminEnv) totpReset(ctx context.Context, username string) error {
+// adminID looks an admin's user ID up in web.db; why says what an owner should do instead.
+func (e adminEnv) adminID(ctx context.Context, username, why string) (int64, error) {
 	var id int64
 	err := e.withWebStore(ctx, func(s *store.Store) error {
 		u, err := s.GetUserByName(ctx, username)
@@ -134,11 +140,16 @@ func (e adminEnv) totpReset(ctx context.Context, username string) error {
 			return err
 		}
 		if u.Role != store.RoleAdmin {
-			return fmt.Errorf("%s is not an admin; owners reset their second factor in the panel", username)
+			return fmt.Errorf("%s is not an admin; %s", username, why)
 		}
 		id = u.ID
 		return nil
 	})
+	return id, err
+}
+
+func (e adminEnv) totpReset(ctx context.Context, username string) error {
+	id, err := e.adminID(ctx, username, "owners reset their second factor in the panel")
 	if err != nil {
 		return err
 	}
@@ -147,6 +158,38 @@ func (e adminEnv) totpReset(ctx context.Context, username string) error {
 		return err
 	}
 	_, err = fmt.Fprintf(e.out, "Add this TOTP secret to the admin's authenticator app. It is shown only once:\n%s\n", enrolled.TOTPURI)
+	return err
+}
+
+// unlock lets an admin run admin operations without a TOTP code for d, on root's authority.
+// The agent caps d at agent.MaxRootWindow and records the call in its audit log.
+func (e adminEnv) unlock(ctx context.Context, username string, d time.Duration) error {
+	if d <= 0 || d > agent.MaxRootWindow {
+		return fmt.Errorf("-for must be longer than 0 and at most %s", agent.MaxRootWindow)
+	}
+	id, err := e.adminID(ctx, username, "owners have no admin window")
+	if err != nil {
+		return err
+	}
+	var v ops.TOTPVerified
+	if err := e.agentCall(ctx, "admin.window.open", ops.AdminWindowArgs{UserID: id, Seconds: int64(d / time.Second)}, &v); err != nil {
+		return err
+	}
+	_, err = fmt.Fprintf(e.out, "%s may run admin actions without a TOTP code until %s. End it early with: paddock admin lock %s\n",
+		username, v.WindowUntil.Local().Format("2006-01-02 15:04 MST"), username)
+	return err
+}
+
+// lock closes an admin's window, so the next admin action asks for a TOTP code.
+func (e adminEnv) lock(ctx context.Context, username string) error {
+	id, err := e.adminID(ctx, username, "owners have no admin window")
+	if err != nil {
+		return err
+	}
+	if err := e.agentCall(ctx, "admin.window.close", ops.AdminUserArgs{UserID: id}, nil); err != nil {
+		return err
+	}
+	_, err = fmt.Fprintf(e.out, "%s's admin window is closed; the next admin action asks for a TOTP code.\n", username)
 	return err
 }
 
