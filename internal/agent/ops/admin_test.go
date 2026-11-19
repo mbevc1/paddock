@@ -226,3 +226,50 @@ func TestAdminTOTPGate(t *testing.T) {
 		}
 	}
 }
+
+func TestRootOpensAndClosesAdminWindow(t *testing.T) {
+	ctx := context.Background()
+	e := newEnv(t)
+	root := e.client(0)
+	web := e.client(webUID)
+	if err := root.Call(ctx, "admin.add", nil, "", AdminAddArgs{UserID: 1, Username: "admin"}, nil); err != nil {
+		t.Fatal(err)
+	}
+	admin := &api.Actor{UserID: 1, Role: api.RoleAdmin}
+	n := 0
+	create := func() error {
+		n++
+		return web.Call(ctx, "owner.create", admin, "", ownerArgs("owner "+string(rune('a'+n))), nil)
+	}
+	hours := func(h float64) AdminWindowArgs {
+		return AdminWindowArgs{UserID: 1, Seconds: int64(h * 3600)}
+	}
+
+	wantCode(t, web.Call(ctx, "admin.window.open", nil, "", hours(8), nil), api.CodeForbidden)
+	wantCode(t, root.Call(ctx, "admin.window.open", nil, "", hours(24.01), nil), api.CodeInvalidArgument)
+	wantCode(t, root.Call(ctx, "admin.window.open", nil, "", hours(0), nil), api.CodeInvalidArgument)
+	wantCode(t, root.Call(ctx, "admin.window.open", nil, "", AdminWindowArgs{UserID: 9, Seconds: 60}, nil), api.CodeNotFound)
+
+	var v TOTPVerified
+	if err := root.Call(ctx, "admin.window.open", nil, "", hours(8), &v); err != nil {
+		t.Fatal(err)
+	}
+	if !v.WindowUntil.Equal(e.now.Add(8 * time.Hour)) {
+		t.Errorf("window until %v", v.WindowUntil)
+	}
+	e.now = e.now.Add(8*time.Hour - time.Minute)
+	if err := create(); err != nil {
+		t.Errorf("inside a root-opened window: %v", err)
+	}
+	e.now = e.now.Add(2 * time.Minute)
+	wantCode(t, create(), api.CodeTOTPRequired)
+
+	if err := root.Call(ctx, "admin.window.open", nil, "", hours(1), nil); err != nil {
+		t.Fatal(err)
+	}
+	wantCode(t, web.Call(ctx, "admin.window.close", nil, "", AdminUserArgs{UserID: 1}, nil), api.CodeForbidden)
+	if err := root.Call(ctx, "admin.window.close", nil, "", AdminUserArgs{UserID: 1}, nil); err != nil {
+		t.Fatal(err)
+	}
+	wantCode(t, create(), api.CodeTOTPRequired)
+}

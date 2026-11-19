@@ -157,6 +157,32 @@ func TestLoginTOTPOffAndOn(t *testing.T) {
 	}
 }
 
+func TestUnlockChecksBeforeCallingTheAgent(t *testing.T) {
+	ctx := context.Background()
+	env, _, _ := testAdminEnv(t)
+	s, err := store.Open(ctx, filepath.Join(env.webDir, "web.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.CreateUser(ctx, "alice", store.RoleOwner, 3, "hash"); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Close(); err != nil {
+		t.Fatal(err)
+	}
+	for _, d := range []time.Duration{0, -time.Hour, 25 * time.Hour} {
+		if err := env.unlock(ctx, "alice", d); err == nil || !strings.Contains(err.Error(), "-for") {
+			t.Errorf("unlock -for %v: %v", d, err)
+		}
+	}
+	if err := env.unlock(ctx, "alice", time.Hour); err == nil || !strings.Contains(err.Error(), "not an admin") {
+		t.Errorf("unlock an owner: %v", err)
+	}
+	if err := env.lock(ctx, "nobody"); !errors.Is(err, store.ErrNotFound) {
+		t.Errorf("lock an unknown user: %v", err)
+	}
+}
+
 func TestAdminAddRollsBackWithoutAgent(t *testing.T) {
 	ctx := context.Background()
 	env, _, _ := testAdminEnv(t)

@@ -55,7 +55,7 @@ Newline-delimited JSON over the Unix socket, one request and one response per li
 ```
 
 - `actor` is recorded in the audit log. The agent re-checks ownership and limits itself; it never trusts `role` or `owner_id` for authorization beyond scoping.
-- Operations marked **admin** require `admin_totp`. The agent verifies it against the admin's TOTP secret in `state.db`, rejects reuse of a code, and then opens a 10-minute admin window for that admin user ID.
+- Operations marked **admin** require `admin_totp`. The agent verifies it against the admin's TOTP secret in `state.db`, rejects reuse of a code, and then opens a 10-minute admin window for that admin user ID. Root can also open a window of up to 24 hours without a code (`paddock admin unlock -for DURATION NAME`, root operation `admin.window.open`) and close one early (`paddock admin lock NAME`); both go to the audit log. While such a window is open, anyone holding the admin's password, or a compromised web process, can act as that admin.
 - **Admin identity lives in the agent.** `state.db` holds the list of admin user IDs and their TOTP secrets; `web.db` never stores an admin's TOTP secret. Admins are created, and their TOTP reset, only with root CLI commands (`paddock admin add`, `paddock admin totp-reset`). A web process that marks an owner as admin in `web.db` gains nothing, because the agent does not know that user as an admin.
 - Operations marked **gate** verify a credential and open a window; they are callable by the web process for any user ID.
 - Operations marked **system** are callable only by the web process itself, not on behalf of a user.
