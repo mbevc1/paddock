@@ -259,3 +259,41 @@ func (b *syncBuffer) String() string {
 	defer b.mu.Unlock()
 	return b.buf.String()
 }
+
+func TestObtainedCertificateIsLoggedAndServed(t *testing.T) {
+	ca := newIssuingCA(t)
+	var logs syncBuffer
+	m := New(Config{Hostname: "panel.example.com", CacheDir: t.TempDir(), DirectoryURL: ca.directory(),
+		SelfSigned: selfPair(t, time.Now()), Log: slog.New(slog.NewTextHandler(&logs, nil))})
+	m.Prefetch()
+	waitFetched(t, m)
+	if !m.Trusted() {
+		t.Fatalf("no certificate obtained; log:\n%s", logs.String())
+	}
+	cert, err := m.GetCertificate(&tls.ClientHelloInfo{ServerName: "panel.example.com",
+		SignatureSchemes: []tls.SignatureScheme{tls.ECDSAWithP256AndSHA256}, SupportedCurves: []tls.CurveID{tls.CurveP256},
+		CipherSuites: []uint16{tls.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256}})
+	if err != nil || cert.Leaf == nil || cert.Leaf.Issuer.CommonName != "Fake CA" {
+		t.Fatalf("served %+v, %v; want the CA's certificate", cert.Leaf, err)
+	}
+	for _, want := range []string{"msg=\"requesting the panel certificate\"", "msg=\"obtained the panel certificate\"",
+		"not_after=" + cert.Leaf.NotAfter.UTC().Format(time.RFC3339)} {
+		if !strings.Contains(logs.String(), want) {
+			t.Errorf("log lacks %s:\n%s", want, logs.String())
+		}
+	}
+}
+
+// autocert reports a failed HTTP-01 challenge as "no viable challenge type found", so the CA's
+// own reason has to come from its replies.
+func TestFailedFetchLogsTheCAReason(t *testing.T) {
+	ca := newFakeCA(t)
+	var logs syncBuffer
+	m := New(Config{Hostname: "panel.example.com", CacheDir: t.TempDir(), DirectoryURL: ca.directory(),
+		SelfSigned: selfPair(t, time.Now()), Log: slog.New(slog.NewTextHandler(&logs, nil))})
+	m.Prefetch()
+	waitFetched(t, m)
+	if want := "ca_error=\"urn:ietf:params:acme:error:unauthorized: " + caProblem + "\""; !strings.Contains(logs.String(), want) {
+		t.Errorf("log lacks %s:\n%s", want, logs.String())
+	}
+}

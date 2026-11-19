@@ -69,3 +69,17 @@ func TestHTTPOnlyTransport(t *testing.T) {
 		}
 	}
 }
+
+func TestHTTP01Failure(t *testing.T) {
+	for body, want := range map[string]string{
+		`{"type":"http-01","status":"invalid","error":{"type":"urn:x:unauthorized","detail":"503"}}`:                    "urn:x:unauthorized: 503",
+		`{"status":"invalid","challenges":[{"type":"http-01","error":{"type":"urn:x:connection","detail":"timeout"}}]}`: "urn:x:connection: timeout",
+		`{"status":"invalid","challenges":[{"type":"tls-alpn-01","error":{"type":"urn:x:tls","detail":"no ALPN"}}]}`:    "",
+		`{"status":"pending","challenges":[{"type":"http-01","status":"pending"}]}`:                                     "",
+		`not json`: "",
+	} {
+		if got := http01Failure([]byte(body)); got != want {
+			t.Errorf("http01Failure(%s) = %q, want %q", body, got, want)
+		}
+	}
+}
