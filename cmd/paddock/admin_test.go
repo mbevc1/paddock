@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strings"
 	"testing"
 	"time"
 
@@ -83,6 +84,76 @@ func TestResetPasswordEndsSessions(t *testing.T) {
 	}
 	if err := env.resetPassword(ctx, "nobody"); !errors.Is(err, store.ErrNotFound) {
 		t.Errorf("unknown user: %v", err)
+	}
+}
+
+func TestLoginTOTPOffAndOn(t *testing.T) {
+	ctx := context.Background()
+	env, out, _ := testAdminEnv(t)
+	s, err := store.Open(ctx, filepath.Join(env.webDir, "web.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	admin, err := s.CreateUser(ctx, "root-admin", store.RoleAdmin, 0, "hash")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.CreateUser(ctx, "alice", store.RoleOwner, 3, "hash"); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Close(); err != nil {
+		t.Fatal(err)
+	}
+	loginTOTP := func() bool {
+		t.Helper()
+		s, err := store.Open(ctx, filepath.Join(env.webDir, "web.db"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer s.Close()
+		u, err := s.GetUser(ctx, admin.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return u.AdminLoginTOTP
+	}
+
+	if err := env.setLoginTOTP(ctx, "root-admin", false); err != nil {
+		t.Fatal(err)
+	}
+	if loginTOTP() {
+		t.Error("login-totp-off left login TOTP on")
+	}
+	now := time.Now()
+	s, err = store.Open(ctx, filepath.Join(env.webDir, "web.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.CreateSession(ctx, store.Session{TokenHash: "a", UserID: admin.ID, CreatedAt: now, LastSeen: now, AuthAt: now, CSRFToken: "c"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := env.setLoginTOTP(ctx, "root-admin", true); err != nil {
+		t.Fatal(err)
+	}
+	if !loginTOTP() {
+		t.Error("login-totp-on left login TOTP off")
+	}
+	s, err = store.Open(ctx, filepath.Join(env.webDir, "web.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	if _, err := s.GetSession(ctx, "a"); !errors.Is(err, store.ErrNotFound) {
+		t.Error("a session opened without TOTP survived login-totp-on")
+	}
+	if !strings.Contains(out.String(), "root-admin") {
+		t.Errorf("output = %q", out.String())
+	}
+	if err := env.setLoginTOTP(ctx, "alice", false); err == nil || !strings.Contains(err.Error(), "not an admin") {
+		t.Errorf("owner: %v", err)
 	}
 }
 

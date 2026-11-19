@@ -78,6 +78,31 @@ func TestUsers(t *testing.T) {
 	}
 }
 
+func TestAdminLoginTOTP(t *testing.T) {
+	ctx := context.Background()
+	s := openTemp(t)
+	admin, err := s.CreateUser(ctx, "root-admin", RoleAdmin, 0, "hash")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !admin.AdminLoginTOTP {
+		t.Error("a new admin signs in without TOTP")
+	}
+	if err := s.SetAdminLoginTOTP(ctx, admin.ID, false); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := s.GetUser(ctx, admin.ID); got.AdminLoginTOTP {
+		t.Error("login TOTP still on after turning it off")
+	}
+	owner, err := s.CreateUser(ctx, "alice", RoleOwner, 3, "hash")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SetAdminLoginTOTP(ctx, owner.ID, false); !errors.Is(err, ErrNotFound) {
+		t.Errorf("turning off an owner's admin login TOTP: %v", err)
+	}
+}
+
 func TestSessionsAndNotifications(t *testing.T) {
 	ctx := context.Background()
 	s := openTemp(t)

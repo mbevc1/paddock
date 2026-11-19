@@ -28,18 +28,20 @@ type User struct {
 	TOTPSecret   []byte
 	TOTPLastStep int64
 	TOTPRequired bool
-	Disabled     bool
-	CreatedAt    time.Time
+	// AdminLoginTOTP is whether an admin's login asks for a TOTP code; always true for owners.
+	AdminLoginTOTP bool
+	Disabled       bool
+	CreatedAt      time.Time
 }
 
-const userColumns = `id, username, role, owner_id, password_hash, totp_secret, totp_last_step, totp_required, disabled, created_at`
+const userColumns = `id, username, role, owner_id, password_hash, totp_secret, totp_last_step, totp_required, admin_login_totp, disabled, created_at`
 
 func scanUser(row interface{ Scan(...any) error }) (User, error) {
 	var u User
 	var owner sql.NullInt64
 	var created sql.NullString
 	if err := row.Scan(&u.ID, &u.Username, &u.Role, &owner, &u.PasswordHash, &u.TOTPSecret, &u.TOTPLastStep,
-		&u.TOTPRequired, &u.Disabled, &created); err != nil {
+		&u.TOTPRequired, &u.AdminLoginTOTP, &u.Disabled, &created); err != nil {
 		return User{}, err
 	}
 	u.OwnerID = owner.Int64
@@ -132,6 +134,12 @@ func (s *Store) UseTOTPStep(ctx context.Context, id, step int64) (bool, error) {
 func (s *Store) SetTOTPRequired(ctx context.Context, id int64, required bool) error {
 	res, err := s.db.ExecContext(ctx, `UPDATE users SET totp_required = ? WHERE id = ?`, required, id)
 	return affectedOne(res, err, fmt.Sprintf("user %d", id))
+}
+
+// SetAdminLoginTOTP sets whether an admin's login asks for a TOTP code.
+func (s *Store) SetAdminLoginTOTP(ctx context.Context, id int64, on bool) error {
+	res, err := s.db.ExecContext(ctx, `UPDATE users SET admin_login_totp = ? WHERE id = ? AND role = 'admin'`, on, id)
+	return affectedOne(res, err, fmt.Sprintf("admin user %d", id))
 }
 
 // SetDisabled enables or disables a user.
