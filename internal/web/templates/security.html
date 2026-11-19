@@ -29,11 +29,11 @@
   {{else if $d.TOTPEnrolled}}
   <p>An authenticator is set up. {{$d.RecoveryLeft}} recovery codes left.</p>
   <form method="post" action="/security/recovery" class="inline">
-    <input type="hidden" name="csrf" value="{{.CSRF}}"><button type="submit">New recovery codes</button>
+    <input type="hidden" name="csrf" value="{{.CSRF}}"><button type="submit" class="secondary">New recovery codes</button>
   </form>
   {{if not $d.TOTPRequired}}
   <form method="post" action="/security/totp/disable" class="inline">
-    <input type="hidden" name="csrf" value="{{.CSRF}}"><button type="submit">Turn off</button>
+    <input type="hidden" name="csrf" value="{{.CSRF}}"><button type="submit" class="danger">Turn off</button>
   </form>
   {{end}}
   {{else if $d.PendingURI}}

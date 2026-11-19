@@ -1,7 +1,7 @@
 {{define "content"}}
 {{$v := .Data.Vhost}}{{$p := .}}
 <h1>{{$v.Primary}}</h1>
-<p>{{$v.ID}} · PHP {{$v.PHPVersion}} · {{$v.Status}}</p>
+<p>{{$v.ID}} · PHP {{$v.PHPVersion}} · <span class="badge {{$v.Status}}">{{$v.Status}}</span></p>
 
 {{with .Data.Secret}}
 <section class="secret">
@@ -35,10 +35,10 @@
 
 <section>
   <h2>Databases</h2>
-  <ul>{{range $v.Databases}}<li><code>{{.}}</code>
-    {{if $p.Can "db.manage"}}<form method="post" action="/vhosts/{{$v.ID}}/databases/{{suffix . $v.ID}}/delete" class="inline">
-      <input type="hidden" name="csrf" value="{{$p.CSRF}}"><button type="submit">Delete</button></form>{{end}}
-  </li>{{else}}<li>None.</li>{{end}}</ul>
+  <ul class="items">{{range $v.Databases}}<li><code>{{.}}</code>
+    {{if $p.Can "db.manage"}}<span class="actions"><form method="post" action="/vhosts/{{$v.ID}}/databases/{{suffix . $v.ID}}/delete" class="inline">
+      <input type="hidden" name="csrf" value="{{$p.CSRF}}"><button type="submit" class="danger small">Delete</button></form></span>{{end}}
+  </li>{{else}}<li class="muted">None.</li>{{end}}</ul>
   {{if .Can "db.manage"}}
   <form method="post" action="/vhosts/{{$v.ID}}/databases" class="inline">
     <input type="hidden" name="csrf" value="{{.CSRF}}">
@@ -47,18 +47,18 @@
   </form>
   <form method="post" action="/vhosts/{{$v.ID}}/dbpassword" class="inline">
     <input type="hidden" name="csrf" value="{{.CSRF}}">
-    <button type="submit">New password for {{$v.ID}}</button>
+    <button type="submit" class="secondary">New password for {{$v.ID}}</button>
   </form>
   {{end}}
   <h3>Extra DB users</h3>
-  <ul>{{range $v.DBUsers}}<li><code>{{.Name}}</code> ({{.Grants}})
-    {{if $p.Can "db.manage"}}
+  <ul class="items">{{range $v.DBUsers}}<li><code>{{.Name}}</code> <span class="badge">{{.Grants}}</span>
+    {{if $p.Can "db.manage"}}<span class="actions">
     <form method="post" action="/vhosts/{{$v.ID}}/dbusers/{{suffix .Name $v.ID}}/password" class="inline">
-      <input type="hidden" name="csrf" value="{{$p.CSRF}}"><button type="submit">New password</button></form>
+      <input type="hidden" name="csrf" value="{{$p.CSRF}}"><button type="submit" class="secondary small">New password</button></form>
     <form method="post" action="/vhosts/{{$v.ID}}/dbusers/{{suffix .Name $v.ID}}/delete" class="inline">
-      <input type="hidden" name="csrf" value="{{$p.CSRF}}"><button type="submit">Delete</button></form>
-    {{end}}
-  </li>{{else}}<li>None.</li>{{end}}</ul>
+      <input type="hidden" name="csrf" value="{{$p.CSRF}}"><button type="submit" class="danger small">Delete</button></form>
+    </span>{{end}}
+  </li>{{else}}<li class="muted">None.</li>{{end}}</ul>
   {{if .Can "db.manage"}}
   <form method="post" action="/vhosts/{{$v.ID}}/dbusers" class="inline">
     <input type="hidden" name="csrf" value="{{.CSRF}}">
@@ -74,11 +74,11 @@
   <p>Upload files over SFTP; SCP clients work too, since they speak SFTP. There is no shell access.</p>
   {{with $v.Access}}
   <p>Account <code>{{.Account}}</code>.</p>
-  <ul>{{range .Keys}}<li><code>{{.Fingerprint}}</code>
-    {{if $p.Can "access.manage"}}<form method="post" action="/vhosts/{{$v.ID}}/keys/remove" class="inline">
+  <ul class="items">{{range .Keys}}<li><code>{{.Fingerprint}}</code>
+    {{if $p.Can "access.manage"}}<span class="actions"><form method="post" action="/vhosts/{{$v.ID}}/keys/remove" class="inline">
       <input type="hidden" name="csrf" value="{{$p.CSRF}}"><input type="hidden" name="key" value="{{.PublicKey}}">
-      <button type="submit">Remove</button></form>{{end}}
-  </li>{{else}}<li>No keys.</li>{{end}}</ul>
+      <button type="submit" class="danger small">Remove</button></form></span>{{end}}
+  </li>{{else}}<li class="muted">No keys.</li>{{end}}</ul>
   {{if $p.Can "access.manage"}}
   <form method="post" action="/vhosts/{{$v.ID}}/keys" class="stack">
     <input type="hidden" name="csrf" value="{{$p.CSRF}}">
@@ -86,7 +86,7 @@
     <button type="submit">Add key</button>
   </form>
   <form method="post" action="/vhosts/{{$v.ID}}/access/delete" class="inline">
-    <input type="hidden" name="csrf" value="{{$p.CSRF}}"><button type="submit">Remove account</button>
+    <input type="hidden" name="csrf" value="{{$p.CSRF}}"><button type="submit" class="danger">Remove account</button>
   </form>
   {{end}}
   {{else}}

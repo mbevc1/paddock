@@ -13,7 +13,7 @@ or open an owner and act as them to work on their vhosts.</p>
   <section>
     <h2>Vhosts</h2>
     {{if .Data.Vhosts}}
-    <ul>{{range .Data.Vhosts}}<li><a href="/vhosts/{{.ID}}">{{.Primary}}</a> · PHP {{.PHPVersion}} · {{.Status}}</li>{{end}}</ul>
+    <ul class="items">{{range .Data.Vhosts}}<li><a href="/vhosts/{{.ID}}">{{.Primary}}</a> <span class="muted">PHP {{.PHPVersion}}</span> <span class="badge {{.Status}}">{{.Status}}</span></li>{{end}}</ul>
     {{else}}<p>No vhosts yet.</p>{{end}}
     {{if .Can "vhost.manage"}}<p><a class="button" href="/vhosts/new">New vhost</a></p>{{end}}
   </section>
