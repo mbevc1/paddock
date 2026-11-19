@@ -65,7 +65,7 @@ Bootstrap is safe to rerun: it changes only what differs and prints no secrets a
 ## First steps
 
 1. **Open the panel** at `https://<hostname>:8443/`. Until the panel has a trusted certificate, compare the certificate's SHA-256 fingerprint with the one bootstrap printed.
-2. **Log in as the admin** with the printed password. Add the printed TOTP URI to an authenticator app: admin actions ask for a code from it.
+2. **Log in as the admin** with the printed password and a code from the printed TOTP URI, added to an authenticator app first. Admin login always asks for that code, and admin actions ask for it again. If the URI is lost, `paddock admin totp-reset` gives a new one.
 3. **Install PHP** under Admin → PHP, for example 8.3 and 8.4. New vhosts default to 8.3.
 4. **Create an owner** under Admin → Owners. The panel shows the owner's password once; pass it on securely. Set the owner's limits there, and require two-factor sign-in if you want it.
 5. **As the owner,** change the password and set up two-factor sign-in under Security, then create a vhost under Vhosts with its domain, PHP version and, optionally, an empty database.
