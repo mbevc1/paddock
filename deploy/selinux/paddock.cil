@@ -7,3 +7,6 @@
 ; Vhost units see a tmpfs over /srv/www, which systemd labels like /srv/www; it creates and
 ; mounts on each vhost's directory there.
 (allow init_t httpd_sys_rw_content_t (dir (write add_name create mounton)))
+; mod_md reaches Let's Encrypt on 443 and the front proxies each vhost's backend on 127.x:81,
+; both HTTP ports; without this the host's booleans decide, and they may be off.
+(allow httpd_t http_port_t (tcp_socket (name_connect)))
