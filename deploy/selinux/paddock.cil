@@ -4,3 +4,6 @@
 ; connectto is checked against the listening process, and paddock-web runs as
 ; unconfined_service_t until T3.4 gives it a domain of its own.
 (allow httpd_t unconfined_service_t (unix_stream_socket (connectto)))
+; Vhost units see a tmpfs over /srv/www, which systemd labels like /srv/www; it creates and
+; mounts on each vhost's directory there.
+(allow init_t httpd_sys_rw_content_t (dir (write add_name create mounton)))
