@@ -3,7 +3,6 @@ package ops
 import (
 	"context"
 	"errors"
-	"io/fs"
 	"strconv"
 	"strings"
 
@@ -21,19 +20,16 @@ const (
 	usermod  = "/usr/sbin/usermod"
 	chpasswd = "/usr/sbin/chpasswd" // #nosec G101 -- a program path, not a credential.
 	pkill    = "/usr/bin/pkill"
-	cp       = "/usr/bin/cp"
-	mknod    = "/usr/bin/mknod"
 	// pkillNoMatch is pkill's exit code when no process matched.
 	pkillNoMatch = 1
 )
 
-// AccessCreateArgs are the arguments of access.create. The account is named after the vhost:
-// sshd chroots it to /srv/jail/<account> (§7.5), so each vhost has at most one.
+// AccessCreateArgs are the arguments of access.create. The SFTP account is named after the
+// vhost: sshd chroots it to /srv/jail/<account> (§7.5), so each vhost has at most one.
 type AccessCreateArgs struct {
-	VhostID  string           `json:"vhost_id"`
-	Kind     state.AccessKind `json:"kind"`
-	Password string           `json:"password,omitempty"`
-	Keys     []string         `json:"keys,omitempty"`
+	VhostID  string   `json:"vhost_id"`
+	Password string   `json:"password,omitempty"`
+	Keys     []string `json:"keys,omitempty"`
 }
 
 // AccessKeyArgs are the arguments of access.key.add and access.key.remove.
@@ -46,20 +42,6 @@ type AccessKeyArgs struct {
 type AccessKeyResult struct {
 	Fingerprint string `json:"fingerprint"`
 }
-
-// shellJailDirs are created in a shell jail, root-owned; tmp is world-writable and sticky.
-var shellJailDirs = []struct {
-	rel  string
-	mode fs.FileMode
-}{
-	{"usr", 0o755}, {"opt", 0o755}, {"opt/remi", 0o755}, {"opt/paddock", 0o755}, {"opt/paddock/bin", 0o755},
-	{"etc", 0o755}, {"dev", 0o755}, {"proc", 0o555}, {"tmp", 0o777 | fs.ModeSticky},
-}
-
-var shellJailLinks = [][2]string{{"bin", "usr/bin"}, {"sbin", "usr/sbin"}, {"lib", "usr/lib"}, {"lib64", "usr/lib64"}}
-
-// shellJailDevices are the device nodes of a shell jail: name, major, minor.
-var shellJailDevices = [][3]string{{"null", "1", "3"}, {"zero", "1", "5"}, {"urandom", "1", "9"}, {"tty", "5", "0"}}
 
 func registerAccess(r *agent.Registry, store *state.Store, h *Host) {
 	r.Register(agent.Op{Name: "access.create", Class: agent.ClassOwner, Long: true,
@@ -131,9 +113,6 @@ func writeAuthorizedKeys(ctx context.Context, store *state.Store, h *Host, v ren
 }
 
 func createAccess(ctx context.Context, store *state.Store, h *Host, actor *api.Actor, args AccessCreateArgs) error {
-	if args.Kind != state.AccessSFTP && args.Kind != state.AccessShell {
-		return api.Errorf(api.CodeInvalidArgument, "kind must be sftp or shell")
-	}
 	if args.Password == "" && len(args.Keys) == 0 {
 		return api.Errorf(api.CodeInvalidArgument, "give a password, keys, or both")
 	}
@@ -161,7 +140,7 @@ func createAccess(ctx context.Context, store *state.Store, h *Host, actor *api.A
 	if err != nil {
 		return err
 	}
-	if err := store.CreateAccessAccount(ctx, sv.N, sv.ID, args.Kind); err != nil {
+	if err := store.CreateAccessAccount(ctx, sv.N, sv.ID); err != nil {
 		if errors.Is(err, state.ErrConflict) {
 			return api.Errorf(api.CodeConflict, "vhost %s already has an access account", sv.ID)
 		}
@@ -190,132 +169,16 @@ func createAccess(ctx context.Context, store *state.Store, h *Host, actor *api.A
 	}
 	undo.add(func(context.Context) error { return change.Restore() })
 
-	if args.Kind == state.AccessShell {
-		if err := buildShellJail(ctx, h, undo, sv, v); err != nil {
-			return fail(err)
-		}
-	}
-
-	shell, group := "/sbin/nologin", "paddock-sftp"
-	if args.Kind == state.AccessShell {
-		shell, group = "/bin/bash", "paddock-shell"
-	}
 	undo.add(func(ctx context.Context) error {
 		return h.run(ctx, usermod, "-s", "/sbin/nologin", "-G", "", "-L", sv.ID)
 	})
-	if err := h.run(ctx, usermod, "-s", shell, "-G", group, sv.ID); err != nil {
+	if err := h.run(ctx, usermod, "-s", "/sbin/nologin", "-G", "paddock-sftp", sv.ID); err != nil {
 		return fail(h.applyFailed("enabling login for "+sv.ID, err))
 	}
 	if args.Password != "" {
 		_, err := h.Run.Run(ctx, []string{chpasswd}, system.Opts{Stdin: strings.NewReader(sv.ID + ":" + args.Password + "\n")})
 		if err != nil {
 			return fail(h.applyFailed("setting the password of "+sv.ID, err))
-		}
-	}
-	return nil
-}
-
-// buildShellJail adds what a shell needs to the vhost's jail (§7.5): read-only /usr and
-// /opt/remi, a private procfs, a generated /etc, minimal /dev, and tmp.
-func buildShellJail(ctx context.Context, h *Host, undo *rollback, sv state.Vhost, v render.Vhost) error {
-	id := sv.ID
-	undo.add(func(ctx context.Context) error { return removeShellJail(ctx, h, v) })
-	for _, d := range shellJailDirs {
-		if err := h.FS.Mkdir(BaseJail, id+"/"+d.rel, d.mode, 0, 0); err != nil {
-			return h.applyFailed("creating the jail's "+d.rel, err)
-		}
-	}
-	for _, l := range shellJailLinks {
-		if err := h.FS.Symlink(BaseJail, id+"/"+l[0], l[1]); err != nil {
-			return h.applyFailed("linking the jail's "+l[0], err)
-		}
-	}
-	if err := linkJailPHP(h, sv.ID, sv.PHPVersion); err != nil {
-		return err
-	}
-	for _, dev := range shellJailDevices {
-		exists, err := h.FS.Exists(BaseJail, id+"/dev/"+dev[0])
-		if err != nil {
-			return h.applyFailed("inspecting the jail's /dev", err)
-		}
-		if !exists {
-			if err := h.run(ctx, mknod, "-m", "0666", BaseJail+"/"+id+"/dev/"+dev[0], "c", dev[1], dev[2]); err != nil {
-				return h.applyFailed("creating /dev/"+dev[0], err)
-			}
-		}
-	}
-	etc, err := render.JailEtc(v)
-	if err != nil {
-		return err
-	}
-	for _, f := range etc {
-		if _, err := h.Files.Write(f); err != nil {
-			return h.applyFailed("writing "+f.Path, err)
-		}
-	}
-	jailEtc := BaseJail + "/" + id + "/etc/"
-	if err := h.run(ctx, cp, "--archive", "--force", "/etc/resolv.conf", "/etc/ld.so.cache", "/etc/pki", jailEtc); err != nil {
-		return h.applyFailed("copying /etc files into the jail", err)
-	}
-
-	mounts, err := render.JailMounts(v, true)
-	if err != nil {
-		return err
-	}
-	for _, m := range mounts[1:] {
-		if _, err := h.Files.Write(m); err != nil {
-			return h.applyFailed("writing "+m.Path, err)
-		}
-	}
-	if err := h.run(ctx, systemctl, "daemon-reload"); err != nil {
-		return h.applyFailed("reloading systemd", err)
-	}
-	for _, m := range mounts[1:] {
-		unit := pathBase(m.Path)
-		if err := h.run(ctx, systemctl, "enable", "--now", unit); err != nil {
-			return h.applyFailed("mounting "+unit, err)
-		}
-	}
-	return nil
-}
-
-func pathBase(p string) string { return p[strings.LastIndexByte(p, '/')+1:] }
-
-// linkJailPHP points the jail's php at the vhost's PHP version.
-func linkJailPHP(h *Host, vhostID, version string) error {
-	p, err := render.NewPHP(version)
-	if err != nil {
-		return err
-	}
-	target := "/opt/remi/php" + p.Tag() + "/root/usr/bin/php"
-	if err := h.FS.Symlink(BaseJail, vhostID+"/opt/paddock/bin/php", target); err != nil {
-		return h.applyFailed("linking the jail's php", err)
-	}
-	return nil
-}
-
-// removeShellJail undoes buildShellJail and keeps the site mount the SFTP jail uses.
-func removeShellJail(ctx context.Context, h *Host, v render.Vhost) error {
-	id := v.ID()
-	mounts, err := render.JailMounts(v, true)
-	if err != nil {
-		return err
-	}
-	for i := len(mounts) - 1; i >= 1; i-- {
-		unit := pathBase(mounts[i].Path)
-		if err := h.stopUnit(ctx, unit); err != nil {
-			return err
-		}
-		if _, err := h.Files.Remove(mounts[i].Path); err != nil {
-			return h.applyFailed("removing "+mounts[i].Path, err)
-		}
-	}
-	if err := h.run(ctx, systemctl, "daemon-reload"); err != nil {
-		return h.applyFailed("reloading systemd", err)
-	}
-	for _, rel := range []string{"etc", "dev", "tmp", "opt", "usr", "proc", "bin", "sbin", "lib", "lib64"} {
-		if err := h.FS.RemoveTree(BaseJail, id+"/"+rel); err != nil {
-			return h.applyFailed("removing the jail's "+rel, err)
 		}
 	}
 	return nil
@@ -334,16 +197,12 @@ func deleteAccess(ctx context.Context, store *state.Store, h *Host, actor *api.A
 	if err != nil {
 		return err
 	}
-	v, err := renderedVhost(ctx, store, sv)
-	if err != nil {
-		return err
-	}
-	return teardownAccess(ctx, store, h, sv, v, acct)
+	return teardownAccess(ctx, store, h, sv, acct)
 }
 
-// teardownAccess locks the account, ends its SSH sessions, and removes its keys and shell
-// jail. Every step accepts work already done.
-func teardownAccess(ctx context.Context, store *state.Store, h *Host, sv state.Vhost, v render.Vhost, acct state.AccessAccount) error {
+// teardownAccess locks the account, ends its SSH sessions, and removes its keys. Every step
+// accepts work already done.
+func teardownAccess(ctx context.Context, store *state.Store, h *Host, sv state.Vhost, acct state.AccessAccount) error {
 	if err := h.run(ctx, usermod, "-s", "/sbin/nologin", "-G", "", "-L", sv.ID); err != nil {
 		return h.applyFailed("locking "+sv.ID, err)
 	}
@@ -353,11 +212,6 @@ func teardownAccess(ctx context.Context, store *state.Store, h *Host, sv state.V
 	}
 	if _, err := h.Files.Remove("/etc/ssh/authorized_keys/" + sv.ID); err != nil {
 		return h.applyFailed("removing the authorized keys of "+sv.ID, err)
-	}
-	if acct.Kind == state.AccessShell {
-		if err := removeShellJail(ctx, h, v); err != nil {
-			return err
-		}
 	}
 	return store.DeleteAccessAccount(ctx, acct.Name)
 }

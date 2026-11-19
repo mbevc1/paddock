@@ -60,11 +60,11 @@ func TestOwnerOperations(t *testing.T) {
 	owner := &api.Actor{UserID: 7, Role: api.RoleOwner, OwnerID: created.OwnerID}
 	wantCode(t, web.Call(ctx, "owner.create", owner, "", OwnerCreateArgs{Name: "Mine"}, nil), api.CodeForbidden)
 
-	set := OwnerLimitsArgs{OwnerID: created.OwnerID, Limits: LimitsArgs{ShellAllowed: ptr(true)}}
+	set := OwnerLimitsArgs{OwnerID: created.OwnerID, Limits: LimitsArgs{MaxDatabases: ptr(3)}}
 	if err := web.Call(ctx, "owner.limits.set", admin, "", set, nil); err != nil {
 		t.Fatal(err)
 	}
-	if l, _ := e.store.GetLimits(ctx, created.OwnerID); !l.ShellAllowed || l.MaxVhosts != 1 {
+	if l, _ := e.store.GetLimits(ctx, created.OwnerID); l.MaxDatabases != 3 || l.MaxVhosts != 1 {
 		t.Errorf("partial limits update = %+v", l)
 	}
 	wantCode(t, web.Call(ctx, "owner.limits.set", admin, "", OwnerLimitsArgs{OwnerID: 999}, nil), api.CodeNotFound)
@@ -111,7 +111,7 @@ func TestLimitExceededReachesCaller(t *testing.T) {
 	if err := e.store.CreateDatabase(ctx, v.N, "v00001_a"); err != nil {
 		t.Fatal(err)
 	}
-	if err := e.store.CreateAccessAccount(ctx, v.N, "v00001", state.AccessSFTP); err != nil {
+	if err := e.store.CreateAccessAccount(ctx, v.N, "v00001"); err != nil {
 		t.Fatal(err)
 	}
 	e.reg.Register(agent.Op{Name: "test.consume", Class: agent.ClassOwner, Handler: func(ctx context.Context, c *agent.Call) (any, error) {
@@ -127,9 +127,7 @@ func TestLimitExceededReachesCaller(t *testing.T) {
 		case "database":
 			err = e.store.CreateDatabase(ctx, v.N, "v00001_b")
 		case "access":
-			err = e.store.CreateAccessAccount(ctx, v.N, "v00001_b", state.AccessSFTP)
-		case "shell":
-			err = e.store.CreateAccessAccount(ctx, v.N, "v00001_c", state.AccessShell)
+			err = e.store.CreateAccessAccount(ctx, v.N, "v00001_b")
 		}
 		return nil, err
 	}})
@@ -146,5 +144,4 @@ func TestLimitExceededReachesCaller(t *testing.T) {
 			t.Errorf("%s: message = %v, want %q", what, err, want)
 		}
 	}
-	wantCode(t, web.Call(ctx, "test.consume", owner, "", map[string]string{"what": "shell"}, nil), api.CodeForbidden)
 }

@@ -95,7 +95,6 @@ func Reconcile(ctx context.Context, store *state.Store, h *Host) (ReconcileResul
 		sv      state.Vhost
 		v       render.Vhost
 		restart bool
-		shell   bool
 	}
 	var plans []plan
 	frontStart := 0
@@ -106,7 +105,7 @@ func Reconcile(ctx context.Context, store *state.Store, h *Host) (ReconcileResul
 			continue
 		}
 		res.Vhosts++
-		v, restart, shell, err := reconcileVhostFiles(ctx, store, rc, sv)
+		v, restart, err := reconcileVhostFiles(ctx, store, rc, sv)
 		if err != nil {
 			fail("vhost "+sv.ID, err)
 			continue
@@ -127,7 +126,7 @@ func Reconcile(ctx context.Context, store *state.Store, h *Host) (ReconcileResul
 			continue
 		}
 		frontChanges = append(frontChanges, rc.changed[frontStart:]...)
-		plans = append(plans, plan{sv: sv, v: v, restart: restart, shell: shell})
+		plans = append(plans, plan{sv: sv, v: v, restart: restart})
 	}
 
 	if len(rc.changed) > 0 {
@@ -146,7 +145,7 @@ func Reconcile(ctx context.Context, store *state.Store, h *Host) (ReconcileResul
 	}
 
 	for _, p := range plans {
-		if err := reconcileUnits(ctx, h, p.sv, p.v, p.restart, p.shell); err != nil {
+		if err := reconcileUnits(ctx, h, p.sv, p.v, p.restart); err != nil {
 			fail("units of "+p.sv.ID, err)
 		}
 	}
@@ -168,59 +167,59 @@ func Reconcile(ctx context.Context, store *state.Store, h *Host) (ReconcileResul
 
 // reconcileVhostFiles restores a vhost's directories and files. restart reports a changed
 // backend or FPM config, which running units must pick up.
-func reconcileVhostFiles(ctx context.Context, store *state.Store, rc *reconciler, sv state.Vhost) (render.Vhost, bool, bool, error) {
+func reconcileVhostFiles(ctx context.Context, store *state.Store, rc *reconciler, sv state.Vhost) (render.Vhost, bool, error) {
 	h := rc.h
 	limits, err := store.GetLimits(ctx, sv.OwnerID)
 	if err != nil {
-		return render.Vhost{}, false, false, err
+		return render.Vhost{}, false, err
 	}
 	v, err := renderedVhost(ctx, store, sv)
 	if err != nil {
-		return render.Vhost{}, false, false, err
+		return render.Vhost{}, false, err
 	}
 	l, err := render.NewLimits(sv.OwnerID, limits.MemoryMaxMB, limits.CPUQuotaPct, limits.TasksMax)
 	if err != nil {
-		return render.Vhost{}, false, false, err
+		return render.Vhost{}, false, err
 	}
 
 	if err := h.FS.Mkdir(BaseWWW, sv.ID, 0o700, sv.UID, sv.UID); err != nil {
-		return v, false, false, err
+		return v, false, err
 	}
 	for _, d := range vhostSubdirs {
 		if err := h.FS.Mkdir(BaseWWW, sv.ID+"/"+d.name, d.mode, sv.UID, sv.UID); err != nil {
-			return v, false, false, err
+			return v, false, err
 		}
 	}
 	for _, rel := range []string{sv.ID, sv.ID + "/site"} {
 		if err := h.FS.Mkdir(BaseJail, rel, 0o755, 0, 0); err != nil {
-			return v, false, false, err
+			return v, false, err
 		}
 	}
 
 	files, err := vhostFiles(v, l)
 	if err != nil {
-		return v, false, false, err
+		return v, false, err
 	}
 	restartOn := []string{"/etc/paddock/httpd/" + sv.ID + ".conf", "/etc/paddock/fpm/" + sv.ID + ".conf"}
 	restart := false
 	for _, f := range files {
 		changed, err := rc.write(f)
 		if err != nil {
-			return v, false, false, err
+			return v, false, err
 		}
 		restart = restart || changed && (slices.Contains(restartOn, f.Path) || strings.HasSuffix(f.Path, "/10-sandbox.conf"))
 	}
 
 	acct, err := store.AccessAccountOf(ctx, sv.N)
 	if errors.Is(err, state.ErrNotFound) {
-		return v, restart, false, nil
+		return v, restart, nil
 	}
 	if err != nil {
-		return v, restart, false, err
+		return v, restart, err
 	}
 	keys, err := store.ListSSHKeys(ctx, acct.Name)
 	if err != nil {
-		return v, restart, false, err
+		return v, restart, err
 	}
 	lines := make([]string, len(keys))
 	for i, k := range keys {
@@ -228,59 +227,18 @@ func reconcileVhostFiles(ctx context.Context, store *state.Store, rc *reconciler
 	}
 	ak, err := render.AuthorizedKeys(v, lines)
 	if err != nil {
-		return v, restart, false, err
+		return v, restart, err
 	}
 	if _, err := rc.write(ak); err != nil {
-		return v, restart, false, err
+		return v, restart, err
 	}
-	if acct.Kind != state.AccessShell {
-		return v, restart, false, nil
-	}
-	for _, d := range shellJailDirs {
-		if err := h.FS.Mkdir(BaseJail, sv.ID+"/"+d.rel, d.mode, 0, 0); err != nil {
-			return v, restart, true, err
-		}
-	}
-	for _, link := range shellJailLinks {
-		if err := h.FS.Symlink(BaseJail, sv.ID+"/"+link[0], link[1]); err != nil {
-			return v, restart, true, err
-		}
-	}
-	if err := linkJailPHP(h, sv.ID, sv.PHPVersion); err != nil {
-		return v, restart, true, err
-	}
-	etc, err := render.JailEtc(v)
-	if err != nil {
-		return v, restart, true, err
-	}
-	mounts, err := render.JailMounts(v, true)
-	if err != nil {
-		return v, restart, true, err
-	}
-	for _, f := range append(etc, mounts[1:]...) {
-		if _, err := rc.write(f); err != nil {
-			return v, restart, true, err
-		}
-	}
-	return v, restart, true, nil
+	return v, restart, nil
 }
 
 // reconcileUnits brings a vhost's units to the state its status calls for.
-func reconcileUnits(ctx context.Context, h *Host, sv state.Vhost, v render.Vhost, restart, shell bool) error {
-	units := []string{render.MountUnitName(BaseJail + "/" + sv.ID + "/site")}
-	if shell {
-		mounts, err := render.JailMounts(v, true)
-		if err != nil {
-			return err
-		}
-		for _, m := range mounts[1:] {
-			units = append(units, pathBase(m.Path))
-		}
-	}
-	for _, u := range units {
-		if err := h.run(ctx, systemctl, "enable", "--now", u); err != nil {
-			return err
-		}
+func reconcileUnits(ctx context.Context, h *Host, sv state.Vhost, v render.Vhost, restart bool) error {
+	if err := h.run(ctx, systemctl, "enable", "--now", render.MountUnitName(BaseJail+"/"+sv.ID+"/site")); err != nil {
+		return err
 	}
 	if sv.Status == state.VhostSuspended {
 		for _, u := range []string{v.HTTPDUnit(), v.FPMUnit()} {

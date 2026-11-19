@@ -70,9 +70,10 @@
 </section>
 
 <section>
-  <h2>SFTP and shell</h2>
+  <h2>SFTP access</h2>
+  <p>Upload files over SFTP; SCP clients work too, since they speak SFTP. There is no shell access.</p>
   {{with $v.Access}}
-  <p>Account <code>{{.Account}}</code> ({{.Kind}}).</p>
+  <p>Account <code>{{.Account}}</code>.</p>
   <ul>{{range .Keys}}<li><code>{{.Fingerprint}}</code>
     {{if $p.Can "access.manage"}}<form method="post" action="/vhosts/{{$v.ID}}/keys/remove" class="inline">
       <input type="hidden" name="csrf" value="{{$p.CSRF}}"><input type="hidden" name="key" value="{{.PublicKey}}">
@@ -92,7 +93,6 @@
   {{if .Can "access.manage"}}
   <form method="post" action="/vhosts/{{$v.ID}}/access" class="stack">
     <input type="hidden" name="csrf" value="{{.CSRF}}">
-    <label>Kind <select name="kind"><option value="sftp">SFTP</option><option value="shell">Shell</option></select></label>
     <label>Password <input name="password" type="password" autocomplete="new-password" minlength="12"></label>
     <label>Public key <textarea name="key" rows="2"></textarea></label>
     <button type="submit">Create account</button>

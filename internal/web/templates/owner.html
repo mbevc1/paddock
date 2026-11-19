@@ -30,13 +30,12 @@
     <label>Disk (MB) <input name="disk_mb" type="number" min="0" value="{{$l.DiskMB}}"></label>
     <label>Databases <input name="max_databases" type="number" min="0" value="{{$l.MaxDatabases}}"></label>
     <label>DB users <input name="max_db_users" type="number" min="0" value="{{$l.MaxDBUsers}}"></label>
-    <label>Access accounts <input name="max_access_accounts" type="number" min="0" value="{{$l.MaxAccessAccounts}}"></label>
+    <label>SFTP accounts <input name="max_access_accounts" type="number" min="0" value="{{$l.MaxAccessAccounts}}"></label>
     <label>Memory (MB) <input name="memory_max_mb" type="number" min="1" value="{{$l.MemoryMaxMB}}"></label>
     <label>CPU (%) <input name="cpu_quota_pct" type="number" min="1" value="{{$l.CPUQuotaPct}}"></label>
     <label>Tasks <input name="tasks_max" type="number" min="1" value="{{$l.TasksMax}}"></label>
     <label>FPM children <input name="pm_max_children" type="number" min="1" value="{{$l.PMMaxChildren}}"></label>
     <label>DB connections <input name="max_user_connections" type="number" min="1" value="{{$l.MaxUserConnections}}"></label>
-    <label><input type="checkbox" name="shell_allowed"{{if $l.ShellAllowed}} checked{{end}}> Shell accounts</label>
     <fieldset><legend>PHP versions (none ticked: all installed)</legend>
       {{range .Data.PHPVersions}}<label><input type="checkbox" name="php_versions" value="{{.}}"{{if has $l.PHPVersions .}} checked{{end}}> {{.}}</label>{{end}}
     </fieldset>

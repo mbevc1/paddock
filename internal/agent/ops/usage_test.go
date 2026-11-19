@@ -180,8 +180,7 @@ func TestCertExpiryEvents(t *testing.T) {
 func TestEventsListAndSources(t *testing.T) {
 	ctx := context.Background()
 	e, web, owner, _ := activeVhost(t)
-	allowShell(t, e, owner.OwnerID)
-	if v := runJob(t, web, "access.create", owner, AccessCreateArgs{VhostID: "v00001", Kind: state.AccessSFTP, Keys: []string{newSSHKey(t, "k")}}); v.Status != state.JobSucceeded {
+	if v := runJob(t, web, "access.create", owner, AccessCreateArgs{VhostID: "v00001", Keys: []string{newSSHKey(t, "k")}}); v.Status != state.JobSucceeded {
 		t.Fatal(v)
 	}
 	if err := e.client(0).Call(ctx, "front.md-renewed", nil, "", MDRenewedArgs{Domains: []string{"shop.example.com", "unknown.example.com"}}, nil); err != nil {

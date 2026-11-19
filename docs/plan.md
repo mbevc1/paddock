@@ -25,7 +25,7 @@ Work through the tasks in part 2 in order. Tick a task's checkbox when every acc
 | `mod_md` | AppStream | ACME for customer vhosts, front only |
 | PHP-FPM 8.2, 8.3, 8.4 | Remi (`phpNN-php-fpm`) | one FPM master per vhost |
 | MariaDB 10.11 | AppStream module `mariadb:10.11` | databases |
-| OpenSSH | BaseOS | SFTP and shell jails |
+| OpenSSH | BaseOS | SFTP jails |
 | fail2ban | EPEL | sshd bans |
 | SELinux | BaseOS | enforcing |
 | firewalld, nftables | BaseOS | ports and loopback rule |
@@ -76,7 +76,7 @@ Newline-delimited JSON over the Unix socket, one request and one response per li
 | `vhost.suspend`, `vhost.resume` | admin | vhost_id |
 | `db.create`, `db.delete` | owner | vhost_id, suffix |
 | `dbuser.create`, `dbuser.delete`, `dbuser.password.reset` | owner | vhost_id, name suffix, grants |
-| `access.create`, `access.delete` | owner | vhost_id, kind (`sftp`, `shell`), password or keys |
+| `access.create`, `access.delete` | owner | vhost_id, password or keys |
 | `access.key.add`, `access.key.remove` | owner | account, public key |
 | `cert.status`, `cert.upload` | owner | vhost_id, PEM chain and key |
 | `pma.session.create` | owner | vhost_id, database |
@@ -110,8 +110,7 @@ Usernames are never derived from domains.
 | `disk_mb` | XFS usage of all vhosts plus database sizes | 10240 |
 | `max_databases` | databases across all vhosts | 10 |
 | `max_db_users` | extra DB users across all vhosts | 10 |
-| `max_access_accounts` | SFTP and shell accounts | 5 |
-| `shell_allowed` | whether shell accounts may be created | false |
+| `max_access_accounts` | SFTP accounts | 5 |
 | `php_versions` | versions the owner may choose | all installed |
 | `memory_max_mb`, `cpu_quota_pct`, `tasks_max` | owner slice | 2048, 200, 512 |
 | `pm_max_children` | per vhost FPM pool | 10 |
@@ -123,7 +122,7 @@ Usernames are never derived from domains.
 /srv/www/                       root:root        0711   own LV, XFS, mounted prjquota
 /srv/www/v00012/                v00012:v00012    0700   vhost home, XFS project 12
   public/  private/  logs/  tmp/  sessions/              all v00012:v00012 0700 (public 0750)
-/srv/jail/v00012/               root:root        0755   SFTP/SSH chroot
+/srv/jail/v00012/               root:root        0755   SFTP chroot
   site/                         bind mount of /srv/www/v00012
 /run/paddock/                   root:root        0755   agent.sock
 /run/paddock/acme/              paddock:paddock  0755   acme.sock (panel ACME challenges)
@@ -338,22 +337,20 @@ Options=bind
 WantedBy=multi-user.target
 ```
 
-Shell jails add bind mounts of `/usr` and `/opt/remi` with `ro,nosuid,nodev`, symlinks `bin`, `sbin`, `lib`, `lib64` into `usr/`, a generated `etc/` (only this user in `passwd` and `group`, `resolv.conf`, `pki/`), a minimal `dev/` (`null`, `zero`, `urandom`, `tty`), `tmp/` (`1777`), and `proc/` mounted with `-t proc -o hidepid=invisible,subset=pid`. `php` in the jail points at the vhost's current PHP version.
+Access accounts are SFTP only: sshd runs `internal-sftp` for them and nothing else, so the jail holds only `site/`. SCP clients work too, since OpenSSH 9 and later carry `scp` transfers over the SFTP protocol; the legacy SCP protocol needs a shell and fails. There is no shell or FTP access.
 
 `/etc/ssh/sshd_config.d/50-paddock.conf`:
 
 ```
 AuthorizedKeysFile /etc/ssh/authorized_keys/%u
 
-Match Group paddock-sftp,paddock-shell
+Match Group paddock-sftp
     ChrootDirectory /srv/jail/%u
+    ForceCommand internal-sftp -d /site
     AllowTcpForwarding local
     PermitOpen 127.0.0.1:3306
     X11Forwarding no
     AllowAgentForwarding no
-
-Match Group paddock-sftp
-    ForceCommand internal-sftp -d /site
 ```
 
 For every vhost user: `systemctl mask user@<uid>.service`, and a `user-<uid>.slice.d/limits.conf` drop-in matching the owner's limits.
@@ -400,12 +397,12 @@ A process or login of vhost A must not read, write, list, signal, or connect to 
 | Run code as B through B's PHP socket | socket `0600` owned by B, path hidden from A |
 | Connect to B's backend on loopback | nftables: only the `apache` UID may connect to `127.64.0.0/16` port 81 |
 | Squat B's backend address while it restarts | port 81 is below 1024; only units with `CAP_NET_BIND_SERVICE` can bind it |
-| List or inspect B's processes | `ProtectProc=invisible`, `ProcSubset=pid`, private procfs in shell jails; cross-UID ptrace denied |
-| Read B's temp files, shared memory, IPC | `PrivateTmp`, `PrivateDevices`, `PrivateIPC`, private `tmp/` in jails |
+| List or inspect B's processes | `ProtectProc=invisible`, `ProcSubset=pid`; cross-UID ptrace denied |
+| Read B's temp files, shared memory, IPC | `PrivateTmp`, `PrivateDevices`, `PrivateIPC` |
 | Read B's databases | MariaDB grants per vhost user; `unix_socket` checks the caller's UID |
-| See B through SFTP or a shell | chroot jail containing only A's tree and a generated `/etc` |
+| See B through SFTP | chroot jail containing only A's tree; `internal-sftp` runs no commands |
 | Starve B of CPU, memory, disk | owner slices, user slices, XFS project quotas |
-| Gain privileges | `NoNewPrivileges`, `RestrictSUIDSGID`; jail mounts are `nosuid`, so setuid binaries under `/usr` gain nothing |
+| Gain privileges | `NoNewPrivileges`, `RestrictSUIDSGID`; access accounts run no commands, so no setuid binary is reachable over SSH |
 
 Known limits: a kernel exploit crosses every boundary; SELinux confines Apache and PHP as a whole but labels all tenants alike.
 
@@ -413,7 +410,7 @@ Known limits: a kernel exploit crosses every boundary; SELinux confines Apache a
 
 **Create:** allocate N; `useradd -u UID -U -M -d /srv/www/vNNNNN -s /sbin/nologin vNNNNN`; create directories; set XFS project and limit; `restorecon`; render backend, FPM, front, drop-ins, slice; create jail and mount unit; `systemctl daemon-reload`; start FPM, then backend; `apachectl configtest` and graceful reload of the front; create primary DB user. Roll back every step on failure.
 
-**PHP switch:** render FPM config for the new version (same socket path), start `paddock-phpNEW-fpm@vNNNNN`, wait for the socket, stop and disable the old unit, update the shell jail's `php` link, record the version.
+**PHP switch:** render FPM config for the new version (same socket path), start `paddock-phpNEW-fpm@vNNNNN`, wait for the socket, stop and disable the old unit, record the version.
 
 **Delete:** stop and disable units, unmount and remove the jail, remove front config and reload, drop databases and DB users, archive the tree to `/var/lib/paddock/agent/archive/` for 7 days, remove the Linux user, release the XFS project. N is never reused.
 
@@ -518,7 +515,7 @@ Everything is hosted in the GitHub repository `github.com/<owner>/paddock`: sour
 | `/usr/bin/paddock` | the binary |
 | `/usr/lib/systemd/system/paddock-agent.service`, `paddock-web.service`, `paddock-nft.service` | Paddock services |
 | `/usr/lib/systemd/system/paddock-httpd@.service` | backend Apache template |
-| `/usr/lib/sysusers.d/paddock.conf` | user `paddock`, groups `paddock-sftp`, `paddock-shell` |
+| `/usr/lib/sysusers.d/paddock.conf` | user `paddock`, group `paddock-sftp` |
 | `/usr/lib/tmpfiles.d/paddock.conf` | `/run/paddock`, `/run/paddock/acme` and `/run/paddock/fpm` |
 | `/usr/share/selinux/packages/paddock.cil` | SELinux module, installed by `%post`: labels `/run/paddock/acme` and lets the front Apache connect to the challenge socket |
 | `/usr/share/paddock/etc/` | default configs that `bootstrap.sh` installs into `/etc` at the same relative paths: sshd drop-in, sysctl, nftables, fail2ban jail, MariaDB, front Apache global config, panel port 80 vhost |
@@ -573,7 +570,7 @@ Use a disposable AlmaLinux 9.4+ VM with a second disk for `/srv/www`, for exampl
 
 Use these until told otherwise; each is a setting, not a code path.
 
-- **New owners:** SFTP only; shell accounts need `shell_allowed` set by an admin.
+- **Access accounts:** SFTP only, which SCP clients also use; no shell or FTP access.
 - **PHP:** the admin installs versions from the panel after the first login (8.3 and 8.4 suggested); new vhosts default to 8.3.
 - **Admin IP allowlist:** off by default, configurable in server settings; when set, admin logins from other addresses are refused by the web process.
 - **Backups (phase 2):** local, under `/var/backups/paddock/`, 7 daily copies per vhost; off-host targets come later.
@@ -624,10 +621,9 @@ Throwaway shell scripts in `poc/`, run as root on a disposable AlmaLinux 9.4+ VM
     - Acceptance: A's PHP cannot connect to B's backend; the front `apache` user can; rule survives `firewall-cmd --reload`.
 - [ ] **T0.7 SFTP jail.** Mount unit and sshd drop-in from §7.5.
     - Acceptance: SFTP login sees only `/site`; TCP forwarding to `127.0.0.1:3306` works; forwarding to any other target fails.
-- [ ] **T0.8 Shell jail.** Jail per §7.5 with private procfs.
-    - Acceptance: shell sees only its own processes and user; `php -v` works; masked `user@<uid>.service` does not break login; session lands in `user-<uid>.slice`; `sudo` and `su` inside the jail cannot gain privileges.
+- **T0.8 Shell jail.** Dropped: access accounts are SFTP only, so there is no shell jail to test.
 - [ ] **T0.9 Kernel settings.** sysctl file from §7.6.
-    - Acceptance: with `user.max_user_namespaces = 0`, all units from T0.2 to T0.8 still start.
+    - Acceptance: with `user.max_user_namespaces = 0`, all units from T0.2 to T0.7 still start.
 - [ ] **T0.10 PHP application.** A plain PHP application in vhost A behind the front proxy.
     - Acceptance: PHP writes and updates files in its own tree, owned by the vhost user; `open_basedir` stops writes outside it; sessions persist; PHP sees HTTPS behind the front proxy.
 - [ ] **T0.11 Scale.** 500 idle vhosts.
@@ -664,7 +660,7 @@ Throwaway shell scripts in `poc/`, run as root on a disposable AlmaLinux 9.4+ VM
     - Deferred: `paddock admin add` takes the admin's panel user ID; creating the matching `web.db` user belongs to the web tasks (T1.18, T1.24).
 - [x] **T1.8 Owners and limits.** `owner.*` ops; limits and defaults from §5; limit checks shared by all ops that consume quota.
     - Acceptance: creating a vhost, database, or access account beyond the limit returns `limit_exceeded`.
-    - Done: quota checks run inside the state transaction that adds the vhost, database, DB user, or access account, so concurrent requests cannot both pass; shell accounts also need `shell_allowed`. Tests cover each resource from the store through the socket. `owner.create` and `owner.limits.set` merge given fields onto the defaults or current limits.
+    - Done: quota checks run inside the state transaction that adds the vhost, database, DB user, or access account, so concurrent requests cannot both pass. Tests cover each resource from the store through the socket. `owner.create` and `owner.limits.set` merge given fields onto the defaults or current limits.
     - Deferred: the `vhost.create`, `db.create`, and `access.create` operations arrive with T1.10, T1.13, and T1.14 and use these store methods. Applying changed limits to owner slices and FPM pools on the host comes with T1.10 and T1.16.
 - [ ] **T1.9 PHP versions.** `php.version.install` and `php.version.remove` via dnf (Remi packages), render the FPM unit template per version, refuse removal while vhosts use the version.
     - Acceptance: fake-runner tests for both paths; integration test installs 8.4 on the VM.
@@ -679,7 +675,7 @@ Throwaway shell scripts in `poc/`, run as root on a disposable AlmaLinux 9.4+ VM
     - Acceptance: integration test switches 8.3 to 8.4 under a request loop with no errors; suspended vhost returns 503.
     - Status: `vhost.php.switch`, `vhost.suspend`, and `vhost.resume` run as jobs with fake-runner tests for each sequence and rollback. `test/integration/vhost_test.go` covers the acceptance on the VM; it has not run yet, so the task stays open.
     - Choices to confirm: only an active vhost can switch PHP; a suspended one must be resumed first. If the FPM socket is missing after the old master stops (PoC question 5), the switch restarts the new unit, which costs a brief gap instead of an outage. Suspend points the front at `Redirect 503 /` before stopping the units, and resume starts the units before restoring the proxy.
-    - Deferred: updating the shell jail's `php` link comes with shell jails in T1.14. Front TLS mode is always `mod_md` until T1.12 records uploaded certificates.
+    - Deferred: Front TLS mode is always `mod_md` until T1.12 records uploaded certificates.
 - [x] **T1.12 Front Apache and certificates.** Front vhost rendering, `MDNotifyCmd` handler (`paddock agent-notify md-renewed` asks the agent to validate and reload), `md-status` reader, custom certificate upload with key and chain validation.
     - Acceptance: `apachectl configtest` failure restores the previous file and reports `apply_failed`; uploaded certificate whose key does not match is rejected.
     - Done: `cert.upload` validates the chain and key (key matches the leaf, valid now, covers every domain, RSA of 2048 bits or more or ECDSA P-256/P-384), stores them re-encoded under `/etc/pki/paddock/` (key `0600`), and switches the front to them; `cert.status` merges the stored record with `md-status`; `paddock agent-notify md-renewed` calls the root-only `front.md-renewed`, which runs `configtest` and a graceful reload. Uploaded certificates survive suspend and resume.
@@ -689,17 +685,17 @@ Throwaway shell scripts in `poc/`, run as root on a disposable AlmaLinux 9.4+ VM
     - Acceptance: unit tests for escaping; integration test proves cross-vhost access is denied and quota revocation works.
     - Status: `internal/mariadb` quotes identifiers and string literals, escapes `_` in grants with the 64-character check, and runs SQL through the `mariadb` client on stdin (no driver is an allowed module), so passwords never reach argv. Operations: `db.create`, `db.delete`, `dbuser.create`, `dbuser.delete`, `dbuser.password.reset`; `vhost.create` now creates the primary DB user and `vhost.delete` drops the vhost's databases and DB users. `test/integration/vhost_test.go` checks cross-vhost access on the VM; quota revocation comes with T1.15. Neither has run yet, so the task stays open.
     - Choices to confirm: databases are created in `utf8mb4` with `utf8mb4_unicode_ci`, since MariaDB 10.11 defaults to `latin1`. Extra DB users get `all` (ALL PRIVILEGES) or `read` (SELECT, SHOW VIEW) on every database of their vhost through the pattern `v00012\_%`, which also covers databases created later. Generated passwords are 24 letters and digits, returned once; the primary user's initial password is discarded and `dbuser.password.reset` with an empty suffix sets a new one. Revokes run one statement at a time and treat "no such grant" (1141, 1147) as done, because a plain `REVOKE` fails on a missing grant; `REVOKE IF EXISTS` is not relied on.
-- [ ] **T1.14 Access accounts.** `access.*` and key ops (passwords passed to `chpasswd` on stdin, never in argv): groups, jails, mount units, shell jail contents, `authorized_keys` files, `user@<uid>.service` masking, user slice drop-in.
+- [ ] **T1.14 Access accounts.** `access.*` and key ops (passwords passed to `chpasswd` on stdin, never in argv): the `paddock-sftp` group, jails, mount units, `authorized_keys` files, `user@<uid>.service` masking, user slice drop-in.
     - Acceptance: integration tests repeat T0.7 and T0.8 through the agent.
-    - Status: `access.create`, `access.delete`, `access.key.add`, and `access.key.remove` with fake-runner tests, including rollback of a half-built shell jail; passwords reach `chpasswd` on stdin only. `test/integration/access_test.go` repeats T0.7 and T0.8 on the VM; it has not run yet, so the task stays open.
-    - Choices to confirm: each vhost has at most one access account, named after the vhost and logging in as the vhost user, which is what `ChrootDirectory /srv/jail/%u` allows (PoC question 7); `max_access_accounts` counts these across the owner's vhosts. Shell jails follow the PoC layout: a `php` link in `/opt/paddock/bin` with `PATH` set in the jail's `/etc/profile`. Deleting an account ends only its `sshd` processes, since FPM and Apache share the vhost UID. Passwords are 12 to 128 printable ASCII characters without `:`.
+    - Status: `access.create`, `access.delete`, `access.key.add`, and `access.key.remove` with fake-runner tests, including rollback; passwords reach `chpasswd` on stdin only. Accounts are SFTP only: `access.create` takes no kind, and `state.db` migration 3 drops the kind and `shell_allowed` columns, refusing to run while shell accounts exist. `test/integration/access_test.go` repeats T0.7 on the VM; it has not run yet, so the task stays open.
+    - Choices to confirm: each vhost has at most one access account, named after the vhost and logging in as the vhost user, which is what `ChrootDirectory /srv/jail/%u` allows (PoC question 7); `max_access_accounts` counts these across the owner's vhosts. Deleting an account ends only its `sshd` processes, since FPM and Apache share the vhost UID. Passwords are 12 to 128 printable ASCII characters without `:`.
 - [ ] **T1.15 Usage and events.** XFS project usage, database sizes, quota notifications at 90 % and enforcement at 100 %; `events.list` feed.
     - Acceptance: filling a vhost to its limit produces the expected events and enforcement.
     - Status: `ScanUsage` (every 10 minutes in the agent, and on demand) sums each owner's XFS project usage and database sizes against `disk_mb`. At 90 % it records `quota_warning`; at 100 % it freezes each vhost's XFS hard limit at its current size, revokes INSERT, UPDATE, and CREATE from the primary user and full-privilege DB users, and records `quota_exceeded`; back under the limit it restores both and records `quota_cleared`. It also records `cert_expiring` once a day for certificates within 14 days of expiry. Failed applies, renewed certificates, and added SSH keys are events too; `events.list` pages through them and `usage.get` reports an owner's use. A fake-runner test walks one owner from 60 % to over the limit and back. `test/integration/vhost_test.go` (`TestQuotaRevocation`) checks the same on the VM, which also confirms the `xfs_quota report -p -N -n -b` output format; it has not run yet, so the task stays open.
     - Deferred: a database or vhost created while its owner is over the limit starts unrestricted until the next scan.
 - [ ] **T1.16 Reconcile.** `reconcile.all` and `paddock reconcile --all` re-render and re-apply everything from `state.db`.
     - Acceptance: deleting a vhost's rendered configs by hand and reconciling restores a working vhost.
-    - Status: `Reconcile` rewrites PHP unit templates and, for every active or suspended vhost, its directories, configs, front vhost (by status and certificate source), authorized keys, and shell jail; reloads systemd when anything changed; brings units to the state the vhost's status calls for, restarting those whose config changed; and reloads the front after `apachectl configtest`, restoring the front files if the check fails. A vhost it cannot repair is reported without stopping the rest. Admins call `reconcile.all` (a job); root calls `paddock reconcile -all`, served synchronously by the root operation `reconcile.run`. Fake-runner tests cover repair, an idle rerun, suspended and shell vhosts, and a failing check; `TestReconcileRestoresVhost` covers the VM half and has not run yet, so the task stays open.
+    - Status: `Reconcile` rewrites PHP unit templates and, for every active or suspended vhost, its directories, configs, front vhost (by status and certificate source), and authorized keys; reloads systemd when anything changed; brings units to the state the vhost's status calls for, restarting those whose config changed; and reloads the front after `apachectl configtest`, restoring the front files if the check fails. A vhost it cannot repair is reported without stopping the rest. Admins call `reconcile.all` (a job); root calls `paddock reconcile -all`, served synchronously by the root operation `reconcile.run`. Fake-runner tests cover repair, an idle rerun, a suspended vhost with an SFTP account, and a failing check; `TestReconcileRestoresVhost` covers the VM half and has not run yet, so the task stays open.
     - Deferred: reconcile does not recreate Linux users, MariaDB users, or databases; it reports the vhost instead. Vhosts in status `creating`, `deleting`, or `failed` are reported for an admin to resolve.
 - [x] **T1.17 Web server base.** TLS on `:8443` with the self-signed certificate, `:8080` redirect, security headers from §11.3, router where every route declares a permission (startup fails otherwise), agent client, embedded templates and static files.
     - Acceptance: test asserts startup failure for a route without permission; header tests.
@@ -738,7 +734,7 @@ Throwaway shell scripts in `poc/`, run as root on a disposable AlmaLinux 9.4+ VM
     - Pinned Remi key: `B1ABF71E14C9D74897E198A8B19527F1478F8947`, the key ID `b19527f1478f8947` that `remi-release-9.rpm` downloaded from rpms.remirepo.net was signed with on 2026-11-17. The VM run is still to do.
 - [ ] **T1.27 Integration suite and red team.** Collect integration tests; port `poc/90-redteam.sh` to run against panel-created vhosts.
     - Acceptance: full suite passes on a fresh VM; red team finds no cross-tenant access.
-    - Status: `test/integration/` runs every test through one in-process agent on the host's own `state.db`, so test vhosts take the next free numbers and never collide with vhosts the panel created; the installed `paddock-agent` and `paddock-web` are stopped for the run and started again afterwards. Each test creates its owners and vhosts through agent operations, as the panel does, and deletes them when it ends. `TestRedTeam` ports `poc/90-redteam.sh`: every §7.7 row, tried from A's PHP (sandbox, SELinux, UID) and, where the PoC did, as A's UID in the host namespaces, the front Apache user, or A's shell account. `TestVhostCreateWithDatabase` covers the optional empty database. `make integration` runs the suite (`RUN=` selects tests). Open: the run on a fresh VM after `bootstrap.sh`.
+    - Status: `test/integration/` runs every test through one in-process agent on the host's own `state.db`, so test vhosts take the next free numbers and never collide with vhosts the panel created; the installed `paddock-agent` and `paddock-web` are stopped for the run and started again afterwards. Each test creates its owners and vhosts through agent operations, as the panel does, and deletes them when it ends. `TestRedTeam` ports `poc/90-redteam.sh`: every §7.7 row, tried from A's PHP (sandbox, SELinux, UID) and, where the PoC did, as A's UID in the host namespaces, the front Apache user, or A's SFTP account. `TestVhostCreateWithDatabase` covers the optional empty database. `make integration` runs the suite (`RUN=` selects tests). Open: the run on a fresh VM after `bootstrap.sh`.
     - Choices to confirm: the suite enrols an admin `itest` with user ID 2^40 in `state.db` and keeps it between runs (a rerun resets its TOTP secret); with no `web.db` user it cannot log in to the panel.
 
 ## Phase 2: comfort

@@ -277,7 +277,7 @@ func (s *Server) resetDBPassword(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) createAccess(w http.ResponseWriter, r *http.Request) {
-	args := ops.AccessCreateArgs{VhostID: r.PathValue("id"), Kind: state.AccessKind(r.PostFormValue("kind")), Password: r.PostFormValue("password")}
+	args := ops.AccessCreateArgs{VhostID: r.PathValue("id"), Password: r.PostFormValue("password")}
 	if k := strings.TrimSpace(r.PostFormValue("key")); k != "" {
 		args.Keys = []string{k}
 	}

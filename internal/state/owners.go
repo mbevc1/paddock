@@ -16,7 +16,6 @@ type Limits struct {
 	MaxDatabases       int
 	MaxDBUsers         int
 	MaxAccessAccounts  int
-	ShellAllowed       bool
 	PHPVersions        []string // empty: every installed version
 	MemoryMaxMB        int
 	CPUQuotaPct        int
@@ -33,7 +32,6 @@ func DefaultLimits() Limits {
 		MaxDatabases:       10,
 		MaxDBUsers:         10,
 		MaxAccessAccounts:  5,
-		ShellAllowed:       false,
 		MemoryMaxMB:        2048,
 		CPUQuotaPct:        200,
 		TasksMax:           512,
@@ -144,16 +142,16 @@ func (s *Store) SetLimits(ctx context.Context, ownerID int64, l Limits) error {
 
 func setLimits(ctx context.Context, tx *sql.Tx, ownerID int64, l Limits) error {
 	_, err := tx.ExecContext(ctx, `INSERT INTO limits (owner_id, max_vhosts, disk_mb, max_databases,
-		max_db_users, max_access_accounts, shell_allowed, php_versions, memory_max_mb, cpu_quota_pct,
+		max_db_users, max_access_accounts, php_versions, memory_max_mb, cpu_quota_pct,
 		tasks_max, pm_max_children, max_user_connections)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT (owner_id) DO UPDATE SET max_vhosts = excluded.max_vhosts, disk_mb = excluded.disk_mb,
 		max_databases = excluded.max_databases, max_db_users = excluded.max_db_users,
-		max_access_accounts = excluded.max_access_accounts, shell_allowed = excluded.shell_allowed,
+		max_access_accounts = excluded.max_access_accounts,
 		php_versions = excluded.php_versions, memory_max_mb = excluded.memory_max_mb,
 		cpu_quota_pct = excluded.cpu_quota_pct, tasks_max = excluded.tasks_max,
 		pm_max_children = excluded.pm_max_children, max_user_connections = excluded.max_user_connections`,
-		ownerID, l.MaxVhosts, l.DiskMB, l.MaxDatabases, l.MaxDBUsers, l.MaxAccessAccounts, l.ShellAllowed,
+		ownerID, l.MaxVhosts, l.DiskMB, l.MaxDatabases, l.MaxDBUsers, l.MaxAccessAccounts,
 		strings.Join(l.PHPVersions, ","), l.MemoryMaxMB, l.CPUQuotaPct, l.TasksMax, l.PMMaxChildren,
 		l.MaxUserConnections)
 	if isConstraint(err) {
@@ -167,9 +165,9 @@ func (s *Store) GetLimits(ctx context.Context, ownerID int64) (Limits, error) {
 	var l Limits
 	var php string
 	err := s.db.QueryRowContext(ctx, `SELECT max_vhosts, disk_mb, max_databases, max_db_users,
-		max_access_accounts, shell_allowed, php_versions, memory_max_mb, cpu_quota_pct, tasks_max,
+		max_access_accounts, php_versions, memory_max_mb, cpu_quota_pct, tasks_max,
 		pm_max_children, max_user_connections FROM limits WHERE owner_id = ?`, ownerID).
-		Scan(&l.MaxVhosts, &l.DiskMB, &l.MaxDatabases, &l.MaxDBUsers, &l.MaxAccessAccounts, &l.ShellAllowed,
+		Scan(&l.MaxVhosts, &l.DiskMB, &l.MaxDatabases, &l.MaxDBUsers, &l.MaxAccessAccounts,
 			&php, &l.MemoryMaxMB, &l.CPUQuotaPct, &l.TasksMax, &l.PMMaxChildren, &l.MaxUserConnections)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Limits{}, fmt.Errorf("%w: limits for owner %d", ErrNotFound, ownerID)

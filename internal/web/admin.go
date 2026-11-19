@@ -199,8 +199,6 @@ func formLimits(r *http.Request) (ops.LimitsArgs, error) {
 		}
 		*dst = &n
 	}
-	shell := r.PostFormValue("shell_allowed") == "on"
-	l.ShellAllowed = &shell
 	php := r.PostForm["php_versions"]
 	l.PHPVersions = &php
 	return l, nil

@@ -9,7 +9,7 @@ on_cleanup "remove_owner_slice 1"
 id=$(vh_id 1)
 install_sshd_dropin
 on_cleanup remove_sshd_dropin
-jail_create 1 sftp
+jail_create 1
 key=$(ssh_key_for 1)
 
 check "jail mount unit active" systemctl is-active "$(mount_unit_name "$JAIL/$id/site")"

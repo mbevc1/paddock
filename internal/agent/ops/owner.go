@@ -26,7 +26,6 @@ type LimitsArgs struct {
 	MaxDatabases       *int      `json:"max_databases,omitempty"`
 	MaxDBUsers         *int      `json:"max_db_users,omitempty"`
 	MaxAccessAccounts  *int      `json:"max_access_accounts,omitempty"`
-	ShellAllowed       *bool     `json:"shell_allowed,omitempty"`
 	PHPVersions        *[]string `json:"php_versions,omitempty"`
 	MemoryMaxMB        *int      `json:"memory_max_mb,omitempty"`
 	CPUQuotaPct        *int      `json:"cpu_quota_pct,omitempty"`
@@ -92,9 +91,6 @@ func (a LimitsArgs) apply(base state.Limits) (state.Limits, error) {
 			return state.Limits{}, api.Errorf(api.CodeInvalidArgument, "%s must be between %d and %d", b.name, b.min, b.max)
 		}
 		*b.dst = *b.src
-	}
-	if a.ShellAllowed != nil {
-		out.ShellAllowed = *a.ShellAllowed
 	}
 	if a.PHPVersions != nil {
 		seen := map[string]bool{}

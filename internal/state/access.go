@@ -7,11 +7,10 @@ import (
 	"fmt"
 )
 
-// AccessAccount is an SFTP or shell login of a vhost.
+// AccessAccount is an SFTP login of a vhost.
 type AccessAccount struct {
 	Name   string
 	VhostN int
-	Kind   AccessKind
 }
 
 // SSHKey is an authorized public key of an access account.
@@ -25,8 +24,8 @@ type SSHKey struct {
 // AccessAccountOf returns the access account of vhost n.
 func (s *Store) AccessAccountOf(ctx context.Context, n int) (AccessAccount, error) {
 	var a AccessAccount
-	err := s.db.QueryRowContext(ctx, `SELECT name, vhost_n, kind FROM access_accounts WHERE vhost_n = ?`, n).
-		Scan(&a.Name, &a.VhostN, &a.Kind)
+	err := s.db.QueryRowContext(ctx, `SELECT name, vhost_n FROM access_accounts WHERE vhost_n = ?`, n).
+		Scan(&a.Name, &a.VhostN)
 	if errors.Is(err, sql.ErrNoRows) {
 		return AccessAccount{}, fmt.Errorf("%w: access account of vhost %d", ErrNotFound, n)
 	}

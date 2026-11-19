@@ -118,7 +118,7 @@ footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--border
   <div class="card"><h3>Private files</h3><p>A vhost sees only its own tree; other vhosts' files, sockets and processes are hidden from it.</p></div>
   <div class="card"><h3>Firewalled backends</h3><p>Only the front Apache may reach a vhost's backend; tenants cannot connect to each other.</p></div>
   <div class="card"><h3>Fair limits</h3><p>Owner and vhost slices cap CPU, memory and tasks; XFS project quotas cap disk.</p></div>
-  <div class="card"><h3>Jailed access</h3><p>SFTP and shell accounts land in a chroot holding only their own vhost.</p></div>
+  <div class="card"><h3>Jailed access</h3><p>SFTP accounts, which SCP clients use too, land in a chroot holding only their own vhost. No shell access.</p></div>
   <div class="card"><h3>Guarded admin</h3><p>A root agent makes every host change and requires a fresh TOTP code for admin actions.</p></div>
 </div>
 
