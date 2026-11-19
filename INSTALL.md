@@ -65,7 +65,7 @@ Bootstrap is safe to rerun: it changes only what differs and prints no secrets a
 ## First steps
 
 1. **Open the panel** at `https://<hostname>:8443/`. Until the panel has a trusted certificate, compare the certificate's SHA-256 fingerprint with the one bootstrap printed.
-2. **Log in as the admin** with the printed password and a code from the printed TOTP URI, added to an authenticator app first. Admin login always asks for that code, and admin actions ask for it again. If the URI is lost, `paddock admin totp-reset` gives a new one.
+2. **Log in as the admin** with the printed password and a code from the printed TOTP URI, added to an authenticator app first. Admin login asks for that code, and admin actions ask for it again. If the URI is lost, `paddock admin totp-reset` gives a new one.
 3. **Install PHP** under Admin → PHP, for example 8.3 and 8.4. New vhosts default to 8.3.
 4. **Create an owner** under Admin → Owners. The panel shows the owner's password once; pass it on securely. Set the owner's limits there, and require two-factor sign-in if you want it.
 5. **As the owner,** change the password and set up two-factor sign-in under Security, then create a vhost under Vhosts with its domain, PHP version and, optionally, an empty database.
@@ -96,6 +96,8 @@ Run these as root on the server:
 | --- | --- |
 | `paddock admin add NAME` | Add another admin; prints a password and TOTP URI once. |
 | `paddock admin totp-reset NAME` | Give an admin a new TOTP secret, for example after losing the phone. |
+| `paddock admin login-totp-off NAME` | Let an admin log in with the password alone. Admin actions still ask for a TOTP code, which opens a 10-minute admin window. |
+| `paddock admin login-totp-on NAME` | Ask for a TOTP code at the admin's login again, and end the admin's sessions. |
 | `paddock admin reset-password NAME` | Set a new password for a panel user and end their sessions. |
 | `paddock reconcile -all` | Re-render and re-apply every vhost from Paddock's state. |
 | `paddock version` | Print the installed version. |

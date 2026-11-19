@@ -149,7 +149,7 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	needsSecond := u.Role == store.RoleAdmin || u.TOTPSecret != nil
+	needsSecond := (u.Role == store.RoleAdmin && u.AdminLoginTOTP) || u.TOTPSecret != nil
 	if _, err := s.startSession(w, r, u, !needsSecond, 0); err != nil {
 		s.serverError(w, r, err)
 		return

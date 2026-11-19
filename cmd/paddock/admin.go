@@ -20,7 +20,7 @@ import (
 
 const agentCallTimeout = 30 * time.Minute
 
-var errAdminUsage = errors.New("usage: paddock admin add|totp-reset|reset-password USERNAME")
+var errAdminUsage = errors.New("usage: paddock admin add|totp-reset|reset-password|login-totp-off|login-totp-on USERNAME")
 
 // adminEnv is what the admin commands touch; tests replace the web user and chown.
 type adminEnv struct {
@@ -61,6 +61,10 @@ func runAdmin(ctx context.Context, args []string, stdout, stderr io.Writer) erro
 		return env.totpReset(ctx, username)
 	case "reset-password":
 		return env.resetPassword(ctx, username)
+	case "login-totp-off":
+		return env.setLoginTOTP(ctx, username, false)
+	case "login-totp-on":
+		return env.setLoginTOTP(ctx, username, true)
 	}
 	return errAdminUsage
 }
@@ -144,6 +148,33 @@ func (e adminEnv) totpReset(ctx context.Context, username string) error {
 	}
 	_, err = fmt.Fprintf(e.out, "Add this TOTP secret to the admin's authenticator app. It is shown only once:\n%s\n", enrolled.TOTPURI)
 	return err
+}
+
+// setLoginTOTP sets whether an admin's login asks for a TOTP code. The agent asks for a code
+// before admin operations either way. Turning it on ends the admin's sessions, which may have
+// started without a code.
+func (e adminEnv) setLoginTOTP(ctx context.Context, username string, on bool) error {
+	return e.withWebStore(ctx, func(s *store.Store) error {
+		u, err := s.GetUserByName(ctx, username)
+		if err != nil {
+			return err
+		}
+		if u.Role != store.RoleAdmin {
+			return fmt.Errorf("%s is not an admin; admins require TOTP per owner in the panel", username)
+		}
+		if err := s.SetAdminLoginTOTP(ctx, u.ID, on); err != nil {
+			return err
+		}
+		if !on {
+			_, err = fmt.Fprintf(e.out, "%s now logs in with the password alone; admin actions still ask for a TOTP code.\n", username)
+			return err
+		}
+		if err := s.DeleteUserSessions(ctx, u.ID, ""); err != nil {
+			return err
+		}
+		_, err = fmt.Fprintf(e.out, "%s's login asks for a TOTP code again. All of the admin's sessions were ended.\n", username)
+		return err
+	})
 }
 
 // resetPassword sets a random password for any user and ends all their sessions.

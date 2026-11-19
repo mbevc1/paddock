@@ -335,6 +335,24 @@ func TestAdminSecondFactorGoesToAgent(t *testing.T) {
 	}
 }
 
+// An admin whose login TOTP is off signs in with the password; the agent still asks for a
+// code before the first admin operation.
+func TestAdminLoginWithoutTOTP(t *testing.T) {
+	h := newHarness(t)
+	admin := h.user("root-admin", store.RoleAdmin, 0)
+	if err := h.store.SetAdminLoginTOTP(context.Background(), admin.ID, false); err != nil {
+		t.Fatal(err)
+	}
+	h.agent.on("owner.list", func(*api.Actor, string, json.RawMessage) (any, error) {
+		return nil, api.Errorf(api.CodeTOTPRequired, "admin code required")
+	})
+	b := h.browser()
+	wantRedirect(t, b.login("root-admin", ownerPassword), "/dashboard")
+	if rec := b.do("GET", "/admin/owners", nil); !strings.Contains(rec.Body.String(), "Confirm admin access") {
+		t.Errorf("admin page without an open window = %d, want the unlock form", rec.Code)
+	}
+}
+
 func TestSessionExpiry(t *testing.T) {
 	h := newHarness(t)
 	h.user("alice", store.RoleOwner, 3)
