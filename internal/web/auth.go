@@ -98,13 +98,25 @@ func (s *Server) home(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) loginPage(w http.ResponseWriter, r *http.Request) {
-	s.render(w, r, http.StatusOK, "login.html", Page{Title: "Sign in"})
+	s.render(w, r, http.StatusOK, "login.html", Page{Title: "Sign in", Data: loginNext(r)})
+}
+
+// loginNext is the page to return to after signing in, from the form or the query.
+func loginNext(r *http.Request) string {
+	next := r.PostFormValue("next")
+	if next == "" {
+		next = r.URL.Query().Get("next")
+	}
+	if next = safeNext(next); next == "/" {
+		return ""
+	}
+	return next
 }
 
 const loginFailed = "Wrong username or password."
 
 func (s *Server) loginRefused(w http.ResponseWriter, r *http.Request, msg string) {
-	s.render(w, r, http.StatusUnauthorized, "login.html", Page{Title: "Sign in", Error: msg})
+	s.render(w, r, http.StatusUnauthorized, "login.html", Page{Title: "Sign in", Error: msg, Data: loginNext(r)})
 }
 
 func waitMessage(d time.Duration) string {
@@ -157,7 +169,7 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 	if needsSecond {
 		// The second factor still decides; the IP limiter key is kept until it passes.
 		s.limiter.Succeed(keys[1])
-		http.Redirect(w, r, "/login/totp", http.StatusSeeOther)
+		http.Redirect(w, r, withNext("/login/totp", loginNext(r)), http.StatusSeeOther)
 		return
 	}
 	s.loginSuccess(w, r, u, keys)
@@ -186,11 +198,11 @@ func (s *Server) loginSuccess(w http.ResponseWriter, r *http.Request, u store.Us
 	if !known {
 		s.notifyUser(ctx, u.ID, "login_new_ip", "Sign-in from a new address: "+ip)
 	}
-	http.Redirect(w, r, "/dashboard", http.StatusSeeOther)
+	http.Redirect(w, r, afterLogin(loginNext(r)), http.StatusSeeOther)
 }
 
 func (s *Server) totpPage(w http.ResponseWriter, r *http.Request) {
-	s.render(w, r, http.StatusOK, "totp.html", Page{Title: "Second factor"})
+	s.render(w, r, http.StatusOK, "totp.html", Page{Title: "Second factor", Data: loginNext(r)})
 }
 
 func (s *Server) loginTOTP(w http.ResponseWriter, r *http.Request) {
@@ -199,7 +211,7 @@ func (s *Server) loginTOTP(w http.ResponseWriter, r *http.Request) {
 	u := id.User
 	keys := []string{"ip:" + clientIP(r), "user:" + strings.ToLower(u.Username)}
 	if wait := s.limiter.Wait(keys...); wait > 0 {
-		s.render(w, r, http.StatusUnauthorized, "totp.html", Page{Title: "Second factor", Error: waitMessage(wait)})
+		s.render(w, r, http.StatusUnauthorized, "totp.html", Page{Title: "Second factor", Error: waitMessage(wait), Data: loginNext(r)})
 		return
 	}
 	code := strings.TrimSpace(r.PostFormValue("code"))
@@ -214,7 +226,7 @@ func (s *Server) loginTOTP(w http.ResponseWriter, r *http.Request) {
 		if err := s.store.AddLoginEvent(ctx, u.ID, u.Username, clientIP(r), false); err != nil {
 			s.log.Error("login event failed", "err", err)
 		}
-		s.render(w, r, http.StatusUnauthorized, "totp.html", Page{Title: "Second factor", Error: "That code did not work."})
+		s.render(w, r, http.StatusUnauthorized, "totp.html", Page{Title: "Second factor", Error: "That code did not work.", Data: loginNext(r)})
 		return
 	}
 	if _, err := s.startSession(w, r, u, true, 0); err != nil {
