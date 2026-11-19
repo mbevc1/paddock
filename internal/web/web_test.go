@@ -604,3 +604,34 @@ func TestNavMarksTheCurrentSection(t *testing.T) {
 		t.Errorf("nav does not mark /vhosts as current")
 	}
 }
+
+func TestAdminManagesAVhostAsItsOwner(t *testing.T) {
+	h, b := adminOverviewHarness(t)
+	h.agent.on("owner.get", func(*api.Actor, string, json.RawMessage) (any, error) {
+		return ops.OwnerView{ID: 3, Name: "Acme Ltd"}, nil
+	})
+	body := b.do("GET", "/dashboard", nil).Body.String()
+	for _, want := range []string{`action="/admin/owners/3/impersonate"`, `name="next" value="/vhosts/v00001"`, ">Manage<"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("admin dashboard lacks %q", want)
+		}
+	}
+	wantRedirect(t, b.do("POST", "/admin/owners/3/impersonate", url.Values{"next": {"/vhosts/v00001"}}), "/vhosts/v00001?")
+	if se, _ := h.store.GetSession(context.Background(), hashToken(b.cookie)); se.Impersonating != 3 {
+		t.Errorf("session is not acting as owner 3: %+v", se)
+	}
+
+	other := h.browser()
+	wantRedirect(t, other.login("root-admin", ownerPassword), "/dashboard")
+	wantRedirect(t, other.do("POST", "/admin/owners/3/impersonate", url.Values{"next": {"//evil.example/x"}}), "/?")
+}
+
+func TestManageNeedsAnOpenAdminWindow(t *testing.T) {
+	h, b := adminOverviewHarness(t)
+	h.agent.on("owner.list", func(*api.Actor, string, json.RawMessage) (any, error) {
+		return nil, api.Errorf(api.CodeTOTPRequired, "admin code required")
+	})
+	if body := b.do("GET", "/dashboard", nil).Body.String(); strings.Contains(body, ">Manage<") {
+		t.Error("Manage shows while the admin window is closed")
+	}
+}

@@ -31,12 +31,15 @@
 <section class="flush">
   <h2>Vhosts</h2>
   <table>
-    <thead><tr><th>Domain</th><th>Owner</th><th>PHP</th><th>Status</th></tr></thead>
+    <thead><tr><th>Domain</th><th>Owner</th><th>PHP</th><th>Status</th><th></th></tr></thead>
     <tbody>
     {{range $v := .Data.Vhosts}}<tr><td><code>{{$v.ID}}</code> {{$v.Primary}}</td>
       <td>{{with index $a.OwnerNames $v.OwnerID}}<a href="/admin/owners/{{$v.OwnerID}}">{{.}}</a>{{else}}<span class="muted">owner {{$v.OwnerID}}</span>{{end}}</td>
-      <td>{{$v.PHPVersion}}</td><td><span class="badge {{$v.Status}}">{{$v.Status}}</span></td></tr>
-    {{else}}<tr><td colspan="4" class="muted">No vhosts yet. Create an owner, then act as them to add one.</td></tr>{{end}}
+      <td>{{$v.PHPVersion}}</td><td><span class="badge {{$v.Status}}">{{$v.Status}}</span></td>
+      <td class="row-actions">{{if and (not $a.Locked) ($.Can "impersonate")}}<form method="post" action="/admin/owners/{{$v.OwnerID}}/impersonate" class="inline">
+        <input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="next" value="/vhosts/{{$v.ID}}">
+        <button type="submit" class="secondary small">Manage</button></form>{{end}}</td></tr>
+    {{else}}<tr><td colspan="5" class="muted">No vhosts yet. Create an owner, then act as them to add one.</td></tr>{{end}}
     </tbody>
   </table>
 </section>

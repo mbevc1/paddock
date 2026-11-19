@@ -305,7 +305,11 @@ func (s *Server) impersonate(w http.ResponseWriter, r *http.Request) {
 	for _, u := range users {
 		s.notifyUser(r.Context(), u.ID, "impersonation", "Admin "+id.User.Username+" started acting on your account.")
 	}
-	redirectFlash(w, r, "/dashboard", "You are acting as "+owner.Name+".")
+	dest := "/dashboard"
+	if next := r.PostFormValue("next"); next != "" {
+		dest = next
+	}
+	redirectFlash(w, r, dest, "You are acting as "+owner.Name+".")
 }
 
 func (s *Server) stopImpersonating(w http.ResponseWriter, r *http.Request) {
