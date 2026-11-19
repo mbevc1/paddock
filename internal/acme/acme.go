@@ -55,6 +55,7 @@ type Manager struct {
 	// nextTry is the Unix time in nanoseconds before which no new attempt starts.
 	nextTry   atomic.Int64
 	failures  atomic.Int32
+	report    *caReport
 	challenge http.Handler
 	now       func() time.Time
 	log       *slog.Logger
@@ -81,7 +82,7 @@ func New(c Config) *Manager {
 		log = slog.New(slog.DiscardHandler)
 	}
 	self := c.SelfSigned
-	m := &Manager{hostname: strings.ToLower(c.Hostname), self: &self, log: log}
+	m := &Manager{hostname: strings.ToLower(c.Hostname), self: &self, log: log, report: &caReport{}}
 	m.auto = &autocert.Manager{
 		Prompt:      autocert.AcceptTOS,
 		HostPolicy:  autocert.HostWhitelist(m.hostname),
@@ -94,7 +95,7 @@ func New(c Config) *Manager {
 		dir = autocert.DefaultACMEDirectory
 	}
 	m.auto.Client = &xacme.Client{DirectoryURL: dir,
-		HTTPClient: &http.Client{Transport: httpOnly{base: http.DefaultTransport}}}
+		HTTPClient: &http.Client{Transport: httpOnly{base: http.DefaultTransport, report: m.report}}}
 	// autocert offers HTTP-01 only after its handler exists, and only HTTP-01 works behind the
 	// front Apache, so the handler is made before any certificate can be requested.
 	m.challenge = m.auto.HTTPHandler(http.NotFoundHandler())
@@ -131,14 +132,24 @@ func (m *Manager) fetch(hello *tls.ClientHelloInfo) {
 	h := *hello
 	go func() {
 		defer m.fetching.Store(false)
-		if _, err := m.auto.GetCertificate(&h); err != nil {
+		m.report.take()
+		m.log.Info("requesting the panel certificate", "hostname", m.hostname)
+		cert, err := m.auto.GetCertificate(&h)
+		if err != nil {
 			wait := retryDelay(int(m.failures.Add(1)))
 			m.nextTry.Store(m.now().Add(wait).UnixNano())
-			m.log.Warn("obtaining the panel certificate failed", "err", err, "retry_in", wait.String())
+			args := []any{"err", err, "retry_in", wait.String()}
+			if reason := m.report.take(); reason != "" {
+				args = append(args, "ca_error", reason)
+			}
+			m.log.Warn("obtaining the panel certificate failed", args...)
 			return
 		}
 		m.failures.Store(0)
 		m.trusted.Store(true)
+		if cert.Leaf != nil {
+			m.log.Info("obtained the panel certificate", "not_after", cert.Leaf.NotAfter.UTC().Format(time.RFC3339))
+		}
 	}()
 }
 
