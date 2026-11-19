@@ -25,7 +25,8 @@ code { font-family: ui-monospace, monospace; font-size: .92em; word-break: break
 
 /* Header: brand, links, and sign-out pushed to the right. */
 header { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem 1.25rem; padding: .6rem 1rem; background: var(--card); border-bottom: 1px solid var(--line); }
-.brand { font-weight: 700; text-decoration: none; color: var(--fg); }
+.brand { display: inline-flex; align-items: center; gap: .5rem; font-weight: 700; text-decoration: none; color: var(--fg); }
+.brand img { display: block; }
 nav { display: flex; flex: 1; flex-wrap: wrap; align-items: center; gap: .25rem 1rem; }
 nav a { text-decoration: none; }
 nav a:hover { text-decoration: underline; }

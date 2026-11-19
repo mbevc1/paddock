@@ -5,13 +5,14 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="htmx-config" content='{"includeIndicatorStyles":false}'>
 <title>{{.Title}} · Paddock</title>
+<link rel="icon" href="/static/logo.svg" type="image/svg+xml">
 <link rel="stylesheet" href="/static/app.css">
 <script src="/static/htmx.min.js" defer></script>
 <script src="/static/app.js" defer></script>
 </head>
 <body{{if .Identity}} hx-headers="{{.HXHeaders}}"{{end}}>
 <header>
-  <a class="brand" href="/">Paddock</a>
+  <a class="brand" href="/"><img src="/static/logo.svg" alt="" width="28" height="28">Paddock</a>
   {{if .Can "self"}}
   <nav>
     <a href="/dashboard">Dashboard</a>
