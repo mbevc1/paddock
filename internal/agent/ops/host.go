@@ -39,8 +39,8 @@ type Host struct {
 	Log *slog.Logger
 	// Now defaults to time.Now.
 	Now func() time.Time
-	// WaitSocket waits for a vhost's FPM socket; nil polls the file system.
-	WaitSocket func(ctx context.Context, vhostID string) error
+	// WaitSocket waits for a socket in a vhost's FPM run directory; nil polls the file system.
+	WaitSocket func(ctx context.Context, vhostID, socket string) error
 	// MDStatus reports mod_md's managed domains; nil reads md-status from the front Apache.
 	MDStatus func(ctx context.Context) ([]MDDomain, error)
 
@@ -58,16 +58,17 @@ func (h *Host) now() time.Time {
 
 const socketTimeout = 15 * time.Second
 
-func (h *Host) waitSocket(ctx context.Context, vhostID string) error {
+// waitSocket waits for the FPM socket of the vhost's PHP version.
+func (h *Host) waitSocket(ctx context.Context, v render.Vhost) error {
 	if h.WaitSocket != nil {
-		return h.WaitSocket(ctx, vhostID)
+		return h.WaitSocket(ctx, v.ID(), v.FPMSocketName())
 	}
 	ctx, cancel := context.WithTimeout(ctx, socketTimeout)
 	defer cancel()
 	tick := time.NewTicker(100 * time.Millisecond)
 	defer tick.Stop()
 	for {
-		if ok, err := h.FS.Exists(BaseFPMRun, vhostID+"/php.sock"); err != nil || ok {
+		if ok, err := h.FS.Exists(BaseFPMRun, v.ID()+"/"+v.FPMSocketName()); err != nil || ok {
 			return err
 		}
 		select {

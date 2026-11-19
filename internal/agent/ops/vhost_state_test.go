@@ -47,21 +47,54 @@ const (
 	dropIn84 = "etc/systemd/system/paddock-php84-fpm@v00001.service.d/10-sandbox.conf"
 )
 
+const (
+	fpmConf     = "etc/paddock/fpm/v00001.conf"
+	backendConf = "etc/paddock/httpd/v00001.conf"
+)
+
+// The new FPM master starts on its own socket while the old one serves; the backend moves to
+// the new socket with a graceful reload before the old master stops.
 var wantSwitchCommands = []string{
 	"/usr/bin/systemctl daemon-reload",
 	"/usr/bin/setpriv --reuid=1000000001 --regid=1000000001 --clear-groups -- /opt/remi/php84/root/usr/sbin/php-fpm -t --fpm-config /etc/paddock/fpm/v00001.conf",
 	"/usr/bin/systemctl enable --now paddock-php84-fpm@v00001.service",
+	"/usr/sbin/httpd -t -f /etc/paddock/httpd/v00001.conf",
+	"/usr/bin/systemctl reload paddock-httpd@v00001.service",
 	"/usr/bin/systemctl disable --now paddock-php83-fpm@v00001.service",
 	"/usr/bin/systemctl daemon-reload",
 }
 
+func fileHas(t *testing.T, e *env, rel, s string) bool {
+	t.Helper()
+	b, err := os.ReadFile(filepath.Join(e.root, rel))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return strings.Contains(string(b), s)
+}
+
 func TestPHPSwitch(t *testing.T) {
 	e, web, owner, mark := activeVhost(t)
+	if !fileHas(t, e, fpmConf, "/php83.sock") || !fileHas(t, e, backendConf, "/php83.sock") {
+		t.Fatal("a new vhost is not on the PHP 8.3 socket")
+	}
+	var waited []string
+	e.host.WaitSocket = func(_ context.Context, vhostID, socket string) error {
+		waited = append(waited, vhostID+"/"+socket)
+		return nil
+	}
 	if v := runJob(t, web, "vhost.php.switch", owner, VhostPHPSwitchArgs{VhostID: "v00001", Version: "8.4"}); v.Status != state.JobSucceeded {
 		t.Fatalf("switch: %+v", v)
 	}
 	if got := e.run.Commands()[mark:]; !slices.Equal(got, wantSwitchCommands) {
 		t.Errorf("commands:\n got %q\nwant %q", got, wantSwitchCommands)
+	}
+	if !slices.Equal(waited, []string{"v00001/php84.sock"}) {
+		t.Errorf("waited for %q, want the new version's socket", waited)
+	}
+	if !fileHas(t, e, fpmConf, "listen = /run/paddock/fpm/v00001/php84.sock") ||
+		!fileHas(t, e, backendConf, "proxy:unix:/run/paddock/fpm/v00001/php84.sock|") {
+		t.Error("FPM or backend config not moved to the PHP 8.4 socket")
 	}
 	if fileExists(e, dropIn83) || !fileExists(e, dropIn84) {
 		t.Error("drop-ins not moved to the new unit")
@@ -79,57 +112,74 @@ func TestPHPSwitch(t *testing.T) {
 	}
 }
 
-func TestPHPSwitchRestartsWhenSocketVanishes(t *testing.T) {
-	e, web, owner, mark := activeVhost(t)
-	waits := 0
-	e.host.WaitSocket = func(context.Context, string) error {
-		waits++
-		if waits == 1 {
-			return errors.New("socket gone")
-		}
-		return nil
+// wantSwitchRolledBack checks a failed switch left the vhost on PHP 8.3 with the old master
+// serving: configs, drop-ins and the recorded version all as before.
+func wantSwitchRolledBack(t *testing.T, e *env, mark int) []string {
+	t.Helper()
+	cmds := e.run.Commands()[mark:]
+	if !fileHas(t, e, fpmConf, "/php83.sock") || !fileHas(t, e, backendConf, "/php83.sock") {
+		t.Error("FPM or backend config not restored to the PHP 8.3 socket")
 	}
-	if v := runJob(t, web, "vhost.php.switch", owner, VhostPHPSwitchArgs{VhostID: "v00001", Version: "8.4"}); v.Status != state.JobSucceeded {
-		t.Fatalf("switch: %+v", v)
+	if fileExists(e, dropIn84) || !fileExists(e, dropIn83) {
+		t.Error("drop-ins not restored")
 	}
-	if !slices.Contains(e.run.Commands()[mark:], "/usr/bin/systemctl restart paddock-php84-fpm@v00001.service") {
-		t.Errorf("new FPM not restarted: %q", e.run.Commands()[mark:])
+	if sv := vhostState(t, e); sv.PHPVersion != "8.3" {
+		t.Errorf("PHP = %s after a failed switch", sv.PHPVersion)
 	}
+	return cmds
 }
 
 func TestPHPSwitchRollsBack(t *testing.T) {
-	for i, failing := range wantSwitchCommands[1:4] {
+	const (
+		stopNew   = "/usr/bin/systemctl disable --now paddock-php84-fpm@v00001.service"
+		startOld  = "/usr/bin/systemctl enable --now paddock-php83-fpm@v00001.service"
+		stopOld   = "/usr/bin/systemctl disable --now paddock-php83-fpm@v00001.service"
+		reloadOld = "/usr/bin/systemctl reload paddock-httpd@v00001.service"
+	)
+	// Failing commands: php-fpm -t, starting the new FPM, httpd -t, the backend reload, and
+	// stopping the old FPM.
+	for i, failing := range wantSwitchCommands[1:6] {
 		t.Run(failing, func(t *testing.T) {
 			e, web, owner, mark := activeVhost(t)
 			e.run.OnFunc(func(argv []string) bool { return strings.Join(argv, " ") == failing }).Fail("boom").Times(1)
-			v := runJob(t, web, "vhost.php.switch", owner, VhostPHPSwitchArgs{VhostID: "v00001", Version: "8.4"})
-			wantJobError(t, v, api.CodeApplyFailed)
-
-			cmds := e.run.Commands()[mark:]
-			if i >= 1 && !slices.Contains(cmds, "/usr/bin/systemctl disable --now paddock-php84-fpm@v00001.service") {
+			wantJobError(t, runJob(t, web, "vhost.php.switch", owner, VhostPHPSwitchArgs{VhostID: "v00001", Version: "8.4"}), api.CodeApplyFailed)
+			cmds := wantSwitchRolledBack(t, e, mark)
+			if i >= 1 && !slices.Contains(cmds, stopNew) {
 				t.Errorf("new FPM left running: %q", cmds)
 			}
-			if i >= 2 && !slices.Contains(cmds, "/usr/bin/systemctl enable --now paddock-php83-fpm@v00001.service") {
+			reloads := 0
+			for _, c := range cmds {
+				if c == reloadOld {
+					reloads++
+				}
+			}
+			// From httpd -t on, the new backend config is written, so the undo reloads the
+			// backend onto the restored one: after the forward reload too, if that ran.
+			want := 0
+			if i >= 2 {
+				want++
+			}
+			if i >= 3 {
+				want++
+			}
+			if reloads != want {
+				t.Errorf("backend reloaded %d times, want %d: %q", reloads, want, cmds)
+			}
+			if i < 4 && slices.Contains(cmds, stopOld) {
+				t.Errorf("old FPM stopped although the switch failed before: %q", cmds)
+			}
+			if i == 4 && !slices.Contains(cmds, startOld) {
 				t.Errorf("old FPM not restarted: %q", cmds)
-			}
-			if fileExists(e, dropIn84) || !fileExists(e, dropIn83) {
-				t.Error("drop-ins not restored")
-			}
-			if sv := vhostState(t, e); sv.PHPVersion != "8.3" {
-				t.Errorf("PHP = %s after a failed switch", sv.PHPVersion)
 			}
 		})
 	}
-	t.Run("socket never returns", func(t *testing.T) {
+	t.Run("new socket never appears", func(t *testing.T) {
 		e, web, owner, mark := activeVhost(t)
-		e.socketErr = errors.New("socket gone")
+		e.socketErr = errors.New("FPM socket did not appear")
 		wantJobError(t, runJob(t, web, "vhost.php.switch", owner, VhostPHPSwitchArgs{VhostID: "v00001", Version: "8.4"}), api.CodeApplyFailed)
-		cmds := e.run.Commands()[mark:]
-		if !slices.Contains(cmds, "/usr/bin/systemctl enable --now paddock-php83-fpm@v00001.service") {
-			t.Errorf("old FPM not restarted: %q", cmds)
-		}
-		if sv := vhostState(t, e); sv.PHPVersion != "8.3" {
-			t.Errorf("PHP = %s", sv.PHPVersion)
+		cmds := wantSwitchRolledBack(t, e, mark)
+		if !slices.Contains(cmds, stopNew) || slices.Contains(cmds, stopOld) {
+			t.Errorf("want the new FPM stopped and the old one untouched: %q", cmds)
 		}
 	})
 }
@@ -278,5 +328,31 @@ func TestResumeRollsBack(t *testing.T) {
 	}
 	if sv := vhostState(t, e); sv.Status != state.VhostSuspended {
 		t.Errorf("status = %s", sv.Status)
+	}
+}
+
+// A vhost suspended before each PHP version had its own socket resumes on the new one.
+func TestResumeRewritesConfigsFromBeforeVersionedSockets(t *testing.T) {
+	e, web, _, _ := activeVhost(t)
+	admin := adminSession(t, e, web)
+	if v := runJob(t, web, "vhost.suspend", admin, VhostIDArgs{VhostID: "v00001"}); v.Status != state.JobSucceeded {
+		t.Fatalf("suspend: %+v", v)
+	}
+	for _, rel := range []string{fpmConf, backendConf} {
+		path := filepath.Join(e.root, rel)
+		b, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(strings.ReplaceAll(string(b), "/php83.sock", "/php.sock")), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if v := runJob(t, web, "vhost.resume", admin, VhostIDArgs{VhostID: "v00001"}); v.Status != state.JobSucceeded {
+		t.Fatalf("resume: %+v", v)
+	}
+	if !fileHas(t, e, fpmConf, "listen = /run/paddock/fpm/v00001/php83.sock") ||
+		!fileHas(t, e, backendConf, "proxy:unix:/run/paddock/fpm/v00001/php83.sock|") {
+		t.Error("resume left a config on the old shared socket")
 	}
 }

@@ -89,7 +89,7 @@ func TestRedTeam(t *testing.T) {
 	})
 
 	t.Run("run code as B through B's PHP socket", func(t *testing.T) {
-		sock := "/run/paddock/fpm/" + b + "/php.sock"
+		sock := "/run/paddock/fpm/" + b + "/php83.sock"
 		if got := phpShell(t, a, "test -e "+sock+" && echo present"); strings.Contains(got, "present") {
 			t.Error("B's FPM socket path is visible to A's PHP")
 		}

@@ -270,3 +270,34 @@ func TestTimeoutsNest(t *testing.T) {
 		t.Errorf("timeouts FPM %ds, backend %ds, front %ds must increase outwards", fpm, backend, front)
 	}
 }
+
+// Each PHP version listens on its own socket, so a switch can start the new FPM master while
+// the old one still serves.
+func TestFPMSocketIsPerVersion(t *testing.T) {
+	for _, tc := range []struct{ php, socket string }{
+		{"8.2", "/run/paddock/fpm/v00012/php82.sock"},
+		{"8.4", "/run/paddock/fpm/v00012/php84.sock"},
+	} {
+		v, err := NewVhost(12, 3, tc.php, "shop.example.com", nil, 10)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if v.FPMSocket() != tc.socket {
+			t.Errorf("FPMSocket() for %s = %q, want %q", tc.php, v.FPMSocket(), tc.socket)
+		}
+		fpm, err := FPM(v)
+		if err != nil {
+			t.Fatal(err)
+		}
+		backend, err := BackendHTTPD(v)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(string(fpm.Data), "listen = "+tc.socket+"\n") {
+			t.Errorf("FPM config for %s does not listen on %s", tc.php, tc.socket)
+		}
+		if !strings.Contains(string(backend.Data), `"proxy:unix:`+tc.socket+`|fcgi://localhost"`) {
+			t.Errorf("backend config for %s does not proxy to %s", tc.php, tc.socket)
+		}
+	}
+}
