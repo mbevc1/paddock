@@ -32,14 +32,14 @@ jobs:
         with:
           persist-credentials: false
       - run: sudo apt-get update && sudo apt-get install -y createrepo-c
-      # Pages sites are limited to 1 GB, so the repository keeps the last five releases (§14.1).
+      # Pages sites are limited to 1 GB, so the repository keeps the last eleven releases (§14.1).
       - name: Build the dnf repository
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           shopt -s nullglob
           mkdir -p rpms _site
-          tags=$(gh release list --repo "$GITHUB_REPOSITORY" --limit 5 --exclude-drafts \
+          tags=$(gh release list --repo "$GITHUB_REPOSITORY" --limit 11 --exclude-drafts \
             --exclude-pre-releases --json tagName --jq '.[].tagName')
           for tag in $tags; do
             gh release download "$tag" --repo "$GITHUB_REPOSITORY" --pattern '*.rpm' --dir rpms
@@ -49,6 +49,7 @@ jobs:
             packages=(rpms/*.el9."$arch".rpm)
             if ((${#packages[@]})); then mv "${packages[@]}" "_site/el9/$arch/"; fi
             createrepo_c -q "_site/el9/$arch"
+            scripts/repo-index.sh "_site/el9/$arch" "Paddock el9 $arch packages"
           done
           echo "LATEST_TAG=$(head -n1 <<<"$tags")" >>"$GITHUB_ENV"
       - name: Build the landing page
