@@ -18,6 +18,13 @@ type Page struct {
 	Error    string
 	Unread   int
 	Data     any
+	// Path is the request's path, which the navigation marks as current.
+	Path string
+}
+
+// Active reports whether the page belongs to the section at prefix, for the navigation.
+func (p Page) Active(prefix string) bool {
+	return p.Path == prefix || strings.HasPrefix(p.Path, prefix+"/")
 }
 
 // Can lets templates show only the actions the user may take: {{if .Can "vhost.manage"}}.
@@ -87,6 +94,7 @@ func (s *Server) render(w http.ResponseWriter, r *http.Request, status int, page
 	if p.Identity == nil {
 		p.Identity = identityFrom(r)
 	}
+	p.Path = r.URL.Path
 	if p.Identity != nil && !p.Identity.Pending {
 		if n, err := s.store.UnreadCount(r.Context(), p.Identity.User.ID); err == nil {
 			p.Unread = n

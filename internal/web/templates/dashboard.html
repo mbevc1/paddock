@@ -1,27 +1,67 @@
 {{define "content"}}
-<h1>Dashboard</h1>
-{{if .Data.AdminHome}}
-<p>You are signed in as an admin. Manage <a href="/admin/owners">owners</a>, <a href="/admin/php">PHP versions</a>,
-or open an owner and act as them to work on their vhosts.</p>
+{{if .Data.AdminHome}}{{$a := .Data.Admin}}
+<div class="page-head">
+  <h1>Dashboard</h1>
+  <div class="actions">
+    {{if .Can "owner.manage"}}<a class="button" href="/admin/owners">Owners</a>{{end}}
+    {{if .Can "php.manage"}}<a class="button secondary" href="/admin/php">PHP versions</a>{{end}}
+  </div>
+</div>
+<div class="tiles">
+  <div class="tile"><span class="tile-label">Vhosts</span><span class="tile-value">{{len .Data.Vhosts}}</span></div>
+  <div class="tile"><span class="tile-label">Active</span><span class="tile-value">{{$a.Active}}</span></div>
+  <div class="tile"><span class="tile-label">Suspended</span><span class="tile-value">{{$a.Suspended}}</span></div>
+  {{if not $a.Locked}}
+  <div class="tile"><span class="tile-label">Owners</span><span class="tile-value">{{len $a.OwnerNames}}</span></div>
+  <div class="tile"><span class="tile-label">PHP</span><span class="tile-text">{{join $a.PHPVersions ", "}}</span></div>
+  {{end}}
+</div>
+{{if and $a.Locked (.Can "server.view")}}
+<section>
+  <h2>Unlock admin actions</h2>
+  <p class="muted">Owners and PHP versions need a current code from your authenticator. One code unlocks admin actions for 10 minutes.</p>
+  <form method="post" action="/admin/unlock" class="inline">
+    <input type="hidden" name="csrf" value="{{.CSRF}}">
+    <input type="hidden" name="next" value="/dashboard">
+    <label>Code <input name="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" required size="8"></label>
+    <button type="submit">Unlock</button>
+  </form>
+</section>
+{{end}}
+<section class="flush">
+  <h2>Vhosts</h2>
+  <table>
+    <thead><tr><th>Domain</th><th>Owner</th><th>PHP</th><th>Status</th></tr></thead>
+    <tbody>
+    {{range $v := .Data.Vhosts}}<tr><td><code>{{$v.ID}}</code> {{$v.Primary}}</td>
+      <td>{{with index $a.OwnerNames $v.OwnerID}}<a href="/admin/owners/{{$v.OwnerID}}">{{.}}</a>{{else}}<span class="muted">owner {{$v.OwnerID}}</span>{{end}}</td>
+      <td>{{$v.PHPVersion}}</td><td><span class="badge {{$v.Status}}">{{$v.Status}}</span></td></tr>
+    {{else}}<tr><td colspan="4" class="muted">No vhosts yet. Create an owner, then act as them to add one.</td></tr>{{end}}
+    </tbody>
+  </table>
+</section>
 {{else}}
+<div class="page-head">
+  <h1>Dashboard</h1>
+  {{if .Can "vhost.manage"}}<div class="actions"><a class="button" href="/vhosts/new">New vhost</a></div>{{end}}
+</div>
+<div class="tiles">
   {{with .Data.Usage}}
-  <section>
-    <h2>Disk</h2>
-    <p>{{mb .TotalBytes}} of {{mb .LimitBytes}} used ({{.Percent}}%).</p>
-  </section>
+  <div class="tile wide"><span class="tile-label">Disk</span>
+    <span class="tile-text">{{mb .TotalBytes}} of {{mb .LimitBytes}}</span>
+    <span class="meter"><span style="width: {{.Percent}}%"></span></span></div>
   {{end}}
-  <section>
-    <h2>Vhosts</h2>
-    {{if .Data.Vhosts}}
-    <ul class="items">{{range .Data.Vhosts}}<li><a href="/vhosts/{{.ID}}">{{.Primary}}</a> <span class="muted">PHP {{.PHPVersion}}</span> <span class="badge {{.Status}}">{{.Status}}</span></li>{{end}}</ul>
-    {{else}}<p>No vhosts yet.</p>{{end}}
-    {{if .Can "vhost.manage"}}<p><a class="button" href="/vhosts/new">New vhost</a></p>{{end}}
-  </section>
   {{with .Data.Owner}}
-  <section>
-    <h2>Limits</h2>
-    <p>{{.Limits.MaxVhosts}} vhosts, {{.Limits.DiskMB}} MB disk, {{.Limits.MaxDatabases}} databases, {{.Limits.MaxAccessAccounts}} SFTP accounts.</p>
-  </section>
+  <div class="tile"><span class="tile-label">Vhosts</span><span class="tile-value">{{len $.Data.Vhosts}}<small> / {{.Limits.MaxVhosts}}</small></span></div>
+  <div class="tile"><span class="tile-label">Databases</span><span class="tile-text">up to {{.Limits.MaxDatabases}}</span></div>
+  <div class="tile"><span class="tile-label">SFTP accounts</span><span class="tile-text">up to {{.Limits.MaxAccessAccounts}}</span></div>
   {{end}}
+</div>
+<section>
+  <h2>Vhosts</h2>
+  {{if .Data.Vhosts}}
+  <ul class="items">{{range .Data.Vhosts}}<li><a href="/vhosts/{{.ID}}">{{.Primary}}</a> <span class="muted">PHP {{.PHPVersion}}</span> <span class="badge {{.Status}}">{{.Status}}</span></li>{{end}}</ul>
+  {{else}}<p class="muted">No vhosts yet.</p>{{end}}
+</section>
 {{end}}
 {{end}}

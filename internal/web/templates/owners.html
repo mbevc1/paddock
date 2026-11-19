@@ -1,14 +1,17 @@
 {{define "content"}}
-<h1>Owners</h1>
+<div class="page-head"><h1>Owners</h1></div>
 {{with .Data.NewPassword}}
 <section class="secret"><p>User <code>{{$.Data.NewUser}}</code>, password <code>{{.}}</code>. Shown only once.</p></section>
 {{end}}
+<section class="flush">
 <table>
-  <thead><tr><th>ID</th><th>Name</th><th>Vhosts</th><th>Disk</th></tr></thead>
-  <tbody>{{range .Data.Owners}}<tr><td>{{.ID}}</td><td><a href="/admin/owners/{{.ID}}">{{.Name}}</a></td><td>{{.Limits.MaxVhosts}}</td><td>{{.Limits.DiskMB}} MB</td></tr>
-  {{else}}<tr><td colspan="4">No owners.</td></tr>{{end}}</tbody>
+  <thead><tr><th>Name</th><th>Vhosts</th><th>Disk limit</th></tr></thead>
+  <tbody>{{range .Data.Owners}}<tr><td><a href="/admin/owners/{{.ID}}">{{.Name}}</a></td><td>{{index $.Data.VhostCounts .ID}} / {{.Limits.MaxVhosts}}</td><td>{{.Limits.DiskMB}} MB</td></tr>
+  {{else}}<tr><td colspan="3" class="muted">No owners yet.</td></tr>{{end}}</tbody>
 </table>
+</section>
 {{if .Can "owner.manage"}}
+<section>
 <h2>New owner</h2>
 <form method="post" action="/admin/owners" class="stack">
   <input type="hidden" name="csrf" value="{{.CSRF}}">
@@ -17,5 +20,6 @@
   <label>Your TOTP code (unless you confirmed one in the last 10 minutes) <input name="totp" inputmode="numeric" pattern="[0-9]{6}" autocomplete="one-time-code"></label>
   <button type="submit">Create owner</button>
 </form>
+</section>
 {{end}}
 {{end}}

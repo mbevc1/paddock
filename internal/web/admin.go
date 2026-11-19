@@ -88,6 +88,7 @@ func (s *Server) adminUnlock(w http.ResponseWriter, r *http.Request) {
 // OwnersData is what the owners page shows; NewPassword is a created user's first password.
 type OwnersData struct {
 	Owners      []ops.OwnerView
+	VhostCounts map[int64]int
 	NewUser     string
 	NewPassword string
 }
@@ -97,7 +98,16 @@ func (s *Server) ownersPage(w http.ResponseWriter, r *http.Request) {
 	if !s.adminRead(w, r, "owner.list", struct{}{}, &owners) {
 		return
 	}
-	s.render(w, r, http.StatusOK, "owners.html", Page{Title: "Owners", Data: OwnersData{Owners: owners}})
+	var vhosts []ops.VhostView
+	if err := s.agentCall(r, "vhost.list", ops.VhostListArgs{}, &vhosts); err != nil {
+		s.agentFailed(w, r, "/dashboard", err)
+		return
+	}
+	counts := map[int64]int{}
+	for _, v := range vhosts {
+		counts[v.OwnerID]++
+	}
+	s.render(w, r, http.StatusOK, "owners.html", Page{Title: "Owners", Data: OwnersData{Owners: owners, VhostCounts: counts}})
 }
 
 // createOwner creates the owner in the agent and the owner's first panel user here, with a

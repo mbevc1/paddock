@@ -1,10 +1,10 @@
 {{define "content"}}
-<h1>Server status</h1>
-<dl>
-  <dt>Paddock</dt><dd>{{.Data.Version}}</dd>
-  <dt>Agent</dt><dd>{{if .Data.AgentOK}}reachable{{else}}not reachable{{end}}</dd>
-  <dt>PHP versions</dt><dd>{{join .Data.PHPVersions ", "}}</dd>
-  <dt>Owners</dt><dd>{{.Data.Owners}}</dd>
-  <dt>Panel users</dt><dd>{{.Data.Users}}</dd>
-</dl>
+<div class="page-head"><h1>Server status</h1></div>
+<div class="tiles">
+  <div class="tile"><span class="tile-label">Paddock</span><span class="tile-text">{{.Data.Version}}</span></div>
+  <div class="tile"><span class="tile-label">Agent</span><span class="tile-text">{{if .Data.AgentOK}}<span class="badge active">reachable</span>{{else}}<span class="badge failed">not reachable</span>{{end}}</span></div>
+  <div class="tile"><span class="tile-label">PHP versions</span><span class="tile-text">{{join .Data.PHPVersions ", "}}</span></div>
+  <div class="tile"><span class="tile-label">Owners</span><span class="tile-value">{{.Data.Owners}}</span></div>
+  <div class="tile"><span class="tile-label">Panel users</span><span class="tile-value">{{.Data.Users}}</span></div>
+</div>
 {{end}}
