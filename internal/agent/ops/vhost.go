@@ -296,7 +296,13 @@ func applyVhost(ctx context.Context, h *Host, undo *rollback, sv state.Vhost, v 
 	if err := step("creating group "+id, groupadd, "-g", uid, id); err != nil {
 		return err
 	}
-	undo.add(func(ctx context.Context) error { return h.run(ctx, groupdel, id) })
+	undo.add(func(ctx context.Context) error {
+		// userdel, undone first, already removes the user's private group.
+		if err := h.run(ctx, groupdel, id); err != nil && exitCode(err) != groupdelNoSuchGrp {
+			return err
+		}
+		return nil
+	})
 	// No subordinate ID ranges: they would overlap the UIDs of other vhosts.
 	if err := step("creating user "+id, useradd, "-u", uid, "-g", uid, "-M", "-d", BaseWWW+"/"+id,
 		"-s", "/sbin/nologin", "-K", "SUB_UID_COUNT=0", "-K", "SUB_GID_COUNT=0", id); err != nil {

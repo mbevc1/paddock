@@ -1,9 +1,11 @@
 package ops
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"io/fs"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"slices"
@@ -197,6 +199,20 @@ func TestVhostCreateRollsBackEveryStep(t *testing.T) {
 				t.Error("rollback did not reload systemd")
 			}
 		})
+	}
+}
+
+// userdel also removes the vhost's private group, so the rollback's groupdel finds none.
+func TestVhostCreateRollbackAcceptsAGroupUserdelRemoved(t *testing.T) {
+	e, web, owner, o := vhostEnv(t)
+	var logs bytes.Buffer
+	e.host.Log = slog.New(slog.NewTextHandler(&logs, nil))
+	e.socketErr = errors.New("FPM socket did not appear")
+	e.run.On("/usr/sbin/groupdel").Return(system.Result{ExitCode: 6}, &system.ExitError{Program: "groupdel", ExitCode: 6})
+	v := runJob(t, web, "vhost.create", owner, createArgs(o))
+	wantJobError(t, v, api.CodeApplyFailed)
+	if strings.Contains(logs.String(), "rollback step failed") {
+		t.Errorf("a group userdel removed was logged as a rollback failure:\n%s", logs.String())
 	}
 }
 
