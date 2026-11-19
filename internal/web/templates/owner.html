@@ -8,7 +8,7 @@
 {{end}}
 <section>
   <h2>Users</h2>
-  <ul>{{range .Data.Users}}<li>{{.Username}}{{if .TOTPSecret}} · second factor set{{end}}{{if .TOTPRequired}} · second factor required{{end}}</li>{{else}}<li>None.</li>{{end}}</ul>
+  <ul class="items">{{range .Data.Users}}<li>{{.Username}}{{if .TOTPSecret}} <span class="badge">second factor set</span>{{end}}{{if .TOTPRequired}} <span class="badge">second factor required</span>{{end}}</li>{{else}}<li class="muted">None.</li>{{end}}</ul>
   {{if .Can "owner.manage"}}
   <form method="post" action="/admin/owners/{{$o.ID}}/totp" class="inline">
     <input type="hidden" name="csrf" value="{{.CSRF}}">
@@ -19,7 +19,7 @@
 </section>
 <section>
   <h2>Vhosts</h2>
-  <ul>{{range .Data.Vhosts}}<li>{{.ID}} {{.Primary}} · {{.Status}}</li>{{else}}<li>None.</li>{{end}}</ul>
+  <ul class="items">{{range .Data.Vhosts}}<li><code>{{.ID}}</code> {{.Primary}} <span class="badge {{.Status}}">{{.Status}}</span></li>{{else}}<li class="muted">None.</li>{{end}}</ul>
 </section>
 {{if .Can "owner.manage"}}
 <section>

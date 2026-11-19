@@ -5,23 +5,24 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="htmx-config" content='{"includeIndicatorStyles":false}'>
 <title>{{.Title}} · Paddock</title>
+<link rel="icon" href="/static/logo.svg" type="image/svg+xml">
 <link rel="stylesheet" href="/static/app.css">
 <script src="/static/htmx.min.js" defer></script>
 <script src="/static/app.js" defer></script>
 </head>
 <body{{if .Identity}} hx-headers="{{.HXHeaders}}"{{end}}>
 <header>
-  <a class="brand" href="/">Paddock</a>
+  <a class="brand" href="/"><img src="/static/logo.svg" alt="" width="28" height="28">Paddock</a>
   {{if .Can "self"}}
   <nav>
-    <a href="/dashboard">Dashboard</a>
-    {{if .Can "vhost.manage"}}<a href="/vhosts">Vhosts</a>{{end}}
-    {{if .Can "owner.manage"}}<a href="/admin/owners">Owners</a>{{end}}
-    {{if .Can "php.manage"}}<a href="/admin/php">PHP</a>{{end}}
-    {{if .Can "server.view"}}<a href="/admin/status">Status</a>{{end}}
-    {{if .Can "audit.view"}}<a href="/admin/audit">Audit</a>{{end}}
-    <a href="/notifications">Notifications <span id="unread" data-stream="/notifications/stream">{{if .Unread}}{{.Unread}}{{end}}</span></a>
-    <a href="/security">Security</a>
+    <a href="/dashboard"{{if .Active "/dashboard"}} aria-current="page"{{end}}>Dashboard</a>
+    {{if .Can "vhost.manage"}}<a href="/vhosts"{{if .Active "/vhosts"}} aria-current="page"{{end}}>Vhosts</a>{{end}}
+    {{if .Can "owner.manage"}}<a href="/admin/owners"{{if .Active "/admin/owners"}} aria-current="page"{{end}}>Owners</a>{{end}}
+    {{if .Can "php.manage"}}<a href="/admin/php"{{if .Active "/admin/php"}} aria-current="page"{{end}}>PHP</a>{{end}}
+    {{if .Can "server.view"}}<a href="/admin/status"{{if .Active "/admin/status"}} aria-current="page"{{end}}>Status</a>{{end}}
+    {{if .Can "audit.view"}}<a href="/admin/audit"{{if .Active "/admin/audit"}} aria-current="page"{{end}}>Audit</a>{{end}}
+    <a href="/notifications"{{if .Active "/notifications"}} aria-current="page"{{end}}>Notifications <span id="unread" data-stream="/notifications/stream">{{if .Unread}}{{.Unread}}{{end}}</span></a>
+    <a href="/security"{{if .Active "/security"}} aria-current="page"{{end}}>Security</a>
     <form method="post" action="/logout" class="inline">
       <input type="hidden" name="csrf" value="{{.CSRF}}">
       <button type="submit">Sign out</button>
@@ -35,7 +36,7 @@
   {{if .Can "impersonate"}}
   <form method="post" action="/admin/impersonate/stop" class="inline">
     <input type="hidden" name="csrf" value="{{.CSRF}}">
-    <button type="submit">Stop</button>
+    <button type="submit" class="secondary small">Stop</button>
   </form>
   {{end}}
 </div>

@@ -2,13 +2,13 @@
 {{$p := .}}
 <h1>Notifications</h1>
 <form method="post" action="/notifications/read" class="inline">
-  <input type="hidden" name="csrf" value="{{.CSRF}}"><button type="submit">Mark all read</button>
+  <input type="hidden" name="csrf" value="{{.CSRF}}"><button type="submit" class="secondary">Mark all read</button>
 </form>
-<ul id="notifications">
+<ul id="notifications" class="items">
 {{range .Data}}<li class="{{if .ReadAt.IsZero}}unread{{end}}">{{time .CreatedAt}} · {{.Message}}
   {{if .ReadAt.IsZero}}<form method="post" action="/notifications/read" class="inline">
     <input type="hidden" name="csrf" value="{{$p.CSRF}}"><input type="hidden" name="id" value="{{.ID}}">
-    <button type="submit">Mark read</button></form>{{end}}
+    <button type="submit" class="secondary small">Mark read</button></form>{{end}}
 </li>{{else}}<li>Nothing yet.</li>{{end}}
 </ul>
 {{end}}

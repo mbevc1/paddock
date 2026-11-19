@@ -110,13 +110,25 @@ type DashboardData struct {
 	Usage     *ops.OwnerUsage
 	Owner     *ops.OwnerView
 	AdminHome bool
+	Admin     *AdminOverview
+}
+
+// AdminOverview is the admin's dashboard. Owners and PHP versions are admin operations, so
+// they show only while the admin window is open; Locked says it is not.
+type AdminOverview struct {
+	Locked      bool
+	OwnerNames  map[int64]string
+	PHPVersions []string
+	Active      int
+	Suspended   int
+	Other       int
 }
 
 func (s *Server) dashboard(w http.ResponseWriter, r *http.Request) {
 	id := identityFrom(r)
 	d := DashboardData{AdminHome: id.Admin() && id.Impersonating() == 0}
 	if d.AdminHome {
-		s.render(w, r, http.StatusOK, "dashboard.html", Page{Title: "Dashboard", Data: d})
+		s.adminDashboard(w, r, d)
 		return
 	}
 	if err := s.agentCall(r, "vhost.list", ops.VhostListArgs{}, &d.Vhosts); err != nil {
@@ -299,4 +311,40 @@ func (s *Server) removeKey(w http.ResponseWriter, r *http.Request) {
 func (s *Server) uploadCert(w http.ResponseWriter, r *http.Request) {
 	args := ops.CertUploadArgs{VhostID: r.PathValue("id"), ChainPEM: r.PostFormValue("chain"), KeyPEM: r.PostFormValue("key")}
 	s.simpleAction(w, r, "cert.upload", args, "Certificate installed.")
+}
+
+func (s *Server) adminDashboard(w http.ResponseWriter, r *http.Request, d DashboardData) {
+	if err := s.agentCall(r, "vhost.list", ops.VhostListArgs{}, &d.Vhosts); err != nil {
+		s.agentFailed(w, r, "/security", err)
+		return
+	}
+	ov := &AdminOverview{OwnerNames: map[int64]string{}}
+	for _, v := range d.Vhosts {
+		switch v.Status {
+		case "active":
+			ov.Active++
+		case "suspended":
+			ov.Suspended++
+		default:
+			ov.Other++
+		}
+	}
+	var owners []ops.OwnerView
+	err := s.adminCall(r, "owner.list", struct{}{}, &owners)
+	if e := api.AsError(err); e != nil && (e.Code == api.CodeTOTPRequired || e.Code == api.CodeTOTPInvalid) {
+		ov.Locked = true
+	} else if err != nil {
+		s.agentFailed(w, r, "/security", err)
+		return
+	} else {
+		for _, o := range owners {
+			ov.OwnerNames[o.ID] = o.Name
+		}
+		if err := s.adminCall(r, "php.version.list", struct{}{}, &ov.PHPVersions); err != nil {
+			s.agentFailed(w, r, "/security", err)
+			return
+		}
+	}
+	d.Admin = ov
+	s.render(w, r, http.StatusOK, "dashboard.html", Page{Title: "Dashboard", Data: d})
 }

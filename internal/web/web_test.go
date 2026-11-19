@@ -19,6 +19,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/mbevc1/paddock/internal/agent/ops"
 	"github.com/mbevc1/paddock/internal/api"
 	"github.com/mbevc1/paddock/internal/auth"
 	"github.com/mbevc1/paddock/internal/web/store"
@@ -536,5 +537,101 @@ func TestRunReportsBusyPortBeforeListening(t *testing.T) {
 	}
 	if strings.Contains(logs.String(), "panel listening") {
 		t.Errorf("logged that the panel listens although binding failed:\n%s", logs.String())
+	}
+}
+
+func adminOverviewHarness(t *testing.T) (*harness, *browser) {
+	t.Helper()
+	h := newHarness(t)
+	admin := h.user("root-admin", store.RoleAdmin, 0)
+	if err := h.store.SetAdminLoginTOTP(context.Background(), admin.ID, false); err != nil {
+		t.Fatal(err)
+	}
+	h.agent.on("vhost.list", func(*api.Actor, string, json.RawMessage) (any, error) {
+		return []ops.VhostView{
+			{ID: "v00001", OwnerID: 3, PHPVersion: "8.3", Status: "active", Primary: "shop.example.com"},
+			{ID: "v00002", OwnerID: 4, PHPVersion: "8.2", Status: "suspended", Primary: "blog.example.org"},
+		}, nil
+	})
+	h.agent.on("owner.list", func(*api.Actor, string, json.RawMessage) (any, error) {
+		return []ops.OwnerView{{ID: 3, Name: "Acme Ltd"}, {ID: 4, Name: "Blue Fox"}}, nil
+	})
+	h.agent.on("php.version.list", func(*api.Actor, string, json.RawMessage) (any, error) { return []string{"8.2", "8.3"}, nil })
+	b := h.browser()
+	wantRedirect(t, b.login("root-admin", ownerPassword), "/dashboard")
+	return h, b
+}
+
+func TestAdminDashboardShowsTheServer(t *testing.T) {
+	_, b := adminOverviewHarness(t)
+	body := b.do("GET", "/dashboard", nil).Body.String()
+	for _, want := range []string{"shop.example.com", "blog.example.org", "Acme Ltd", "Blue Fox", "8.2, 8.3",
+		`<span class="tile-value">2</span>`, `<span class="tile-value">1</span>`} {
+		if !strings.Contains(body, want) {
+			t.Errorf("admin dashboard lacks %q", want)
+		}
+	}
+}
+
+func TestAdminDashboardWithoutAWindowStillListsVhosts(t *testing.T) {
+	h, b := adminOverviewHarness(t)
+	h.agent.on("owner.list", func(*api.Actor, string, json.RawMessage) (any, error) {
+		return nil, api.Errorf(api.CodeTOTPRequired, "admin code required")
+	})
+	body := b.do("GET", "/dashboard", nil).Body.String()
+	for _, want := range []string{"shop.example.com", `action="/admin/unlock"`, `name="next" value="/dashboard"`} {
+		if !strings.Contains(body, want) {
+			t.Errorf("locked admin dashboard lacks %q", want)
+		}
+	}
+}
+
+func TestOwnersPageCountsVhosts(t *testing.T) {
+	_, b := adminOverviewHarness(t)
+	if body := b.do("GET", "/admin/owners", nil).Body.String(); !strings.Contains(body, "1 / 0") {
+		t.Errorf("owners page does not count each owner's vhosts against the limit:\n%s", body)
+	}
+}
+
+func TestNavMarksTheCurrentSection(t *testing.T) {
+	h := newHarness(t)
+	h.user("alice", store.RoleOwner, 3)
+	h.agent.on("vhost.list", func(*api.Actor, string, json.RawMessage) (any, error) { return []ops.VhostView{}, nil })
+	b := h.browser()
+	b.login("alice", ownerPassword)
+	body := b.do("GET", "/vhosts", nil).Body.String()
+	if !strings.Contains(body, `href="/vhosts" aria-current="page"`) || strings.Contains(body, `href="/dashboard" aria-current`) {
+		t.Errorf("nav does not mark /vhosts as current")
+	}
+}
+
+func TestAdminManagesAVhostAsItsOwner(t *testing.T) {
+	h, b := adminOverviewHarness(t)
+	h.agent.on("owner.get", func(*api.Actor, string, json.RawMessage) (any, error) {
+		return ops.OwnerView{ID: 3, Name: "Acme Ltd"}, nil
+	})
+	body := b.do("GET", "/dashboard", nil).Body.String()
+	for _, want := range []string{`action="/admin/owners/3/impersonate"`, `name="next" value="/vhosts/v00001"`, ">Manage<"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("admin dashboard lacks %q", want)
+		}
+	}
+	wantRedirect(t, b.do("POST", "/admin/owners/3/impersonate", url.Values{"next": {"/vhosts/v00001"}}), "/vhosts/v00001?")
+	if se, _ := h.store.GetSession(context.Background(), hashToken(b.cookie)); se.Impersonating != 3 {
+		t.Errorf("session is not acting as owner 3: %+v", se)
+	}
+
+	other := h.browser()
+	wantRedirect(t, other.login("root-admin", ownerPassword), "/dashboard")
+	wantRedirect(t, other.do("POST", "/admin/owners/3/impersonate", url.Values{"next": {"//evil.example/x"}}), "/?")
+}
+
+func TestManageNeedsAnOpenAdminWindow(t *testing.T) {
+	h, b := adminOverviewHarness(t)
+	h.agent.on("owner.list", func(*api.Actor, string, json.RawMessage) (any, error) {
+		return nil, api.Errorf(api.CodeTOTPRequired, "admin code required")
+	})
+	if body := b.do("GET", "/dashboard", nil).Body.String(); strings.Contains(body, ">Manage<") {
+		t.Error("Manage shows while the admin window is closed")
 	}
 }
