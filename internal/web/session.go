@@ -233,11 +233,7 @@ func (s *Server) guard(rt Route) http.Handler {
 			}
 		default:
 			if id == nil || id.Pending {
-				if r.Method == http.MethodGet {
-					http.Redirect(w, r, "/login", http.StatusSeeOther)
-				} else {
-					http.Error(w, "sign in first", http.StatusUnauthorized)
-				}
+				toLogin(w, r)
 				return
 			}
 			if !id.Can(rt.Perm) {
@@ -271,6 +267,43 @@ func (s *Server) guard(rt Route) http.Handler {
 		ctx = context.WithValue(ctx, codeUseKey{}, &codeUse{})
 		rt.Handler(w, r.WithContext(ctx))
 	})
+}
+
+// toLogin sends a request without a session to the login page, which returns the user to the
+// page they were on: the requested page, or for a form post or an htmx request the page that
+// made it. htmx gets HX-Redirect, so the whole tab moves rather than one fragment.
+func toLogin(w http.ResponseWriter, r *http.Request) {
+	next := r.URL.RequestURI()
+	htmx := r.Header.Get("HX-Request") == "true"
+	if r.Method != http.MethodGet || htmx {
+		next = localReferer(r)
+	}
+	target := "/login"
+	if next = safeNext(next); next != "/" {
+		target += "?next=" + url.QueryEscape(next)
+	}
+	if htmx {
+		w.Header().Set("HX-Redirect", target)
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+	http.Redirect(w, r, target, http.StatusSeeOther)
+}
+
+// afterLogin is where a signed-in user goes: a safe next path, or the dashboard.
+func afterLogin(next string) string {
+	if next = safeNext(next); next == "/" {
+		return "/dashboard"
+	}
+	return next
+}
+
+// withNext appends a next path to path when there is one worth keeping.
+func withNext(path, next string) string {
+	if next = safeNext(next); next == "/" {
+		return path
+	}
+	return path + "?next=" + url.QueryEscape(next)
 }
 
 // localReferer returns the path of a same-origin Referer, or "/".

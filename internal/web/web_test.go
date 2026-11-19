@@ -114,6 +114,8 @@ type browser struct {
 	h      *harness
 	cookie string
 	origin string
+	// header is added to every request, for example Referer or HX-Request.
+	header http.Header
 }
 
 func (h *harness) browser() *browser { return &browser{h: h, origin: h.srv.origin} }
@@ -148,6 +150,9 @@ func (b *browser) do(method, path string, form url.Values) *httptest.ResponseRec
 	}
 	if b.cookie != "" {
 		req.AddCookie(&http.Cookie{Name: cookieName, Value: b.cookie})
+	}
+	for k, v := range b.header {
+		req.Header[k] = v
 	}
 	rec := httptest.NewRecorder()
 	b.h.srv.Handler().ServeHTTP(rec, req)
@@ -634,4 +639,50 @@ func TestManageNeedsAnOpenAdminWindow(t *testing.T) {
 	if body := b.do("GET", "/dashboard", nil).Body.String(); strings.Contains(body, ">Manage<") {
 		t.Error("Manage shows while the admin window is closed")
 	}
+}
+
+// An expired or missing session sends every request to the login page, which returns the user
+// to where they were.
+func TestExpiredSessionGoesToLoginAndBack(t *testing.T) {
+	h := newHarness(t)
+	h.user("alice", store.RoleOwner, 3)
+	h.agent.on("vhost.list", func(*api.Actor, string, json.RawMessage) (any, error) { return []ops.VhostView{}, nil })
+
+	b := h.browser()
+	wantRedirect(t, b.do("GET", "/vhosts?x=1", nil), "/login?next=%2Fvhosts%3Fx%3D1")
+
+	b.header = http.Header{"Referer": {"https://panel.example.com:8443/vhosts/v00001"}}
+	wantRedirect(t, b.do("POST", "/vhosts/v00001/php", url.Values{"php": {"8.4"}}), "/login?next=%2Fvhosts%2Fv00001")
+
+	b.header.Set("HX-Request", "true")
+	rec := b.do("GET", "/jobs/7", nil)
+	if rec.Code != http.StatusUnauthorized || rec.Header().Get("HX-Redirect") != "/login?next=%2Fvhosts%2Fv00001" {
+		t.Errorf("htmx request without a session = %d, HX-Redirect %q", rec.Code, rec.Header().Get("HX-Redirect"))
+	}
+
+	if body := b.do("GET", "/login?next=%2Fvhosts", nil).Body.String(); !strings.Contains(body, `name="next" value="/vhosts"`) {
+		t.Error("login form does not carry next")
+	}
+	b.header = nil
+	wantRedirect(t, b.do("POST", "/login", url.Values{"username": {"alice"}, "password": {ownerPassword}, "next": {"/vhosts"}}), "/vhosts")
+
+	evil := h.browser()
+	wantRedirect(t, evil.do("POST", "/login", url.Values{"username": {"alice"}, "password": {ownerPassword}, "next": {"//evil.example/"}}), "/dashboard")
+}
+
+func TestNextSurvivesTheSecondFactor(t *testing.T) {
+	h := newHarness(t)
+	admin := h.user("root-admin", store.RoleAdmin, 0)
+	h.agent.on("admin.totp.verify", func(_ *api.Actor, _ string, args json.RawMessage) (any, error) {
+		if strings.Contains(string(args), fmt.Sprintf(`"user_id":%d`, admin.ID)) {
+			return nil, nil
+		}
+		return nil, api.Errorf(api.CodeTOTPInvalid, "code rejected")
+	})
+	b := h.browser()
+	wantRedirect(t, b.do("POST", "/login", url.Values{"username": {"root-admin"}, "password": {ownerPassword}, "next": {"/admin/owners"}}), "/login/totp?next=%2Fadmin%2Fowners")
+	if body := b.do("GET", "/login/totp?next=%2Fadmin%2Fowners", nil).Body.String(); !strings.Contains(body, `name="next" value="/admin/owners"`) {
+		t.Error("TOTP form does not carry next")
+	}
+	wantRedirect(t, b.do("POST", "/login/totp", url.Values{"code": {"135790"}, "next": {"/admin/owners"}}), "/admin/owners")
 }

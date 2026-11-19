@@ -2,6 +2,7 @@
 <h1>Second factor</h1>
 <form method="post" action="/login/totp" class="stack">
   <input type="hidden" name="csrf" value="{{.CSRF}}">
+  {{with .Data}}<input type="hidden" name="next" value="{{.}}">{{end}}
   <label>Code from your authenticator <input name="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" autofocus></label>
   {{if not .Identity.Admin}}<label>Or a recovery code <input name="recovery" autocomplete="off"></label>{{end}}
   <button type="submit">Continue</button>
