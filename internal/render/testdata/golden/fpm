@@ -4,7 +4,7 @@ error_log = /srv/www/v00012/logs/php-fpm.log
 systemd_interval = 10
 
 [v00012]
-listen = /run/paddock/fpm/v00012/php.sock
+listen = /run/paddock/fpm/v00012/php83.sock
 listen.mode = 0600
 pm = ondemand
 pm.max_children = 10

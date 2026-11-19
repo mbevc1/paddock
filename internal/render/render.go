@@ -146,6 +146,13 @@ func (v Vhost) HTTPDUnit() string { return "paddock-httpd@" + v.id + ".service" 
 // FPMUnit returns the FPM unit instance for the vhost's PHP version.
 func (v Vhost) FPMUnit() string { return "paddock-php" + v.php.Tag() + "-fpm@" + v.id + ".service" }
 
+// FPMSocketName is the vhost's FPM socket in its run directory. Each PHP version has its own,
+// so a switch starts the new master while the old one still listens.
+func (v Vhost) FPMSocketName() string { return "php" + v.php.Tag() + ".sock" }
+
+// FPMSocket is the full path of the vhost's FPM socket.
+func (v Vhost) FPMSocket() string { return "/run/paddock/fpm/" + v.id + "/" + v.FPMSocketName() }
+
 // Limits are the resource limits rendered into slices.
 type Limits struct {
 	ownerID     int64

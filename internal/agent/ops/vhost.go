@@ -396,7 +396,7 @@ func applyVhost(ctx context.Context, h *Host, undo *rollback, sv state.Vhost, v 
 			return err
 		}
 		if unit == v.FPMUnit() {
-			if err := h.waitSocket(ctx, id); err != nil {
+			if err := h.waitSocket(ctx, v); err != nil {
 				return h.applyFailed("starting "+unit, err)
 			}
 		}

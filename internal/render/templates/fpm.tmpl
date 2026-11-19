@@ -3,7 +3,7 @@ error_log = /srv/www/{{.ID}}/logs/php-fpm.log
 systemd_interval = 10
 
 [{{.ID}}]
-listen = /run/paddock/fpm/{{.ID}}/php.sock
+listen = {{.FPMSocket}}
 listen.mode = 0600
 pm = ondemand
 pm.max_children = {{.PMMaxChildren}}

@@ -40,7 +40,7 @@ Work through the tasks in part 2 in order. Tick a task's checkbox when every acc
 | `paddock web` | `paddock` | `:8443` TLS, `:8080` redirect, `/run/paddock/acme/acme.sock` | panel, API, ACME challenge responses |
 | front `httpd` | `apache` | `:80`, `:443`, `127.0.0.1:81` (root only) | TLS for vhosts, proxy to backends; `md-status` for the agent on port 81 |
 | `paddock-httpd@vNNNNN` | vhost user | `127.64.X.Y:81` | static files, `.htaccess`, PHP via FastCGI |
-| `paddock-phpNN-fpm@vNNNNN` | vhost user | `/run/paddock/fpm/vNNNNN/php.sock` (`0600`) | PHP |
+| `paddock-phpNN-fpm@vNNNNN` | vhost user | `/run/paddock/fpm/vNNNNN/phpNN.sock` (`0600`), one per PHP version | PHP |
 
 The agent accepts connections only from UID 0 and the UID of user `paddock` (checked with `SO_PEERCRED`).
 
@@ -126,7 +126,7 @@ Usernames are never derived from domains.
   site/                         bind mount of /srv/www/v00012
 /run/paddock/                   root:root        0755   agent.sock
 /run/paddock/acme/              paddock:paddock  0755   acme.sock (panel ACME challenges)
-/run/paddock/fpm/v00012/        v00012:v00012    0700
+/run/paddock/fpm/v00012/        v00012:v00012    0700   php83.sock, one socket per PHP version
 /etc/paddock/httpd/v00012.conf  root:root        0644   backend Apache config
 /etc/paddock/fpm/v00012.conf    root:root        0644   FPM config
 /etc/httpd/conf.d/paddock-v00012.conf                   front vhost
@@ -246,7 +246,7 @@ SetEnvIf X-Forwarded-Proto https HTTPS=on
 </Directory>
 ProxyTimeout 305
 <FilesMatch "\.php$">
-    SetHandler "proxy:unix:/run/paddock/fpm/v00012/php.sock|fcgi://localhost"
+    SetHandler "proxy:unix:/run/paddock/fpm/v00012/php83.sock|fcgi://localhost"
 </FilesMatch>
 ```
 
@@ -262,7 +262,7 @@ error_log = /srv/www/v00012/logs/php-fpm.log
 systemd_interval = 10
 
 [v00012]
-listen = /run/paddock/fpm/v00012/php.sock
+listen = /run/paddock/fpm/v00012/php83.sock
 listen.mode = 0600
 pm = ondemand
 pm.max_children = 10
@@ -410,7 +410,7 @@ Known limits: a kernel exploit crosses every boundary; SELinux confines Apache a
 
 **Create:** allocate N; `useradd -u UID -U -M -d /srv/www/vNNNNN -s /sbin/nologin vNNNNN`; create directories; set XFS project and limit; `restorecon`; render backend, FPM, front, drop-ins, slice; create jail and mount unit; `systemctl daemon-reload`; start FPM, then backend; `apachectl configtest` and graceful reload of the front; create primary DB user. Roll back every step on failure.
 
-**PHP switch:** render FPM config for the new version (same socket path), start `paddock-phpNEW-fpm@vNNNNN`, wait for the socket, stop and disable the old unit, record the version.
+**PHP switch:** each PHP version listens on its own socket (`/run/paddock/fpm/vNNNNN/phpNN.sock`), because php-fpm refuses to bind a socket another master still listens on. Render the FPM config for the new version, start `paddock-phpNEW-fpm@vNNNNN` and wait for its socket, render the backend config for the new socket, check it with `httpd -t` and reload the backend gracefully so in-flight requests finish on the old master, then stop and disable the old unit and record the version. Until the old unit stops, a failure rolls back to the old config with the old master still serving.
 
 **Delete:** stop and disable units, unmount and remove the jail, remove front config and reload, drop databases and DB users, archive the tree to `/var/lib/paddock/agent/archive/` for 7 days, remove the Linux user, release the XFS project. N is never reused.
 
@@ -674,7 +674,7 @@ Throwaway shell scripts in `poc/`, run as root on a disposable AlmaLinux 9.4+ VM
 - [ ] **T1.11 PHP switch, suspend, resume.** §8.
     - Acceptance: integration test switches 8.3 to 8.4 under a request loop with no errors; suspended vhost returns 503.
     - Status: `vhost.php.switch`, `vhost.suspend`, and `vhost.resume` run as jobs with fake-runner tests for each sequence and rollback. `test/integration/vhost_test.go` covers the acceptance on the VM; it has not run yet, so the task stays open.
-    - Choices to confirm: only an active vhost can switch PHP; a suspended one must be resumed first. If the FPM socket is missing after the old master stops (PoC question 5), the switch restarts the new unit, which costs a brief gap instead of an outage. Suspend points the front at `Redirect 503 /` before stopping the units, and resume starts the units before restoring the proxy.
+    - Choices to confirm: only an active vhost can switch PHP; a suspended one must be resumed first. Suspend points the front at `Redirect 503 /` before stopping the units, and resume starts the units before restoring the proxy.
     - Deferred: Front TLS mode is always `mod_md` until T1.12 records uploaded certificates.
 - [x] **T1.12 Front Apache and certificates.** Front vhost rendering, `MDNotifyCmd` handler (`paddock agent-notify md-renewed` asks the agent to validate and reload), `md-status` reader, custom certificate upload with key and chain validation.
     - Acceptance: `apachectl configtest` failure restores the previous file and reports `apply_failed`; uploaded certificate whose key does not match is rejected.

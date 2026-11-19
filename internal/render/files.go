@@ -67,7 +67,7 @@ func UserSliceDropIn(v Vhost, l Limits) (File, error) {
 func (v Vhost) data() map[string]any {
 	return map[string]any{
 		"ID": v.id, "Address": v.Address(), "Primary": v.Primary(), "Aliases": v.Aliases(),
-		"Domains": v.domains, "PMMaxChildren": v.pmMaxChildren, "UID": v.UID(),
+		"Domains": v.domains, "PMMaxChildren": v.pmMaxChildren, "UID": v.UID(), "FPMSocket": v.FPMSocket(),
 	}
 }
 

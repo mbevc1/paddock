@@ -99,7 +99,7 @@ func newRealHarness(t *testing.T) *realHarness {
 	run := &system.Fake{}
 	host := &ops.Host{Run: run, Files: render.Writer{Root: root}, Platform: plat,
 		FS:         &ops.HostFS{Root: root, MountInfo: mountinfo, Chown: func(*os.Root, string, int, int) error { return nil }},
-		WaitSocket: func(context.Context, string) error { return nil }}
+		WaitSocket: func(context.Context, string, string) error { return nil }}
 	gate := &agent.TOTPGate{Store: st}
 	reg := agent.NewRegistry()
 	(&agent.Server{Registry: reg, Store: st}).RegisterJobGet()

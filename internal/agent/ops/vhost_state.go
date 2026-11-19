@@ -126,20 +126,37 @@ func switchPHP(ctx context.Context, store *state.Store, h *Host, actor *api.Acto
 		return nil
 	}
 
+	write := func(f render.File, err error) (*render.Change, error) {
+		if err != nil {
+			return nil, err
+		}
+		change, err := h.Files.Write(f)
+		if err != nil {
+			return nil, h.applyFailed("writing "+f.Path, err)
+		}
+		return change, nil
+	}
+
 	dropIns, err := render.SandboxDropIns(newV)
 	if err != nil {
 		return err
 	}
-	change, err := h.Files.Write(dropIns[1])
+	dropIn, err := write(dropIns[1], nil)
 	if err != nil {
-		return h.applyFailed("writing "+dropIns[1].Path, err)
+		return err
 	}
 	undo.add(func(ctx context.Context) error {
-		if err := change.Restore(); err != nil {
+		if err := dropIn.Restore(); err != nil {
 			return err
 		}
 		return h.run(ctx, systemctl, "daemon-reload")
 	})
+	// The running master read its config at start, so rewriting the file leaves it serving.
+	fpmConf, err := write(render.FPM(newV))
+	if err != nil {
+		return fail(err)
+	}
+	undo.add(func(context.Context) error { return fpmConf.Restore() })
 	if err := step("reloading systemd", systemctl, "daemon-reload"); err != nil {
 		return fail(err)
 	}
@@ -154,20 +171,31 @@ func switchPHP(ctx context.Context, store *state.Store, h *Host, actor *api.Acto
 	if err := step("starting "+newV.FPMUnit(), systemctl, "enable", "--now", newV.FPMUnit()); err != nil {
 		return fail(err)
 	}
-	undo.add(func(ctx context.Context) error { return h.run(ctx, systemctl, "enable", "--now", oldV.FPMUnit()) })
-	if err := step("stopping "+oldV.FPMUnit(), systemctl, "disable", "--now", oldV.FPMUnit()); err != nil {
+	if err := h.waitSocket(ctx, newV); err != nil {
+		return fail(h.applyFailed("starting "+newV.FPMUnit(), err))
+	}
+
+	// A graceful reload lets requests in flight finish on the old master.
+	backend, err := write(render.BackendHTTPD(newV))
+	if err != nil {
+		return fail(err)
+	}
+	undo.add(func(ctx context.Context) error {
+		if err := backend.Restore(); err != nil {
+			return err
+		}
+		return h.run(ctx, systemctl, "reload", newV.HTTPDUnit())
+	})
+	if err := step("checking the backend config", httpd, "-t", "-f", "/etc/paddock/httpd/"+sv.ID+".conf"); err != nil {
+		return fail(err)
+	}
+	if err := step("reloading "+newV.HTTPDUnit(), systemctl, "reload", newV.HTTPDUnit()); err != nil {
 		return fail(err)
 	}
 
-	// The old master may unlink the shared socket path as it exits; a restart makes the new
-	// master bind it again.
-	if err := h.waitSocket(ctx, sv.ID); err != nil {
-		if err := step("restarting "+newV.FPMUnit(), systemctl, "restart", newV.FPMUnit()); err != nil {
-			return fail(err)
-		}
-		if err := h.waitSocket(ctx, sv.ID); err != nil {
-			return fail(h.applyFailed("starting "+newV.FPMUnit(), err))
-		}
+	undo.add(func(ctx context.Context) error { return h.run(ctx, systemctl, "enable", "--now", oldV.FPMUnit()) })
+	if err := step("stopping "+oldV.FPMUnit(), systemctl, "disable", "--now", oldV.FPMUnit()); err != nil {
+		return fail(err)
 	}
 
 	oldDropIns, err := render.SandboxDropIns(oldV)
@@ -247,12 +275,27 @@ func resumeVhost(ctx context.Context, store *state.Store, h *Host, sv state.Vhos
 		return err
 	}
 	undo := &rollback{h: h}
+	// A vhost suspended before PHP versions had their own sockets still has configs naming the
+	// old shared one, so both are written again before the units start.
+	for _, build := range []func(render.Vhost) (render.File, error){render.FPM, render.BackendHTTPD} {
+		f, err := build(v)
+		if err != nil {
+			undo.run(ctx)
+			return err
+		}
+		change, err := h.Files.Write(f)
+		if err != nil {
+			undo.run(ctx)
+			return h.applyFailed("writing "+f.Path, err)
+		}
+		undo.add(func(context.Context) error { return change.Restore() })
+	}
 	undo.add(func(ctx context.Context) error { return h.run(ctx, systemctl, "disable", "--now", v.FPMUnit()) })
 	if err := h.run(ctx, systemctl, "enable", "--now", v.FPMUnit()); err != nil {
 		undo.run(ctx)
 		return h.applyFailed("starting "+v.FPMUnit(), err)
 	}
-	if err := h.waitSocket(ctx, sv.ID); err != nil {
+	if err := h.waitSocket(ctx, v); err != nil {
 		undo.run(ctx)
 		return h.applyFailed("starting "+v.FPMUnit(), err)
 	}

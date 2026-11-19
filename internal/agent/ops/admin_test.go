@@ -62,7 +62,7 @@ func newEnv(t *testing.T) *env {
 	e.root, e.chowns = hfs.Root, chowns
 	e.host = &Host{Run: e.run, Files: render.Writer{Root: e.root}, FS: hfs, Platform: plat,
 		Now:        func() time.Time { return e.now },
-		WaitSocket: func(context.Context, string) error { return e.socketErr }}
+		WaitSocket: func(context.Context, string, string) error { return e.socketErr }}
 	RegisterPHP(e.reg, store, e.host)
 	RegisterVhosts(e.reg, store, e.host)
 	return e
