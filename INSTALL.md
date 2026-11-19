@@ -25,7 +25,7 @@ BASE=https://github.com/mbevc1/paddock/releases/latest/download
 curl -fsSLO $BASE/bootstrap.sh
 curl -fsSLO $BASE/SHA256SUMS
 sha256sum -c --ignore-missing SHA256SUMS
-sudo bash bootstrap.sh --hostname panel.example.com --www-device /dev/vdb --format
+sudo bash bootstrap.sh --hostname panel.example.com --email ops@example.com --www-device /dev/vdb --format
 ```
 
 At the end it prints the first admin's username, password and TOTP URI, the panel URL and the panel certificate's fingerprint. The password and TOTP URI are shown only once, so store them before closing the terminal.
@@ -35,7 +35,7 @@ To install a particular release from the [Releases page](https://github.com/mbev
 Without a spare disk, keep `/srv/www` in a disk image instead, for example 20 GB:
 
 ```bash
-sudo bash bootstrap.sh --hostname panel.example.com --www-file 20G
+sudo bash bootstrap.sh --hostname panel.example.com --email ops@example.com --www-file 20G
 ```
 
 ### Options
@@ -46,7 +46,7 @@ sudo bash bootstrap.sh --hostname panel.example.com --www-file 20G
 | `--www-device DEV` | Block device for `/srv/www`; needed until `/srv/www` is mounted. |
 | `--format` | Create XFS on `--www-device` when it is empty. A device holding a file system is never formatted. |
 | `--www-file SIZE` | Keep `/srv/www` in an XFS image of that size, such as `20G`, at `/var/lib/paddock/www.img`, instead of on its own device. Reruns reuse the image. |
-| `--email ADDR` | Contact address for Let's Encrypt certificates (optional). |
+| `--email ADDR` | Contact address for Let's Encrypt certificates (required). Use a real domain: without one, Apache falls back to `root@localhost`, which Let's Encrypt refuses, and vhosts get no certificates. |
 | `--admin NAME` | Username of the first admin (default `admin`). |
 | `--rpm FILE` | Install a local `paddock` RPM instead of the one from the repository. |
 
@@ -128,5 +128,5 @@ make rpm RPM_VERSION=0.0.1
 ```
 
 ```bash
-sudo bash packaging/bootstrap.sh --hostname panel.example.com --www-device /dev/vdb --format --rpm dist/paddock-0.0.1-1.el9.x86_64.rpm
+sudo bash packaging/bootstrap.sh --hostname panel.example.com --email ops@example.com --www-device /dev/vdb --format --rpm dist/paddock-0.0.1-1.el9.x86_64.rpm
 ```

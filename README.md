@@ -29,7 +29,7 @@ BASE=https://github.com/mbevc1/paddock/releases/latest/download
 curl -fsSLO $BASE/bootstrap.sh
 curl -fsSLO $BASE/SHA256SUMS
 sha256sum -c --ignore-missing SHA256SUMS
-sudo bash bootstrap.sh --hostname panel.example.com --www-device /dev/vdb --format
+sudo bash bootstrap.sh --hostname panel.example.com --email ops@example.com --www-device /dev/vdb --format
 ```
 
 It prints the first admin's credentials once; the panel is then at `https://<hostname>:8443/`. [INSTALL.md](INSTALL.md) covers requirements, options, first steps, upgrades, removal and troubleshooting. The project page is https://mbevc1.github.io/paddock/.

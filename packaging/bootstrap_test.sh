@@ -44,8 +44,10 @@ printf 'UUID=2 /srv/www-old xfs defaults 0 0\n' >"$WORK/fstab2"
 reject fstab_has_www "$WORK/fstab2"
 
 : >"$WORK/local.rpm"
-args_fail() { (parse_args --hostname panel.example.com --rpm "$WORK/local.rpm" "$@") >/dev/null 2>&1 && fail "parse_args accepted: $*"; }
-args_ok() { (parse_args --hostname panel.example.com --rpm "$WORK/local.rpm" "$@") >/dev/null 2>&1 || fail "parse_args refused: $*"; }
+args_fail() { (parse_args --hostname panel.example.com --email ops@example.com --rpm "$WORK/local.rpm" "$@") >/dev/null 2>&1 && fail "parse_args accepted: $*"; }
+args_ok() { (parse_args --hostname panel.example.com --email ops@example.com --rpm "$WORK/local.rpm" "$@") >/dev/null 2>&1 || fail "parse_args refused: $*"; }
+# mod_md otherwise falls back to ServerAdmin, root@localhost, which Let's Encrypt refuses.
+(parse_args --hostname panel.example.com --rpm "$WORK/local.rpm" --www-file 20G) >/dev/null 2>&1 && fail "parse_args accepted a run without --email"
 args_ok --www-file 20G
 args_ok --www-device /dev/vdb --format
 args_fail --www-device /dev/vdb --www-file 20G
