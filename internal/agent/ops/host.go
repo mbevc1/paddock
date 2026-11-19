@@ -47,6 +47,8 @@ type Host struct {
 	// mu serializes host changes, so two operations never interleave edits and reloads of
 	// shared services such as the front Apache.
 	mu sync.Mutex
+	// activated holds the renewal each managed domain last had activated; guarded by mu.
+	activated map[string]string
 }
 
 func (h *Host) now() time.Time {

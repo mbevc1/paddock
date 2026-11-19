@@ -50,10 +50,14 @@ type MDDomain struct {
 	State    string
 	NotAfter time.Time
 	Error    string
+	// Staged is a finished renewal whose certificate waits for the front Apache to reload.
+	Staged bool
+	// RenewalRun identifies the renewal, so each one is activated once.
+	RenewalRun string
 }
 
-// registerCerts adds cert.upload and cert.status (owner) and front.md-renewed (root, called
-// by mod_md through paddock agent-notify).
+// registerCerts adds cert.upload and cert.status (owner) and front.md-renewed (root, for
+// paddock agent-notify run by hand; the usage scan activates renewals on its own).
 func registerCerts(r *agent.Registry, store *state.Store, h *Host) {
 	r.Register(agent.Op{Name: "cert.upload", Class: agent.ClassOwner, Secrets: []string{"key_pem"},
 		Handler: func(ctx context.Context, c *agent.Call) (any, error) {
@@ -86,24 +90,63 @@ func registerCerts(r *agent.Registry, store *state.Store, h *Host) {
 			}
 			h.mu.Lock()
 			defer h.mu.Unlock()
-			if err := h.run(ctx, apachectl, "configtest"); err != nil {
-				return nil, h.applyFailed("checking the front config", err)
-			}
-			if err := h.run(ctx, systemctl, "reload", "httpd.service"); err != nil {
-				return nil, h.applyFailed("reloading the front Apache", err)
-			}
-			for _, d := range args.Domains {
-				sv, err := store.VhostByDomain(ctx, d)
-				if err != nil {
-					continue
-				}
-				if _, err := store.AppendEvent(ctx, state.Event{Kind: state.EventCertRenewed, OwnerID: sv.OwnerID,
-					VhostN: sv.N, Message: "certificate renewed for " + d}); err != nil {
-					return nil, err
-				}
-			}
-			return nil, nil
+			return nil, activateRenewed(ctx, store, h, args.Domains)
 		}})
+}
+
+// activateRenewed reloads the front Apache, which puts mod_md's staged certificates in use,
+// and tells each domain's owner. The caller holds h.mu.
+func activateRenewed(ctx context.Context, store *state.Store, h *Host, domains []string) error {
+	if err := h.run(ctx, apachectl, "configtest"); err != nil {
+		return h.applyFailed("checking the front config", err)
+	}
+	if err := h.run(ctx, systemctl, "reload", "httpd.service"); err != nil {
+		return h.applyFailed("reloading the front Apache", err)
+	}
+	for _, d := range domains {
+		sv, err := store.VhostByDomain(ctx, d)
+		if err != nil {
+			continue
+		}
+		if _, err := store.AppendEvent(ctx, state.Event{Kind: state.EventCertRenewed, OwnerID: sv.OwnerID,
+			VhostN: sv.N, Message: "certificate renewed for " + d}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// activateStaged activates mod_md's finished renewals. mod_md's notify command runs as the
+// apache user, which the agent does not accept, so the usage scan watches md-status instead.
+// The caller holds h.mu.
+func activateStaged(ctx context.Context, store *state.Store, h *Host) error {
+	domains, err := h.mdStatus(ctx)
+	if err != nil {
+		// A front Apache that is down must not stop the rest of the scan; the next one retries.
+		h.logger().Warn("reading md-status failed", "err", err)
+		return nil
+	}
+	var due []string
+	for _, d := range domains {
+		if d.Staged && h.activated[d.Name] != d.RenewalRun {
+			due = append(due, d.Name)
+		}
+	}
+	if len(due) == 0 {
+		return nil
+	}
+	if err := activateRenewed(ctx, store, h, due); err != nil {
+		return err
+	}
+	if h.activated == nil {
+		h.activated = map[string]string{}
+	}
+	for _, d := range domains {
+		if d.Staged {
+			h.activated[d.Name] = d.RenewalRun
+		}
+	}
+	return nil
 }
 
 // frontOptions returns the front variant for a vhost: its certificate source and whether it
@@ -258,6 +301,8 @@ func parseMDStatus(body []byte) ([]MDDomain, error) {
 		}
 		d.NotAfter = certUntil(m["cert"])
 		if renewal, ok := m["renewal"].(map[string]any); ok {
+			d.Staged = renewal["finished"] == true
+			d.RenewalRun = str(renewal["last-run"])
 			if last, ok := renewal["last"].(map[string]any); ok {
 				d.Error = str(last["problem"])
 				if d.Error == "" {

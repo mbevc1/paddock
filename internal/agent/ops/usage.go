@@ -222,6 +222,9 @@ func ScanUsage(ctx context.Context, store *state.Store, h *Host) error {
 	if err := checkCertExpiry(ctx, store, h); err != nil {
 		errs = append(errs, err)
 	}
+	if err := activateStaged(ctx, store, h); err != nil {
+		errs = append(errs, err)
+	}
 	return errors.Join(errs...)
 }
 
