@@ -137,7 +137,7 @@ Usernames are never derived from domains.
 /var/backups/paddock/           root:root        0700   backups (phase 2)
 ```
 
-SELinux: `semanage fcontext -a -t httpd_sys_rw_content_t '/srv/www(/.*)?'`, then `restorecon`. The `paddock` module (`deploy/selinux/paddock.cil`) labels `/run/paddock/acme` `httpd_var_run_t` and lets `httpd_t` connect to the challenge socket.
+SELinux: `semanage fcontext -a -t httpd_sys_rw_content_t '/srv/www(/.*)?'`, then `restorecon`. The `paddock` module (`deploy/selinux/paddock.cil`) labels `/run/paddock/acme` `httpd_var_run_t`, lets `httpd_t` connect to the challenge socket, lets systemd (`init_t`) create and mount on each vhost's directory in the tmpfs that its units see over `/srv/www`, which carries `/srv/www`'s label, and lets `httpd_t` connect to HTTP ports (`http_port_t`): mod_md reaches Let's Encrypt on 443 and the front proxies to each backend on port 81, whatever `httpd_graceful_shutdown` or `httpd_can_network_relay` are set to.
 
 ## 7. Rendered files
 
