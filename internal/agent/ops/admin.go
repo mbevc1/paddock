@@ -49,8 +49,8 @@ type TOTPVerified struct {
 	WindowUntil time.Time `json:"window_until"`
 }
 
-// RegisterAdmin adds admin.add, admin.remove, admin.totp.reset, admin.window.open and
-// admin.window.close (root CLI) and admin.totp.verify (gate).
+// RegisterAdmin adds admin.add, admin.remove, admin.disable, admin.enable, admin.totp.reset,
+// admin.window.open and admin.window.close (root CLI) and admin.totp.verify (gate).
 func RegisterAdmin(r *agent.Registry, store *state.Store, gate *agent.TOTPGate) {
 	r.Register(agent.Op{Name: "admin.add", Class: agent.ClassRoot, Handler: func(ctx context.Context, c *agent.Call) (any, error) {
 		args, err := agent.DecodeArgs[AdminAddArgs](c)
@@ -85,11 +85,30 @@ func RegisterAdmin(r *agent.Registry, store *state.Store, gate *agent.TOTPGate) 
 		case errors.Is(err, state.ErrNotFound):
 			return nil, api.Errorf(api.CodeNotFound, "admin %d not found", args.UserID)
 		case errors.Is(err, state.ErrLastAdmin):
-			return nil, api.Errorf(api.CodeConflict, "%v; add another admin first", err)
+			return nil, api.Errorf(api.CodeConflict, "%v; add or enable another admin first", err)
 		default:
 			return nil, err
 		}
 	}})
+
+	setDisabled := func(name string, apply func(context.Context, int64) error) {
+		r.Register(agent.Op{Name: name, Class: agent.ClassRoot, Handler: func(ctx context.Context, c *agent.Call) (any, error) {
+			args, err := agent.DecodeArgs[AdminUserArgs](c)
+			if err != nil {
+				return nil, err
+			}
+			switch err := apply(ctx, args.UserID); {
+			case errors.Is(err, state.ErrNotFound):
+				return nil, api.Errorf(api.CodeNotFound, "admin %d not found", args.UserID)
+			case errors.Is(err, state.ErrLastAdmin):
+				return nil, api.Errorf(api.CodeConflict, "%v; add or enable another admin first", err)
+			default:
+				return nil, err
+			}
+		}})
+	}
+	setDisabled("admin.disable", store.DisableAdmin)
+	setDisabled("admin.enable", store.EnableAdmin)
 
 	r.Register(agent.Op{Name: "admin.totp.reset", Class: agent.ClassRoot, Handler: func(ctx context.Context, c *agent.Call) (any, error) {
 		args, err := agent.DecodeArgs[AdminUserArgs](c)
@@ -120,7 +139,7 @@ func RegisterAdmin(r *agent.Registry, store *state.Store, gate *agent.TOTPGate) 
 		}
 		until, err := gate.OpenWindow(ctx, args.UserID, time.Duration(args.Seconds)*time.Second)
 		if err != nil {
-			return nil, notFoundAdmin(err, args.UserID)
+			return nil, err
 		}
 		return TOTPVerified{WindowUntil: until.UTC()}, nil
 	}})
@@ -130,7 +149,7 @@ func RegisterAdmin(r *agent.Registry, store *state.Store, gate *agent.TOTPGate) 
 		if err != nil {
 			return nil, err
 		}
-		return nil, notFoundAdmin(gate.CloseWindow(ctx, args.UserID), args.UserID)
+		return nil, gate.CloseWindow(ctx, args.UserID)
 	}})
 
 	r.Register(agent.Op{Name: "admin.totp.verify", Class: agent.ClassGate, Handler: func(ctx context.Context, c *agent.Call) (any, error) {
@@ -144,13 +163,4 @@ func RegisterAdmin(r *agent.Registry, store *state.Store, gate *agent.TOTPGate) 
 		}
 		return TOTPVerified{WindowUntil: until.UTC()}, nil
 	}})
-}
-
-// notFoundAdmin reports an unknown admin to root as not found; the gate itself calls one
-// forbidden, which is the right answer for the web process.
-func notFoundAdmin(err error, userID int64) error {
-	if e := api.AsError(err); e != nil && e.Code == api.CodeForbidden {
-		return api.Errorf(api.CodeNotFound, "admin %d not found", userID)
-	}
-	return err
 }

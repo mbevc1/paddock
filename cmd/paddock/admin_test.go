@@ -219,6 +219,43 @@ func TestRemoveAdminChecks(t *testing.T) {
 	}
 }
 
+func TestDisableAdminChecks(t *testing.T) {
+	ctx := context.Background()
+	env, _, _ := testAdminEnv(t)
+	s, err := store.Open(ctx, filepath.Join(env.webDir, "web.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.CreateUser(ctx, "alice", store.RoleOwner, 3, "hash"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.CreateUser(ctx, "ops", store.RoleAdmin, 0, "hash"); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Close(); err != nil {
+		t.Fatal(err)
+	}
+	for _, disabled := range []bool{true, false} {
+		if err := env.setDisabled(ctx, "alice", disabled); err == nil || !strings.Contains(err.Error(), "not an admin") {
+			t.Errorf("disabled=%v on an owner: %v", disabled, err)
+		}
+		if err := env.setDisabled(ctx, "nobody", disabled); !errors.Is(err, store.ErrNotFound) {
+			t.Errorf("disabled=%v on an unknown user: %v", disabled, err)
+		}
+	}
+	if err := env.setDisabled(ctx, "ops", true); err == nil {
+		t.Fatal("disable succeeded without an agent")
+	}
+	s, err = store.Open(ctx, filepath.Join(env.webDir, "web.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	if u, err := s.GetUserByName(ctx, "ops"); err != nil || u.Disabled {
+		t.Errorf("panel user disabled although the agent was not reached: %+v, %v", u, err)
+	}
+}
+
 func TestAdminAddRollsBackWithoutAgent(t *testing.T) {
 	ctx := context.Background()
 	env, _, _ := testAdminEnv(t)

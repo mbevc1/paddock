@@ -21,7 +21,7 @@ import (
 
 const agentCallTimeout = 30 * time.Minute
 
-var errAdminUsage = errors.New("usage: paddock admin add|remove|totp-reset|reset-password|login-totp-off|login-totp-on|lock USERNAME\n       paddock admin unlock -for DURATION USERNAME")
+var errAdminUsage = errors.New("usage: paddock admin add|remove|disable|enable|totp-reset|reset-password|login-totp-off|login-totp-on|lock USERNAME\n       paddock admin unlock -for DURATION USERNAME")
 
 // adminEnv is what the admin commands touch; tests replace the web user and chown.
 type adminEnv struct {
@@ -61,6 +61,10 @@ func runAdmin(ctx context.Context, args []string, stdout, stderr io.Writer) erro
 		return env.add(ctx, username)
 	case "remove":
 		return env.remove(ctx, username)
+	case "disable":
+		return env.setDisabled(ctx, username, true)
+	case "enable":
+		return env.setDisabled(ctx, username, false)
 	case "totp-reset":
 		return env.totpReset(ctx, username)
 	case "reset-password":
@@ -167,6 +171,36 @@ func (e adminEnv) remove(ctx context.Context, username string) error {
 		return err
 	}
 	_, err = fmt.Fprintf(e.out, "Admin %s removed; their sessions are ended.\n", username)
+	return err
+}
+
+// setDisabled disables or enables an admin, in the agent first since it decides admin rights.
+// Disabling also ends the admin's panel sessions; their account and TOTP secret stay.
+func (e adminEnv) setDisabled(ctx context.Context, username string, disabled bool) error {
+	id, err := e.adminID(ctx, username, "owners' users are managed in the panel")
+	if err != nil {
+		return err
+	}
+	op, done := "admin.enable", "enabled; they sign in as before"
+	if disabled {
+		op, done = "admin.disable", "disabled; their sessions are ended"
+	}
+	if err := e.agentCall(ctx, op, ops.AdminUserArgs{UserID: id}, nil); err != nil {
+		return err
+	}
+	err = e.withWebStore(ctx, func(s *store.Store) error {
+		if err := s.SetDisabled(ctx, id, disabled); err != nil {
+			return err
+		}
+		if disabled {
+			return s.DeleteUserSessions(ctx, id, "")
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	_, err = fmt.Fprintf(e.out, "Admin %s %s.\n", username, done)
 	return err
 }
 

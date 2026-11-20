@@ -16,6 +16,7 @@ type Admin struct {
 	LastUsedStep int64
 	// WindowUntil is the end of the admin window; zero when none is open.
 	WindowUntil time.Time
+	Disabled    bool
 }
 
 // AddAdmin records an admin and their TOTP secret.
@@ -32,8 +33,8 @@ func (s *Store) AddAdmin(ctx context.Context, userID int64, username string, sec
 func (s *Store) GetAdmin(ctx context.Context, userID int64) (Admin, error) {
 	var a Admin
 	var window sql.NullString
-	err := s.db.QueryRowContext(ctx, `SELECT user_id, username, totp_secret, last_used_step, window_until
-		FROM admins WHERE user_id = ?`, userID).Scan(&a.UserID, &a.Username, &a.TOTPSecret, &a.LastUsedStep, &window)
+	err := s.db.QueryRowContext(ctx, `SELECT user_id, username, totp_secret, last_used_step, window_until, disabled
+		FROM admins WHERE user_id = ?`, userID).Scan(&a.UserID, &a.Username, &a.TOTPSecret, &a.LastUsedStep, &window, &a.Disabled)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Admin{}, fmt.Errorf("%w: admin %d", ErrNotFound, userID)
 	}
@@ -73,27 +74,53 @@ func (s *Store) CloseAdminWindow(ctx context.Context, userID int64) error {
 	return affectedOne(res, err, fmt.Sprintf("admin %d", userID))
 }
 
-// ErrLastAdmin refuses to remove the only admin, which would leave no one to run admin
-// operations.
-var ErrLastAdmin = errors.New("the last admin cannot be removed")
+// ErrLastAdmin refuses to remove or disable the last enabled admin, which would leave no one
+// to run admin operations.
+var ErrLastAdmin = errors.New("no other enabled admin would remain")
+
+// keepAnotherAdmin checks that the admin exists and that another enabled admin remains.
+func keepAnotherAdmin(ctx context.Context, tx *sql.Tx, userID int64) error {
+	var exists, others int
+	if err := tx.QueryRowContext(ctx, `SELECT count(*) FILTER (WHERE user_id = ?),
+		count(*) FILTER (WHERE user_id != ? AND disabled = 0) FROM admins`, userID, userID).
+		Scan(&exists, &others); err != nil {
+		return err
+	}
+	if exists == 0 {
+		return fmt.Errorf("%w: admin %d", ErrNotFound, userID)
+	}
+	if others == 0 {
+		return ErrLastAdmin
+	}
+	return nil
+}
 
 // RemoveAdmin deletes an admin, ending their admin rights at once.
 func (s *Store) RemoveAdmin(ctx context.Context, userID int64) error {
 	return s.tx(ctx, func(tx *sql.Tx) error {
-		var exists, total int
-		if err := tx.QueryRowContext(ctx, `SELECT count(*) FILTER (WHERE user_id = ?), count(*) FROM admins`, userID).
-			Scan(&exists, &total); err != nil {
+		if err := keepAnotherAdmin(ctx, tx, userID); err != nil {
 			return err
-		}
-		if exists == 0 {
-			return fmt.Errorf("%w: admin %d", ErrNotFound, userID)
-		}
-		if total == 1 {
-			return ErrLastAdmin
 		}
 		_, err := tx.ExecContext(ctx, `DELETE FROM admins WHERE user_id = ?`, userID)
 		return err
 	})
+}
+
+// DisableAdmin stops an admin's admin operations and closes their window, keeping the account.
+func (s *Store) DisableAdmin(ctx context.Context, userID int64) error {
+	return s.tx(ctx, func(tx *sql.Tx) error {
+		if err := keepAnotherAdmin(ctx, tx, userID); err != nil {
+			return err
+		}
+		_, err := tx.ExecContext(ctx, `UPDATE admins SET disabled = 1, window_until = NULL WHERE user_id = ?`, userID)
+		return err
+	})
+}
+
+// EnableAdmin lets a disabled admin run admin operations again, after a fresh TOTP code.
+func (s *Store) EnableAdmin(ctx context.Context, userID int64) error {
+	res, err := s.db.ExecContext(ctx, `UPDATE admins SET disabled = 0 WHERE user_id = ?`, userID)
+	return affectedOne(res, err, fmt.Sprintf("admin %d", userID))
 }
 
 // ResetAdminTOTP replaces an admin's secret and closes any open window.

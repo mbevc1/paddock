@@ -36,6 +36,18 @@ func (g *TOTPGate) admin(ctx context.Context, userID int64) (state.Admin, error)
 	if errors.Is(err, state.ErrNotFound) {
 		return state.Admin{}, api.Errorf(api.CodeForbidden, "user %d is not an admin", userID)
 	}
+	if err == nil && a.Disabled {
+		return state.Admin{}, api.Errorf(api.CodeForbidden, "admin %d is disabled", userID)
+	}
+	return a, err
+}
+
+// rootAdmin looks an admin up for a root CLI command, which reports an unknown one as such.
+func (g *TOTPGate) rootAdmin(ctx context.Context, userID int64) (state.Admin, error) {
+	a, err := g.Store.GetAdmin(ctx, userID)
+	if errors.Is(err, state.ErrNotFound) {
+		return state.Admin{}, api.Errorf(api.CodeNotFound, "admin %d not found", userID)
+	}
 	return a, err
 }
 
@@ -70,8 +82,12 @@ func (g *TOTPGate) OpenWindow(ctx context.Context, userID int64, d time.Duration
 	if d <= 0 || d > MaxRootWindow {
 		return time.Time{}, api.Errorf(api.CodeInvalidArgument, "window must be longer than 0 and at most %s", MaxRootWindow)
 	}
-	if _, err := g.admin(ctx, userID); err != nil {
+	a, err := g.rootAdmin(ctx, userID)
+	if err != nil {
 		return time.Time{}, err
+	}
+	if a.Disabled {
+		return time.Time{}, api.Errorf(api.CodeConflict, "admin %d is disabled; enable them first", userID)
 	}
 	until := g.now().Add(d)
 	return until, g.Store.OpenAdminWindow(ctx, userID, until)
@@ -79,7 +95,7 @@ func (g *TOTPGate) OpenWindow(ctx context.Context, userID int64, d time.Duration
 
 // CloseWindow ends an admin's window, so the next admin operation needs a code.
 func (g *TOTPGate) CloseWindow(ctx context.Context, userID int64) error {
-	if _, err := g.admin(ctx, userID); err != nil {
+	if _, err := g.rootAdmin(ctx, userID); err != nil {
 		return err
 	}
 	return g.Store.CloseAdminWindow(ctx, userID)

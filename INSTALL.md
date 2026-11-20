@@ -95,7 +95,9 @@ Run these as root on the server:
 | Command | Purpose |
 | --- | --- |
 | `paddock admin add NAME` | Add another admin; prints a password and TOTP URI once. |
-| `paddock admin remove NAME` | Remove an admin: their admin rights end at once, and their panel user and sessions are deleted. The last admin cannot be removed. |
+| `paddock admin remove NAME` | Remove an admin: their admin rights end at once, and their panel user and sessions are deleted. The last enabled admin cannot be removed. |
+| `paddock admin disable NAME` | Lock an admin out without deleting them: admin actions and sign-in are refused and their sessions end; password and TOTP setup stay. The last enabled admin cannot be disabled. |
+| `paddock admin enable NAME` | Let a disabled admin sign in again with their existing password and TOTP. |
 | `paddock admin totp-reset NAME` | Give an admin a new TOTP secret, for example after losing the phone. |
 | `paddock admin login-totp-off NAME` | Let an admin log in with the password alone. Admin actions still ask for a TOTP code, which opens a 10-minute admin window. |
 | `paddock admin login-totp-on NAME` | Ask for a TOTP code at the admin's login again, and end the admin's sessions. |
