@@ -73,6 +73,29 @@ func (s *Store) CloseAdminWindow(ctx context.Context, userID int64) error {
 	return affectedOne(res, err, fmt.Sprintf("admin %d", userID))
 }
 
+// ErrLastAdmin refuses to remove the only admin, which would leave no one to run admin
+// operations.
+var ErrLastAdmin = errors.New("the last admin cannot be removed")
+
+// RemoveAdmin deletes an admin, ending their admin rights at once.
+func (s *Store) RemoveAdmin(ctx context.Context, userID int64) error {
+	return s.tx(ctx, func(tx *sql.Tx) error {
+		var exists, total int
+		if err := tx.QueryRowContext(ctx, `SELECT count(*) FILTER (WHERE user_id = ?), count(*) FROM admins`, userID).
+			Scan(&exists, &total); err != nil {
+			return err
+		}
+		if exists == 0 {
+			return fmt.Errorf("%w: admin %d", ErrNotFound, userID)
+		}
+		if total == 1 {
+			return ErrLastAdmin
+		}
+		_, err := tx.ExecContext(ctx, `DELETE FROM admins WHERE user_id = ?`, userID)
+		return err
+	})
+}
+
 // ResetAdminTOTP replaces an admin's secret and closes any open window.
 func (s *Store) ResetAdminTOTP(ctx context.Context, userID int64, secret []byte) error {
 	res, err := s.db.ExecContext(ctx, `UPDATE admins SET totp_secret = ?, last_used_step = 0, window_until = NULL

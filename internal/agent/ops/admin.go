@@ -49,8 +49,8 @@ type TOTPVerified struct {
 	WindowUntil time.Time `json:"window_until"`
 }
 
-// RegisterAdmin adds admin.add, admin.totp.reset, admin.window.open and admin.window.close
-// (root CLI) and admin.totp.verify (gate).
+// RegisterAdmin adds admin.add, admin.remove, admin.totp.reset, admin.window.open and
+// admin.window.close (root CLI) and admin.totp.verify (gate).
 func RegisterAdmin(r *agent.Registry, store *state.Store, gate *agent.TOTPGate) {
 	r.Register(agent.Op{Name: "admin.add", Class: agent.ClassRoot, Handler: func(ctx context.Context, c *agent.Call) (any, error) {
 		args, err := agent.DecodeArgs[AdminAddArgs](c)
@@ -74,6 +74,21 @@ func RegisterAdmin(r *agent.Registry, store *state.Store, gate *agent.TOTPGate) 
 			return nil, err
 		}
 		return TOTPEnrollment{TOTPURI: auth.TOTPURI(TOTPIssuer, args.Username, secret)}, nil
+	}})
+
+	r.Register(agent.Op{Name: "admin.remove", Class: agent.ClassRoot, Handler: func(ctx context.Context, c *agent.Call) (any, error) {
+		args, err := agent.DecodeArgs[AdminUserArgs](c)
+		if err != nil {
+			return nil, err
+		}
+		switch err := store.RemoveAdmin(ctx, args.UserID); {
+		case errors.Is(err, state.ErrNotFound):
+			return nil, api.Errorf(api.CodeNotFound, "admin %d not found", args.UserID)
+		case errors.Is(err, state.ErrLastAdmin):
+			return nil, api.Errorf(api.CodeConflict, "%v; add another admin first", err)
+		default:
+			return nil, err
+		}
 	}})
 
 	r.Register(agent.Op{Name: "admin.totp.reset", Class: agent.ClassRoot, Handler: func(ctx context.Context, c *agent.Call) (any, error) {

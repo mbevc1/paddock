@@ -24,7 +24,7 @@ func TestRun(t *testing.T) {
 		{name: "web without hostname", args: []string{"web"}, wantCode: 1, wantStderr: "-hostname"},
 		{name: "admin without subcommand", args: []string{"admin"}, wantCode: 1, wantStderr: "usage: paddock admin"},
 		{name: "admin add without username", args: []string{"admin", "add"}, wantCode: 1, wantStderr: "usage: paddock admin"},
-		{name: "admin unknown subcommand", args: []string{"admin", "remove", "alice"}, wantCode: 1, wantStderr: "usage: paddock admin"},
+		{name: "admin unknown subcommand", args: []string{"admin", "rename", "alice"}, wantCode: 1, wantStderr: "usage: paddock admin"},
 		{name: "admin bad username", args: []string{"admin", "add", "Bad Name"}, wantCode: 1, wantStderr: "username"},
 		{name: "agent-notify without event", args: []string{"agent-notify"}, wantCode: 1, wantStderr: "usage: paddock agent-notify"},
 		{name: "agent-notify without domains", args: []string{"agent-notify", "md-renewed"}, wantCode: 1, wantStderr: "usage: paddock agent-notify"},

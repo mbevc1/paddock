@@ -12,6 +12,7 @@ import (
 
 	"github.com/mbevc1/paddock/internal/agent"
 	"github.com/mbevc1/paddock/internal/agent/ops"
+	"github.com/mbevc1/paddock/internal/api"
 	"github.com/mbevc1/paddock/internal/auth"
 	"github.com/mbevc1/paddock/internal/setup"
 	"github.com/mbevc1/paddock/internal/validate"
@@ -20,7 +21,7 @@ import (
 
 const agentCallTimeout = 30 * time.Minute
 
-var errAdminUsage = errors.New("usage: paddock admin add|totp-reset|reset-password|login-totp-off|login-totp-on|lock USERNAME\n       paddock admin unlock -for DURATION USERNAME")
+var errAdminUsage = errors.New("usage: paddock admin add|remove|totp-reset|reset-password|login-totp-off|login-totp-on|lock USERNAME\n       paddock admin unlock -for DURATION USERNAME")
 
 // adminEnv is what the admin commands touch; tests replace the web user and chown.
 type adminEnv struct {
@@ -58,6 +59,8 @@ func runAdmin(ctx context.Context, args []string, stdout, stderr io.Writer) erro
 	switch args[0] {
 	case "add":
 		return env.add(ctx, username)
+	case "remove":
+		return env.remove(ctx, username)
 	case "totp-reset":
 		return env.totpReset(ctx, username)
 	case "reset-password":
@@ -146,6 +149,25 @@ func (e adminEnv) adminID(ctx context.Context, username, why string) (int64, err
 		return nil
 	})
 	return id, err
+}
+
+// remove takes an admin's rights in the agent first, then deletes their panel user and
+// sessions. The agent already forgetting the admin means an earlier run got that far, so a
+// rerun finishes the panel side.
+func (e adminEnv) remove(ctx context.Context, username string) error {
+	id, err := e.adminID(ctx, username, "owners are removed with their owner in the panel")
+	if err != nil {
+		return err
+	}
+	err = e.agentCall(ctx, "admin.remove", ops.AdminUserArgs{UserID: id}, nil)
+	if apiErr := api.AsError(err); err != nil && (apiErr == nil || apiErr.Code != api.CodeNotFound) {
+		return err
+	}
+	if err := e.withWebStore(ctx, func(s *store.Store) error { return s.DeleteUser(ctx, id) }); err != nil {
+		return err
+	}
+	_, err = fmt.Fprintf(e.out, "Admin %s removed; their sessions are ended.\n", username)
+	return err
 }
 
 func (e adminEnv) totpReset(ctx context.Context, username string) error {
