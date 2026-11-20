@@ -273,3 +273,77 @@ func TestRootOpensAndClosesAdminWindow(t *testing.T) {
 	}
 	wantCode(t, create(), api.CodeTOTPRequired)
 }
+
+func TestRootRemovesAnAdmin(t *testing.T) {
+	ctx := context.Background()
+	e := newEnv(t)
+	root := e.client(0)
+	web := e.client(webUID)
+	for _, a := range []AdminAddArgs{{UserID: 1, Username: "admin"}, {UserID: 2, Username: "ops"}} {
+		if err := root.Call(ctx, "admin.add", nil, "", a, nil); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := root.Call(ctx, "admin.window.open", nil, "", AdminWindowArgs{UserID: 2, Seconds: 3600}, nil); err != nil {
+		t.Fatal(err)
+	}
+	ops := &api.Actor{UserID: 2, Role: api.RoleAdmin}
+	if err := web.Call(ctx, "owner.create", ops, "", ownerArgs("before"), nil); err != nil {
+		t.Fatalf("admin with an open window: %v", err)
+	}
+
+	wantCode(t, web.Call(ctx, "admin.remove", nil, "", AdminUserArgs{UserID: 2}, nil), api.CodeForbidden)
+	wantCode(t, root.Call(ctx, "admin.remove", nil, "", AdminUserArgs{UserID: 9}, nil), api.CodeNotFound)
+	if err := root.Call(ctx, "admin.remove", nil, "", AdminUserArgs{UserID: 2}, nil); err != nil {
+		t.Fatal(err)
+	}
+	wantCode(t, web.Call(ctx, "owner.create", ops, "", ownerArgs("after"), nil), api.CodeForbidden)
+	wantCode(t, root.Call(ctx, "admin.remove", nil, "", AdminUserArgs{UserID: 1}, nil), api.CodeConflict)
+}
+
+func TestRootDisablesAndEnablesAnAdmin(t *testing.T) {
+	ctx := context.Background()
+	e := newEnv(t)
+	root := e.client(0)
+	web := e.client(webUID)
+	var enrolled TOTPEnrollment
+	if err := root.Call(ctx, "admin.add", nil, "", AdminAddArgs{UserID: 1, Username: "admin"}, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := root.Call(ctx, "admin.add", nil, "", AdminAddArgs{UserID: 2, Username: "ops"}, &enrolled); err != nil {
+		t.Fatal(err)
+	}
+	secret := secretFromURI(t, enrolled.TOTPURI)
+	if err := root.Call(ctx, "admin.window.open", nil, "", AdminWindowArgs{UserID: 2, Seconds: 3600}, nil); err != nil {
+		t.Fatal(err)
+	}
+	ops := &api.Actor{UserID: 2, Role: api.RoleAdmin}
+	n := 0
+	create := func(code string) error {
+		n++
+		return web.Call(ctx, "owner.create", ops, code, ownerArgs("owner "+string(rune('a'+n))), nil)
+	}
+
+	wantCode(t, web.Call(ctx, "admin.disable", nil, "", AdminUserArgs{UserID: 2}, nil), api.CodeForbidden)
+	wantCode(t, root.Call(ctx, "admin.disable", nil, "", AdminUserArgs{UserID: 9}, nil), api.CodeNotFound)
+	if err := root.Call(ctx, "admin.disable", nil, "", AdminUserArgs{UserID: 2}, nil); err != nil {
+		t.Fatal(err)
+	}
+	wantCode(t, create(""), api.CodeForbidden)
+	wantCode(t, create(auth.TOTPCode(secret, auth.TOTPStep(e.now))), api.CodeForbidden)
+	wantCode(t, web.Call(ctx, "admin.totp.verify", nil, "", TOTPVerifyArgs{UserID: 2, Code: auth.TOTPCode(secret, auth.TOTPStep(e.now))}, nil), api.CodeForbidden)
+	wantCode(t, root.Call(ctx, "admin.window.open", nil, "", AdminWindowArgs{UserID: 2, Seconds: 60}, nil), api.CodeConflict)
+	wantCode(t, root.Call(ctx, "admin.disable", nil, "", AdminUserArgs{UserID: 1}, nil), api.CodeConflict)
+	wantCode(t, root.Call(ctx, "admin.remove", nil, "", AdminUserArgs{UserID: 1}, nil), api.CodeConflict)
+
+	if err := root.Call(ctx, "admin.enable", nil, "", AdminUserArgs{UserID: 2}, nil); err != nil {
+		t.Fatal(err)
+	}
+	wantCode(t, create(""), api.CodeTOTPRequired)
+	if err := root.Call(ctx, "admin.window.open", nil, "", AdminWindowArgs{UserID: 2, Seconds: 60}, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := create(""); err != nil {
+		t.Errorf("re-enabled admin with a new window: %v", err)
+	}
+}
