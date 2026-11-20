@@ -3,6 +3,8 @@ package ops
 import (
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -43,7 +45,42 @@ type AccessKeyResult struct {
 	Fingerprint string `json:"fingerprint"`
 }
 
+// HostKeyView is one of the server's SSH host keys, which SFTP clients ask users to confirm.
+type HostKeyView struct {
+	Type        string `json:"type"`
+	Fingerprint string `json:"fingerprint"`
+}
+
+// sshHostKeys reads the public halves of sshd's host keys. A file that does not parse is
+// skipped rather than failing the page that shows them.
+func (h *Host) sshHostKeys() ([]HostKeyView, error) {
+	dir := h.SSHDir
+	if dir == "" {
+		dir = "/etc/ssh"
+	}
+	paths, err := filepath.Glob(filepath.Join(dir, "ssh_host_*_key.pub"))
+	if err != nil {
+		return nil, err
+	}
+	keys := []HostKeyView{}
+	for _, p := range paths {
+		b, err := os.ReadFile(p) // #nosec G304 -- a fixed glob in sshd's own directory.
+		if err != nil {
+			return nil, err
+		}
+		pub, _, _, _, err := ssh.ParseAuthorizedKey(b)
+		if err != nil {
+			h.logger().Warn("skipping an unreadable SSH host key", "path", p, "err", err)
+			continue
+		}
+		keys = append(keys, HostKeyView{Type: pub.Type(), Fingerprint: ssh.FingerprintSHA256(pub)})
+	}
+	return keys, nil
+}
+
 func registerAccess(r *agent.Registry, store *state.Store, h *Host) {
+	r.Register(agent.Op{Name: "host.ssh.keys", Class: agent.ClassOwner,
+		Handler: func(context.Context, *agent.Call) (any, error) { return h.sshHostKeys() }})
 	r.Register(agent.Op{Name: "access.create", Class: agent.ClassOwner, Long: true,
 		Handler: func(ctx context.Context, c *agent.Call) (any, error) {
 			args, err := agent.DecodeArgs[AccessCreateArgs](c)

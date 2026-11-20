@@ -204,7 +204,13 @@ func (s *Server) vhostPage(w http.ResponseWriter, r *http.Request) {
 		s.agentFailed(w, r, "/vhosts", err)
 		return
 	}
-	page := Page{Title: d.Primary, Data: VhostPageData{Vhost: d, PHPVersions: versions}, Error: r.URL.Query().Get("error")}
+	data := VhostPageData{Vhost: d, PHPVersions: versions, SSHHost: s.cfg.Hostname}
+	if d.Access != nil {
+		if err := s.agentCall(r, "host.ssh.keys", struct{}{}, &data.HostKeys); err != nil {
+			s.log.Warn("reading SSH host keys failed", "err", err)
+		}
+	}
+	page := Page{Title: d.Primary, Data: data, Error: r.URL.Query().Get("error")}
 	s.render(w, r, http.StatusOK, "vhost.html", page)
 }
 
@@ -213,6 +219,9 @@ type VhostPageData struct {
 	Vhost       ops.VhostDetail
 	PHPVersions []string
 	Secret      *ops.DBCredentials
+	// SSHHost is where SFTP clients connect: the panel's hostname, which names this server.
+	SSHHost  string
+	HostKeys []ops.HostKeyView
 }
 
 func vhostPath(r *http.Request) string { return "/vhosts/" + url.PathEscape(r.PathValue("id")) }
