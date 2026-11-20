@@ -19,3 +19,19 @@ dependencies:
 pipelines:
   - changed-files:
       - any-glob-to-any-file: '.github/**'
+
+# Go source, with its embedded templates and static files. go.mod and go.sum are included so the
+# label Dependabot sets on Go updates survives sync-labels.
+go:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'cmd/**'
+          - 'internal/**'
+          - 'test/**'
+          - 'go.mod'
+          - 'go.sum'
+
+# Workflow changes; Dependabot uses the same label for GitHub Actions updates.
+github_actions:
+  - changed-files:
+      - any-glob-to-any-file: '.github/workflows/**'

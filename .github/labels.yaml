@@ -5,10 +5,10 @@
   description: Dependency updates
 - name: go
   color: "00add8"
-  description: Go module updates
+  description: Go source and module changes
 - name: github_actions
   color: "000000"
-  description: GitHub Actions updates
+  description: GitHub Actions workflow changes
 - name: documentation
   color: "0075ca"
   description: Documentation changes
