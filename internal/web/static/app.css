@@ -96,6 +96,9 @@ ul.items > li { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem;
 ul.items > li > .actions { margin-left: auto; display: flex; gap: .5rem; }
 ul.items > li > .actions .inline { margin: 0; }
 .muted { color: var(--muted); }
+pre { margin: .5rem 0; padding: .5rem .75rem; background: var(--bg); border: 1px solid var(--line); border-radius: .35rem; overflow-x: auto; }
+pre code { word-break: normal; }
+.connect { margin-bottom: 1rem; }
 
 .flash { color: var(--ok); background: var(--ok-soft); padding: .5rem .75rem; border-radius: .35rem; }
 .error { color: var(--err); background: var(--err-soft); padding: .5rem .75rem; border-radius: .35rem; }

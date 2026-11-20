@@ -686,3 +686,24 @@ func TestNextSurvivesTheSecondFactor(t *testing.T) {
 	}
 	wantRedirect(t, b.do("POST", "/login/totp", url.Values{"code": {"135790"}, "next": {"/admin/owners"}}), "/admin/owners")
 }
+
+func TestVhostPageShowsHowToConnect(t *testing.T) {
+	h := newHarness(t)
+	h.user("alice", store.RoleOwner, 3)
+	h.agent.on("vhost.get", func(*api.Actor, string, json.RawMessage) (any, error) {
+		return ops.VhostDetail{VhostView: ops.VhostView{ID: "v00006", OwnerID: 3, PHPVersion: "8.4", Status: "active", Primary: "shop.example.com"},
+			Access: &ops.AccessView{Account: "v00006"}}, nil
+	})
+	h.agent.on("php.version.list", func(*api.Actor, string, json.RawMessage) (any, error) { return []string{"8.4"}, nil })
+	h.agent.on("host.ssh.keys", func(*api.Actor, string, json.RawMessage) (any, error) {
+		return []ops.HostKeyView{{Type: "ssh-ed25519", Fingerprint: "SHA256:abc123"}}, nil
+	})
+	b := h.browser()
+	b.login("alice", ownerPassword)
+	body := b.do("GET", "/vhosts/v00006", nil).Body.String()
+	for _, want := range []string{"sftp v00006@panel.example.com", "scp -r", "v00006@panel.example.com:public/", "ssh-ed25519", "SHA256:abc123"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("vhost page lacks %q", want)
+		}
+	}
+}

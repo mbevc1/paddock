@@ -138,3 +138,37 @@ func TestVhostDeleteRemovesAccess(t *testing.T) {
 		}
 	}
 }
+
+func TestHostSSHKeys(t *testing.T) {
+	ctx := context.Background()
+	e := newEnv(t)
+	dir := t.TempDir()
+	e.host.SSHDir = dir
+	var want []HostKeyView
+	for _, name := range []string{"ed25519", "ecdsa"} {
+		line := newSSHKey(t, "root@web2")
+		pub, _, _, _, err := ssh.ParseAuthorizedKey([]byte(line))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "ssh_host_"+name+"_key.pub"), []byte(line+"\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		want = append(want, HostKeyView{Type: pub.Type(), Fingerprint: ssh.FingerprintSHA256(pub)})
+	}
+	for name, body := range map[string]string{"ssh_host_rsa_key.pub": "not a key\n", "ssh_host_ed25519_key": "PRIVATE"} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	owner := &api.Actor{UserID: 7, Role: api.RoleOwner, OwnerID: 1}
+	var got []HostKeyView
+	if err := e.client(webUID).Call(ctx, "host.ssh.keys", owner, "", struct{}{}, &got); err != nil {
+		t.Fatal(err)
+	}
+	slices.SortFunc(got, func(a, b HostKeyView) int { return strings.Compare(a.Fingerprint, b.Fingerprint) })
+	slices.SortFunc(want, func(a, b HostKeyView) int { return strings.Compare(a.Fingerprint, b.Fingerprint) })
+	if !slices.Equal(got, want) {
+		t.Errorf("host.ssh.keys = %+v, want %+v", got, want)
+	}
+}

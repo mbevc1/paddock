@@ -72,8 +72,17 @@
 <section>
   <h2>SFTP access</h2>
   <p>Upload files over SFTP; SCP clients work too, since they speak SFTP. There is no shell access.</p>
-  {{with $v.Access}}
-  <p>Account <code>{{.Account}}</code>.</p>
+  {{with $v.Access}}{{$host := $p.Data.SSHHost}}
+  <div class="connect">
+    <p>Account <code>{{.Account}}</code>, server <code>{{$host}}</code>, port 22. Files go into <code>public/</code>, the web root.</p>
+    <pre><code>sftp {{.Account}}@{{$host}}</code></pre>
+    <pre><code>scp -r ./site/* {{.Account}}@{{$host}}:public/</code></pre>
+    {{with $p.Data.HostKeys}}
+    <p class="muted">On the first connection, check that the client shows one of these server fingerprints:</p>
+    <ul class="items">{{range .}}<li><span class="badge">{{.Type}}</span> <code>{{.Fingerprint}}</code></li>{{end}}</ul>
+    {{end}}
+  </div>
+  <h3>SSH keys</h3>
   <ul class="items">{{range .Keys}}<li><code>{{.Fingerprint}}</code>
     {{if $p.Can "access.manage"}}<span class="actions"><form method="post" action="/vhosts/{{$v.ID}}/keys/remove" class="inline">
       <input type="hidden" name="csrf" value="{{$p.CSRF}}"><input type="hidden" name="key" value="{{.PublicKey}}">
