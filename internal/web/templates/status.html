@@ -6,5 +6,22 @@
   {{if .Can "php.manage"}}<a class="tile" href="/admin/php">{{else}}<div class="tile">{{end}}<span class="tile-label">PHP versions</span><span class="tile-text">{{join .Data.PHPVersions ", "}}</span>{{if .Can "php.manage"}}</a>{{else}}</div>{{end}}
   {{if .Can "owner.manage"}}<a class="tile" href="/admin/owners">{{else}}<div class="tile">{{end}}<span class="tile-label">Owners</span><span class="tile-value">{{.Data.Owners}}</span>{{if .Can "owner.manage"}}</a>{{else}}</div>{{end}}
   <a class="tile" href="/admin/admins"><span class="tile-label">Admins</span><span class="tile-value">{{.Data.Admins}}</span></a>
+  {{if .Data.HealthOK}}<div class="tile"><span class="tile-label">Problems</span><span class="tile-value">{{.Data.Problems}}</span></div>{{end}}
 </div>
+<section class="flush">
+  <h2>Vhosts</h2>
+  {{with .Data.Health}}
+  <table>
+    <thead><tr><th>Domain</th><th>Owner</th><th>Certificate</th><th>Backend</th><th>PHP-FPM</th></tr></thead>
+    <tbody>
+    {{range .}}<tr{{if .Problem}} class="problem"{{end}}><td><code>{{.ID}}</code> {{.Primary}}{{if ne .Status "active"}} <span class="badge {{.Status}}">{{.Status}}</span>{{end}}</td>
+      <td>{{if .OwnerName}}<a href="/admin/owners/{{.OwnerID}}">{{.OwnerName}}</a>{{else}}<span class="muted">owner {{.OwnerID}}</span>{{end}}</td>
+      <td><span class="badge{{with .CertClass}} {{.}}{{end}}">{{.CertLabel}}</span>{{with .Cert.Error}} <span class="muted">{{.}}</span>{{end}}</td>
+      <td>{{template "unit" .Backend}}</td><td>{{template "unit" .FPM}} <span class="muted">{{.PHPVersion}}</span></td></tr>
+    {{end}}
+    </tbody>
+  </table>
+  {{else}}<p class="muted">{{if .Data.HealthOK}}No vhosts yet.{{else}}The agent could not report vhost health.{{end}}</p>{{end}}
+</section>
 {{end}}
+{{define "unit"}}{{if eq . "active"}}<span class="badge active">running</span>{{else if eq . "inactive"}}<span class="badge failed">stopped</span>{{else if eq . "unknown"}}<span class="badge">unknown</span>{{else}}<span class="muted">–</span>{{end}}{{end}}
