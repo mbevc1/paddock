@@ -103,6 +103,37 @@ func TestAdminLoginTOTP(t *testing.T) {
 	}
 }
 
+func TestLastLogins(t *testing.T) {
+	ctx := context.Background()
+	s := openTemp(t)
+	t0 := time.Date(2026, 11, 21, 10, 0, 0, 0, time.UTC)
+	now := t0
+	s.SetClock(func() time.Time { return now })
+	for _, e := range []struct {
+		user int64
+		ip   string
+		ok   bool
+	}{{1, "192.0.2.1", true}, {2, "192.0.2.2", true}, {1, "192.0.2.3", true}, {1, "192.0.2.4", false}} {
+		if err := s.AddLoginEvent(ctx, e.user, "u", e.ip, e.ok); err != nil {
+			t.Fatal(err)
+		}
+		now = now.Add(time.Minute)
+	}
+	got, err := s.LastLogins(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if l := got[1]; l.IP != "192.0.2.3" || !l.Time.Equal(t0.Add(2*time.Minute)) {
+		t.Errorf("user 1's last successful sign-in = %+v", l)
+	}
+	if l := got[2]; l.IP != "192.0.2.2" {
+		t.Errorf("user 2's last successful sign-in = %+v", l)
+	}
+	if _, ok := got[3]; ok {
+		t.Error("a user who never signed in has a last sign-in")
+	}
+}
+
 func TestSessionsAndNotifications(t *testing.T) {
 	ctx := context.Background()
 	s := openTemp(t)
