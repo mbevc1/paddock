@@ -48,6 +48,8 @@ section.flush table { margin: 0; }
 section.flush th:first-child, section.flush td:first-child { padding-left: 1.25rem; }
 section.flush th:last-child, section.flush td:last-child { padding-right: 1.25rem; }
 section.flush tr:last-child td { border-bottom: 0; }
+section.flush > p { padding: 0 1.25rem 1rem; }
+tr.problem td:first-child { box-shadow: inset 3px 0 var(--err); }
 
 .page-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .75rem; margin: .5rem 0 1rem; }
 .page-head h1 { margin: 0; }

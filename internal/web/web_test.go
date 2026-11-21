@@ -872,6 +872,54 @@ func TestScriptAsksBeforeConfirmedSubmits(t *testing.T) {
 	}
 }
 
+func TestStatusPageShowsVhostHealth(t *testing.T) {
+	h, b := adminOverviewHarness(t)
+	valid := time.Date(2027, 2, 15, 10, 0, 0, 0, time.UTC)
+	soon := time.Date(2026, 11, 25, 10, 0, 0, 0, time.UTC)
+	h.agent.on("server.health", func(*api.Actor, string, json.RawMessage) (any, error) {
+		return []ops.VhostHealth{
+			{ID: "v00001", OwnerID: 3, Primary: "shop.example.com", Status: "active", Backend: ops.UnitActive, FPM: ops.UnitInactive,
+				Cert: ops.CertStatus{Source: "acme", NotAfter: &valid}},
+			{ID: "v00002", OwnerID: 4, Primary: "blog.example.org", Status: "suspended",
+				Cert: ops.CertStatus{Source: "acme", Error: "urn:ietf:params:acme:error:dns"}},
+			{ID: "v00003", OwnerID: 3, Primary: "soon.example.com", Status: "active", Backend: ops.UnitActive, FPM: ops.UnitActive,
+				Cert: ops.CertStatus{Source: "acme", NotAfter: &soon}},
+			{ID: "v00004", OwnerID: 3, Primary: "new.example.com", Status: "active", Backend: ops.UnitActive, FPM: ops.UnitActive,
+				Cert: ops.CertStatus{Source: "acme"}},
+		}, nil
+	})
+	body := b.do("GET", "/admin/status", nil).Body.String()
+	for _, want := range []string{
+		`<span class="tile-label">Problems</span><span class="tile-value">3</span>`,
+		`<span class="badge active">valid until 2027-02-15</span>`,
+		`<span class="badge failed">expires 2026-11-25</span>`,
+		`<span class="badge failed">error</span> <span class="muted">urn:ietf:params:acme:error:dns</span>`,
+		`<span class="badge">pending</span>`,
+		`<span class="badge active">running</span>`, `<span class="badge failed">stopped</span>`,
+		`<a href="/admin/owners/4">Blue Fox</a>`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("status page lacks %q", want)
+		}
+	}
+}
+
+func TestStatusPageWithoutHealth(t *testing.T) {
+	_, b := adminOverviewHarness(t)
+	body := b.do("GET", "/admin/status", nil).Body.String()
+	if !strings.Contains(body, "The agent could not report vhost health.") || strings.Contains(body, ">Problems<") {
+		t.Errorf("status page without health:\n%s", body)
+	}
+}
+
+func TestHealthRowLabelsAnUploadedCertificate(t *testing.T) {
+	until := time.Date(2027, 6, 1, 0, 0, 0, 0, time.UTC)
+	row := healthRow(ops.VhostHealth{Cert: ops.CertStatus{Source: "upload", NotAfter: &until}}, nil, time.Date(2026, 11, 17, 0, 0, 0, 0, time.UTC))
+	if row.CertLabel != "uploaded, valid until 2027-06-01" || row.CertClass != "active" || row.Problem {
+		t.Errorf("row = %+v", row)
+	}
+}
+
 func TestAdminDashboardDomainsOpenTheVhost(t *testing.T) {
 	_, b := adminOverviewHarness(t)
 	body := b.do("GET", "/dashboard", nil).Body.String()

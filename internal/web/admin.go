@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/mbevc1/paddock/internal/agent/ops"
 	"github.com/mbevc1/paddock/internal/api"
@@ -360,6 +361,43 @@ type StatusData struct {
 	PHPVersions []string
 	Owners      int
 	Admins      int
+	// HealthOK is false when the agent could not report Health.
+	HealthOK bool
+	Health   []HealthRow
+	Problems int
+}
+
+// HealthRow is one vhost on the status page, with its certificate and services summarized.
+type HealthRow struct {
+	ops.VhostHealth
+	OwnerName string
+	CertLabel string
+	CertClass string
+	Problem   bool
+}
+
+func healthRow(v ops.VhostHealth, owners map[int64]string, now time.Time) HealthRow {
+	row := HealthRow{VhostHealth: v, OwnerName: owners[v.OwnerID]}
+	c := v.Cert
+	switch {
+	case c.Error != "":
+		row.CertLabel, row.CertClass, row.Problem = "error", "failed", true
+	case c.NotAfter == nil:
+		row.CertLabel = "pending"
+	case c.NotAfter.Sub(now) < ops.CertWarnWindow:
+		row.CertLabel, row.CertClass, row.Problem = "expires "+c.NotAfter.UTC().Format(time.DateOnly), "failed", true
+	default:
+		row.CertLabel, row.CertClass = "valid until "+c.NotAfter.UTC().Format(time.DateOnly), "active"
+	}
+	if c.Source == state.CertUpload && c.Error == "" {
+		row.CertLabel = "uploaded, " + row.CertLabel
+	}
+	for _, u := range []ops.UnitState{v.Backend, v.FPM} {
+		if u == ops.UnitInactive || u == ops.UnitUnknown {
+			row.Problem = true
+		}
+	}
+	return row
 }
 
 // AdminRow is one admin on the admins page; Last is nil before their first sign-in.
@@ -417,6 +455,23 @@ func (s *Server) statusPage(w http.ResponseWriter, r *http.Request) {
 	for _, u := range users {
 		if u.Role == store.RoleAdmin {
 			d.Admins++
+		}
+	}
+	var health []ops.VhostHealth
+	if err := s.adminCall(r, "server.health", struct{}{}, &health); err != nil {
+		s.log.Warn("reading server health failed", "err", err)
+	} else {
+		names := make(map[int64]string, len(owners))
+		for _, o := range owners {
+			names[o.ID] = o.Name
+		}
+		d.HealthOK = true
+		for _, v := range health {
+			row := healthRow(v, names, s.now())
+			if row.Problem {
+				d.Problems++
+			}
+			d.Health = append(d.Health, row)
 		}
 	}
 	s.render(w, r, http.StatusOK, "status.html", Page{Title: "Server status", Data: d})

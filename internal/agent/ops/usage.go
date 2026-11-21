@@ -18,10 +18,12 @@ import (
 	"github.com/mbevc1/paddock/internal/validate"
 )
 
+// CertWarnWindow is how long before expiry a certificate counts as expiring.
+const CertWarnWindow = 14 * 24 * time.Hour
+
 const (
 	quotaWarnPercent    = 90
 	quotaEnforcePercent = 100
-	certWarnWindow      = 14 * 24 * time.Hour
 	// eventRepeat keeps a recurring condition, such as an expiring certificate, to one event
 	// a day.
 	eventRepeat     = 24 * time.Hour
@@ -355,7 +357,7 @@ func checkCertExpiry(ctx context.Context, store *state.Store, h *Host) error {
 			}
 			notAfter = managed[v.Primary()]
 		}
-		if notAfter.IsZero() || notAfter.Sub(now) > certWarnWindow {
+		if notAfter.IsZero() || notAfter.Sub(now) > CertWarnWindow {
 			continue
 		}
 		recent, err := store.EventSince(ctx, state.EventCertExpiring, sv.N, now.Add(-eventRepeat))
