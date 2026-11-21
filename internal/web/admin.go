@@ -359,7 +359,7 @@ type StatusData struct {
 	AgentOK     bool
 	PHPVersions []string
 	Owners      int
-	Users       int
+	Admins      int
 }
 
 // AdminRow is one admin on the admins page; Last is nil before their first sign-in.
@@ -414,7 +414,11 @@ func (s *Server) statusPage(w http.ResponseWriter, r *http.Request) {
 		s.serverError(w, r, err)
 		return
 	}
-	d.Users = len(users)
+	for _, u := range users {
+		if u.Role == store.RoleAdmin {
+			d.Admins++
+		}
+	}
 	s.render(w, r, http.StatusOK, "status.html", Page{Title: "Server status", Data: d})
 }
 

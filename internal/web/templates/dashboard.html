@@ -12,8 +12,8 @@
   <div class="tile"><span class="tile-label">Active</span><span class="tile-value">{{$a.Active}}</span></div>
   <div class="tile"><span class="tile-label">Suspended</span><span class="tile-value">{{$a.Suspended}}</span></div>
   {{if not $a.Locked}}
-  <div class="tile"><span class="tile-label">Owners</span><span class="tile-value">{{len $a.OwnerNames}}</span></div>
-  <div class="tile"><span class="tile-label">PHP</span><span class="tile-text">{{join $a.PHPVersions ", "}}</span></div>
+  {{if .Can "owner.manage"}}<a class="tile" href="/admin/owners">{{else}}<div class="tile">{{end}}<span class="tile-label">Owners</span><span class="tile-value">{{len $a.OwnerNames}}</span>{{if .Can "owner.manage"}}</a>{{else}}</div>{{end}}
+  {{if .Can "php.manage"}}<a class="tile" href="/admin/php">{{else}}<div class="tile">{{end}}<span class="tile-label">PHP</span><span class="tile-text">{{join $a.PHPVersions ", "}}</span>{{if .Can "php.manage"}}</a>{{else}}</div>{{end}}
   {{end}}
 </div>
 {{if and $a.Locked (.Can "server.view")}}
@@ -55,7 +55,7 @@
     <span class="meter"><span style="width: {{.Percent}}%"></span></span></div>
   {{end}}
   {{with .Data.Owner}}
-  <div class="tile"><span class="tile-label">Vhosts</span><span class="tile-value">{{len $.Data.Vhosts}}<small> / {{.Limits.MaxVhosts}}</small></span></div>
+  <a class="tile" href="/vhosts"><span class="tile-label">Vhosts</span><span class="tile-value">{{len $.Data.Vhosts}}<small> / {{.Limits.MaxVhosts}}</small></span></a>
   <div class="tile"><span class="tile-label">Databases</span><span class="tile-text">up to {{.Limits.MaxDatabases}}</span></div>
   <div class="tile"><span class="tile-label">SFTP accounts</span><span class="tile-text">up to {{.Limits.MaxAccessAccounts}}</span></div>
   {{end}}
