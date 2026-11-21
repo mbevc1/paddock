@@ -1,0 +1,28 @@
+{{define "content"}}
+<div class="page-head"><h1>Admins</h1></div>
+<section class="flush">
+<table>
+  <thead><tr><th>Username</th><th>Status</th><th>TOTP at login</th><th>Last sign-in</th></tr></thead>
+  <tbody>
+  {{range .Data.Admins}}<tr>
+    <td>{{.User.Username}}{{if eq .User.ID $.Data.Me}} <span class="muted">(you)</span>{{end}}</td>
+    <td>{{if .User.Disabled}}<span class="badge failed">disabled</span>{{else}}<span class="badge active">active</span>{{end}}</td>
+    <td>{{if .User.AdminLoginTOTP}}on{{else}}off{{end}}</td>
+    <td>{{with .Last}}{{time .Time}} <span class="muted">from {{.IP}}</span>{{else}}<span class="muted">never</span>{{end}}</td>
+  </tr>{{end}}
+  </tbody>
+</table>
+</section>
+<section>
+  <h2>Managing admins</h2>
+  <p class="muted">Admins are managed as root on the server, never from the panel, so a compromised panel cannot create or change one.</p>
+  <pre><code>paddock admin add NAME
+paddock admin disable NAME
+paddock admin enable NAME
+paddock admin remove NAME
+paddock admin reset-password NAME
+paddock admin totp-reset NAME
+paddock admin login-totp-off NAME
+paddock admin unlock -for 8h NAME</code></pre>
+</section>
+{{end}}

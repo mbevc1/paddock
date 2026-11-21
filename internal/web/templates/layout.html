@@ -19,15 +19,19 @@
     {{if .Can "vhost.manage"}}<a href="/vhosts"{{if .Active "/vhosts"}} aria-current="page"{{end}}>Vhosts</a>{{end}}
     {{if .Can "owner.manage"}}<a href="/admin/owners"{{if .Active "/admin/owners"}} aria-current="page"{{end}}>Owners</a>{{end}}
     {{if .Can "php.manage"}}<a href="/admin/php"{{if .Active "/admin/php"}} aria-current="page"{{end}}>PHP</a>{{end}}
+    {{if .Can "server.view"}}<a href="/admin/admins"{{if .Active "/admin/admins"}} aria-current="page"{{end}}>Admins</a>{{end}}
     {{if .Can "server.view"}}<a href="/admin/status"{{if .Active "/admin/status"}} aria-current="page"{{end}}>Status</a>{{end}}
     {{if .Can "audit.view"}}<a href="/admin/audit"{{if .Active "/admin/audit"}} aria-current="page"{{end}}>Audit</a>{{end}}
     <a href="/notifications"{{if .Active "/notifications"}} aria-current="page"{{end}}>Notifications <span id="unread" data-stream="/notifications/stream">{{if .Unread}}{{.Unread}}{{end}}</span></a>
     <a href="/security"{{if .Active "/security"}} aria-current="page"{{end}}>Security</a>
+  </nav>
+  <div class="account">
+    <span class="whoami">{{.Identity.User.Username}} <span class="badge">{{if .Identity.Admin}}admin{{else}}owner{{end}}</span></span>
     <form method="post" action="/logout" class="inline">
       <input type="hidden" name="csrf" value="{{.CSRF}}">
       <button type="submit">Sign out</button>
     </form>
-  </nav>
+  </div>
   {{end}}
 </header>
 {{if and .Identity (.Identity.Impersonating)}}

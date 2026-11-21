@@ -192,3 +192,34 @@ func (s *Store) KnownIP(ctx context.Context, userID int64, ip string) (bool, err
 	err := s.db.QueryRowContext(ctx, `SELECT count(*) FROM login_events WHERE user_id = ? AND ip = ? AND success = 1`, userID, ip).Scan(&n)
 	return n > 0, err
 }
+
+// LoginRecord is a user's most recent successful sign-in.
+type LoginRecord struct {
+	IP   string
+	Time time.Time
+}
+
+// LastLogins returns each user's most recent successful sign-in, by user ID.
+func (s *Store) LastLogins(ctx context.Context) (map[int64]LoginRecord, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT user_id, ip, time FROM login_events e
+		WHERE success = 1 AND user_id IS NOT NULL
+		AND id = (SELECT max(id) FROM login_events WHERE user_id = e.user_id AND success = 1)`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[int64]LoginRecord{}
+	for rows.Next() {
+		var id int64
+		var rec LoginRecord
+		var at sql.NullString
+		if err := rows.Scan(&id, &rec.IP, &at); err != nil {
+			return nil, err
+		}
+		if rec.Time, err = parseTS(at); err != nil {
+			return nil, err
+		}
+		out[id] = rec
+	}
+	return out, rows.Err()
+}

@@ -707,3 +707,39 @@ func TestVhostPageShowsHowToConnect(t *testing.T) {
 		}
 	}
 }
+
+func TestHeaderShowsWhoIsSignedIn(t *testing.T) {
+	h := newHarness(t)
+	h.user("alice", store.RoleOwner, 3)
+	h.agent.on("vhost.list", func(*api.Actor, string, json.RawMessage) (any, error) { return []ops.VhostView{}, nil })
+	h.agent.on("owner.get", func(*api.Actor, string, json.RawMessage) (any, error) { return ops.OwnerView{ID: 3}, nil })
+	h.agent.on("usage.get", func(*api.Actor, string, json.RawMessage) (any, error) { return ops.OwnerUsage{}, nil })
+	b := h.browser()
+	b.login("alice", ownerPassword)
+	if body := b.do("GET", "/dashboard", nil).Body.String(); !strings.Contains(body, `<span class="whoami">alice <span class="badge">owner</span></span>`) {
+		t.Error("header does not name the signed-in owner")
+	}
+}
+
+func TestAdminsPage(t *testing.T) {
+	h, b := adminOverviewHarness(t)
+	ops := h.user("ops", store.RoleAdmin, 0)
+	if err := h.store.SetDisabled(context.Background(), ops.ID, true); err != nil {
+		t.Fatal(err)
+	}
+	body := b.do("GET", "/admin/admins", nil).Body.String()
+	for _, want := range []string{"root-admin", "ops", `<span class="badge failed">disabled</span>`, "you",
+		"192.0.2.10", "paddock admin add", `<span class="whoami">root-admin <span class="badge">admin</span></span>`,
+		`href="/admin/admins" aria-current="page"`} {
+		if !strings.Contains(body, want) {
+			t.Errorf("admins page lacks %q", want)
+		}
+	}
+
+	h.user("alice", store.RoleOwner, 3)
+	owner := h.browser()
+	owner.login("alice", ownerPassword)
+	if rec := owner.do("GET", "/admin/admins", nil); rec.Code != http.StatusNotFound {
+		t.Errorf("owner reached the admins page: %d", rec.Code)
+	}
+}

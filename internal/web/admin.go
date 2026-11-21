@@ -30,6 +30,7 @@ func (s *Server) adminRoutes(rt *Router) {
 	rt.Handle(Route{Method: "GET", Pattern: "/admin/php", Perm: PermPHP, Handler: s.phpPage})
 	rt.Handle(Route{Method: "POST", Pattern: "/admin/php", Perm: PermPHP, Handler: s.changePHP})
 	rt.Handle(Route{Method: "GET", Pattern: "/admin/status", Perm: PermServer, Handler: s.statusPage})
+	rt.Handle(Route{Method: "GET", Pattern: "/admin/admins", Perm: PermServer, Handler: s.adminsPage})
 	rt.Handle(Route{Method: "GET", Pattern: "/admin/audit", Perm: PermAudit, Handler: s.auditPage})
 }
 
@@ -359,6 +360,45 @@ type StatusData struct {
 	PHPVersions []string
 	Owners      int
 	Users       int
+}
+
+// AdminRow is one admin on the admins page; Last is nil before their first sign-in.
+type AdminRow struct {
+	User store.User
+	Last *store.LoginRecord
+}
+
+// AdminsData is what the admins page shows; Me is the viewer's user ID.
+type AdminsData struct {
+	Admins []AdminRow
+	Me     int64
+}
+
+// adminsPage lists the admins from web.db. Root manages them with paddock admin on the server,
+// so the page has no actions.
+func (s *Server) adminsPage(w http.ResponseWriter, r *http.Request) {
+	users, err := s.store.ListUsers(r.Context(), 0)
+	if err != nil {
+		s.serverError(w, r, err)
+		return
+	}
+	last, err := s.store.LastLogins(r.Context())
+	if err != nil {
+		s.serverError(w, r, err)
+		return
+	}
+	d := AdminsData{Me: identityFrom(r).User.ID}
+	for _, u := range users {
+		if u.Role != store.RoleAdmin {
+			continue
+		}
+		row := AdminRow{User: u}
+		if l, ok := last[u.ID]; ok {
+			row.Last = &l
+		}
+		d.Admins = append(d.Admins, row)
+	}
+	s.render(w, r, http.StatusOK, "admins.html", Page{Title: "Admins", Data: d})
 }
 
 func (s *Server) statusPage(w http.ResponseWriter, r *http.Request) {
