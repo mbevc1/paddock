@@ -750,3 +750,46 @@ func TestAdminsPage(t *testing.T) {
 		t.Errorf("owner reached the admins page: %d", rec.Code)
 	}
 }
+
+func TestStatusTilesLinkToTheirPages(t *testing.T) {
+	h, b := adminOverviewHarness(t)
+	h.user("ops", store.RoleAdmin, 0)
+	h.user("alice", store.RoleOwner, 3)
+	body := b.do("GET", "/admin/status", nil).Body.String()
+	for _, want := range []string{
+		`<a class="tile" href="/admin/php"><span class="tile-label">PHP versions</span><span class="tile-text">8.2, 8.3</span></a>`,
+		`<a class="tile" href="/admin/owners"><span class="tile-label">Owners</span><span class="tile-value">2</span></a>`,
+		`<a class="tile" href="/admin/admins"><span class="tile-label">Admins</span><span class="tile-value">2</span></a>`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("status page lacks %q", want)
+		}
+	}
+}
+
+func TestDashboardTilesLinkToTheirPages(t *testing.T) {
+	_, b := adminOverviewHarness(t)
+	body := b.do("GET", "/dashboard", nil).Body.String()
+	for _, want := range []string{
+		`<a class="tile" href="/admin/owners"><span class="tile-label">Owners</span>`,
+		`<a class="tile" href="/admin/php"><span class="tile-label">PHP</span>`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("admin dashboard lacks %q", want)
+		}
+	}
+}
+
+func TestOwnerDashboardVhostsTileLinksToVhosts(t *testing.T) {
+	h := newHarness(t)
+	h.user("alice", store.RoleOwner, 3)
+	h.agent.on("vhost.list", func(*api.Actor, string, json.RawMessage) (any, error) { return []ops.VhostView{}, nil })
+	h.agent.on("owner.get", func(*api.Actor, string, json.RawMessage) (any, error) {
+		return ops.OwnerView{ID: 3, Name: "Acme Ltd"}, nil
+	})
+	b := h.browser()
+	b.login("alice", ownerPassword)
+	if body := b.do("GET", "/dashboard", nil).Body.String(); !strings.Contains(body, `<a class="tile" href="/vhosts"><span class="tile-label">Vhosts</span>`) {
+		t.Errorf("owner dashboard does not link the vhosts tile:\n%s", body)
+	}
+}
