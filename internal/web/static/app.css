@@ -33,7 +33,9 @@ nav a { text-decoration: none; color: var(--muted); padding: .3rem .1rem; border
 nav a:hover { color: var(--fg); }
 nav a[aria-current=page] { color: var(--fg); font-weight: 600; border-bottom-color: var(--accent); }
 .account { display: flex; align-items: center; gap: .75rem; margin-left: auto; }
-.account .whoami { color: var(--muted); font-size: .92rem; white-space: nowrap; }
+.account .whoami { color: var(--muted); font-size: .92rem; white-space: nowrap; text-decoration: none; padding: .3rem .1rem; border-bottom: 2px solid transparent; }
+.account .whoami:hover { color: var(--fg); }
+.account .whoami[aria-current=page] { color: var(--fg); border-bottom-color: var(--accent); }
 .account .inline { margin: 0; }
 .account button { background: transparent; color: var(--muted); border: 1px solid var(--line); padding: .25rem .7rem; }
 .account button:hover { color: var(--fg); background: var(--bg); }

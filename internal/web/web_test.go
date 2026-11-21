@@ -716,8 +716,15 @@ func TestHeaderShowsWhoIsSignedIn(t *testing.T) {
 	h.agent.on("usage.get", func(*api.Actor, string, json.RawMessage) (any, error) { return ops.OwnerUsage{}, nil })
 	b := h.browser()
 	b.login("alice", ownerPassword)
-	if body := b.do("GET", "/dashboard", nil).Body.String(); !strings.Contains(body, `<span class="whoami">alice <span class="badge">owner</span></span>`) {
-		t.Error("header does not name the signed-in owner")
+	body := b.do("GET", "/dashboard", nil).Body.String()
+	if !strings.Contains(body, `<a class="whoami" href="/security">alice <span class="badge">owner</span></a>`) {
+		t.Error("header does not link the signed-in owner to their security page")
+	}
+	if strings.Contains(body, `>Security</a>`) {
+		t.Error("the menu still has a separate Security item")
+	}
+	if body := b.do("GET", "/security", nil).Body.String(); !strings.Contains(body, `<a class="whoami" href="/security" aria-current="page">`) {
+		t.Error("the account link is not marked current on the security page")
 	}
 }
 
@@ -729,7 +736,7 @@ func TestAdminsPage(t *testing.T) {
 	}
 	body := b.do("GET", "/admin/admins", nil).Body.String()
 	for _, want := range []string{"root-admin", "ops", `<span class="badge failed">disabled</span>`, "you",
-		"192.0.2.10", "paddock admin add", `<span class="whoami">root-admin <span class="badge">admin</span></span>`,
+		"192.0.2.10", "paddock admin add", `<a class="whoami" href="/security">root-admin <span class="badge">admin</span></a>`,
 		`href="/admin/admins" aria-current="page"`} {
 		if !strings.Contains(body, want) {
 			t.Errorf("admins page lacks %q", want)

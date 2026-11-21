@@ -23,10 +23,9 @@
     {{if .Can "server.view"}}<a href="/admin/status"{{if .Active "/admin/status"}} aria-current="page"{{end}}>Status</a>{{end}}
     {{if .Can "audit.view"}}<a href="/admin/audit"{{if .Active "/admin/audit"}} aria-current="page"{{end}}>Audit</a>{{end}}
     <a href="/notifications"{{if .Active "/notifications"}} aria-current="page"{{end}}>Notifications <span id="unread" data-stream="/notifications/stream">{{if .Unread}}{{.Unread}}{{end}}</span></a>
-    <a href="/security"{{if .Active "/security"}} aria-current="page"{{end}}>Security</a>
   </nav>
   <div class="account">
-    <span class="whoami">{{.Identity.User.Username}} <span class="badge">{{if .Identity.Admin}}admin{{else}}owner{{end}}</span></span>
+    <a class="whoami" href="/security"{{if .Active "/security"}} aria-current="page"{{end}}>{{.Identity.User.Username}} <span class="badge">{{if .Identity.Admin}}admin{{else}}owner{{end}}</span></a>
     <form method="post" action="/logout" class="inline">
       <input type="hidden" name="csrf" value="{{.CSRF}}">
       <button type="submit">Sign out</button>
