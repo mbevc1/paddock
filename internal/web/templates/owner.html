@@ -1,11 +1,12 @@
 {{define "content"}}
 {{$o := .Data.Owner}}{{$l := $o.Limits}}
-<h1>{{$o.Name}}</h1>
-{{if .Can "impersonate"}}
-<form method="post" action="/admin/owners/{{$o.ID}}/impersonate" class="inline">
-  <input type="hidden" name="csrf" value="{{.CSRF}}"><button type="submit">Act as owner</button>
-</form>
-{{end}}
+<nav class="crumbs" aria-label="Breadcrumb"><a href="/admin/owners">Owners</a> <span aria-current="page">{{$o.Name}}</span></nav>
+<div class="page-head">
+  <h1>{{$o.Name}}</h1>
+  {{if .Can "impersonate"}}<div class="actions"><form method="post" action="/admin/owners/{{$o.ID}}/impersonate" class="inline">
+    <input type="hidden" name="csrf" value="{{.CSRF}}"><button type="submit">Act as owner</button>
+  </form></div>{{end}}
+</div>
 <section>
   <h2>Users</h2>
   <ul class="items">{{range .Data.Users}}<li>{{.Username}}{{if .TOTPSecret}} <span class="badge">second factor set</span>{{end}}{{if .TOTPRequired}} <span class="badge">second factor required</span>{{end}}</li>{{else}}<li class="muted">None.</li>{{end}}</ul>

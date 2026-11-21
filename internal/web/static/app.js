@@ -1,3 +1,12 @@
+// Ask before submitting a form that carries data-confirm; without script the form submits as is.
+document.addEventListener("submit", function (ev) {
+  "use strict";
+  var message = ev.target.getAttribute("data-confirm");
+  if (message && !window.confirm(message)) {
+    ev.preventDefault();
+  }
+}, true);
+
 // Live notifications: count new ones in the header and list them on the notifications page.
 (function () {
   "use strict";

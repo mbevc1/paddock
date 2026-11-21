@@ -1,7 +1,8 @@
 {{define "content"}}
 {{$v := .Data.Vhost}}{{$p := .}}
-<h1>{{$v.Primary}}</h1>
-<p>{{$v.ID}} · PHP {{$v.PHPVersion}} · <span class="badge {{$v.Status}}">{{$v.Status}}</span></p>
+<nav class="crumbs" aria-label="Breadcrumb"><a href="/vhosts">Vhosts</a> <span aria-current="page">{{$v.Primary}}</span></nav>
+<div class="page-head"><h1>{{$v.Primary}}</h1></div>
+<p class="meta"><code>{{$v.ID}}</code> · PHP {{$v.PHPVersion}} · <span class="badge {{$v.Status}}">{{$v.Status}}</span></p>
 
 {{with .Data.Secret}}
 <section class="secret">
@@ -36,7 +37,7 @@
 <section>
   <h2>Databases</h2>
   <ul class="items">{{range $v.Databases}}<li><code>{{.}}</code>
-    {{if $p.Can "db.manage"}}<span class="actions"><form method="post" action="/vhosts/{{$v.ID}}/databases/{{suffix . $v.ID}}/delete" class="inline">
+    {{if $p.Can "db.manage"}}<span class="actions"><form method="post" action="/vhosts/{{$v.ID}}/databases/{{suffix . $v.ID}}/delete" class="inline" data-confirm="Delete database {{.}} and all its data?">
       <input type="hidden" name="csrf" value="{{$p.CSRF}}"><button type="submit" class="danger small">Delete</button></form></span>{{end}}
   </li>{{else}}<li class="muted">None.</li>{{end}}</ul>
   {{if .Can "db.manage"}}
@@ -55,7 +56,7 @@
     {{if $p.Can "db.manage"}}<span class="actions">
     <form method="post" action="/vhosts/{{$v.ID}}/dbusers/{{suffix .Name $v.ID}}/password" class="inline">
       <input type="hidden" name="csrf" value="{{$p.CSRF}}"><button type="submit" class="secondary small">New password</button></form>
-    <form method="post" action="/vhosts/{{$v.ID}}/dbusers/{{suffix .Name $v.ID}}/delete" class="inline">
+    <form method="post" action="/vhosts/{{$v.ID}}/dbusers/{{suffix .Name $v.ID}}/delete" class="inline" data-confirm="Delete DB user {{.Name}}?">
       <input type="hidden" name="csrf" value="{{$p.CSRF}}"><button type="submit" class="danger small">Delete</button></form>
     </span>{{end}}
   </li>{{else}}<li class="muted">None.</li>{{end}}</ul>
@@ -84,7 +85,7 @@
   </div>
   <h3>SSH keys</h3>
   <ul class="items">{{range .Keys}}<li><code>{{.Fingerprint}}</code>
-    {{if $p.Can "access.manage"}}<span class="actions"><form method="post" action="/vhosts/{{$v.ID}}/keys/remove" class="inline">
+    {{if $p.Can "access.manage"}}<span class="actions"><form method="post" action="/vhosts/{{$v.ID}}/keys/remove" class="inline" data-confirm="Remove key {{.Fingerprint}}?">
       <input type="hidden" name="csrf" value="{{$p.CSRF}}"><input type="hidden" name="key" value="{{.PublicKey}}">
       <button type="submit" class="danger small">Remove</button></form></span>{{end}}
   </li>{{else}}<li class="muted">No keys.</li>{{end}}</ul>
@@ -94,7 +95,7 @@
     <label>Public key <textarea name="key" rows="2" required></textarea></label>
     <button type="submit">Add key</button>
   </form>
-  <form method="post" action="/vhosts/{{$v.ID}}/access/delete" class="inline">
+  <form method="post" action="/vhosts/{{$v.ID}}/access/delete" class="inline" data-confirm="Remove SFTP account {{.Account}} and its keys?">
     <input type="hidden" name="csrf" value="{{$p.CSRF}}"><button type="submit" class="danger">Remove account</button>
   </form>
   {{end}}

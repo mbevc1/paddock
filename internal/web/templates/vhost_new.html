@@ -1,5 +1,6 @@
 {{define "content"}}
-<h1>New vhost</h1>
+<nav class="crumbs" aria-label="Breadcrumb"><a href="/vhosts">Vhosts</a> <span aria-current="page">New vhost</span></nav>
+<div class="page-head"><h1>New vhost</h1></div>
 {{if .Data.NeedsOwner}}
 <p>Admins create vhosts while acting as an owner. Open the owner and choose “Act as owner”.</p>
 {{else if .Can "vhost.manage"}}

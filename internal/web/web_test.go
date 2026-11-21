@@ -793,3 +793,81 @@ func TestOwnerDashboardVhostsTileLinksToVhosts(t *testing.T) {
 		t.Errorf("owner dashboard does not link the vhosts tile:\n%s", body)
 	}
 }
+
+func vhostPage(t *testing.T) string {
+	t.Helper()
+	h := newHarness(t)
+	h.user("alice", store.RoleOwner, 3)
+	h.agent.on("vhost.get", func(*api.Actor, string, json.RawMessage) (any, error) {
+		return ops.VhostDetail{VhostView: ops.VhostView{ID: "v00006", OwnerID: 3, PHPVersion: "8.4", Status: "active", Primary: "shop.example.com"},
+			Databases: []string{"v00006_shop"}, DBUsers: []ops.DBUserView{{Name: "v00006_report", Grants: "read"}},
+			Access: &ops.AccessView{Account: "v00006", Keys: []ops.KeyView{{Fingerprint: "SHA256:k1", PublicKey: "ssh-ed25519 AAAA"}}}}, nil
+	})
+	h.agent.on("php.version.list", func(*api.Actor, string, json.RawMessage) (any, error) { return []string{"8.4"}, nil })
+	h.agent.on("host.ssh.keys", func(*api.Actor, string, json.RawMessage) (any, error) { return []ops.HostKeyView{}, nil })
+	b := h.browser()
+	b.login("alice", ownerPassword)
+	return b.do("GET", "/vhosts/v00006", nil).Body.String()
+}
+
+func TestVhostPageHasBreadcrumbsAndAPageHead(t *testing.T) {
+	body := vhostPage(t)
+	for _, want := range []string{
+		`<nav class="crumbs" aria-label="Breadcrumb"><a href="/vhosts">Vhosts</a> <span aria-current="page">shop.example.com</span></nav>`,
+		`<div class="page-head">`, `<h1>shop.example.com</h1>`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("vhost page lacks %q", want)
+		}
+	}
+}
+
+func TestVhostPageAsksBeforeDeleting(t *testing.T) {
+	body := vhostPage(t)
+	for _, want := range []string{
+		`data-confirm="Delete database v00006_shop and all its data?"`,
+		`data-confirm="Delete DB user v00006_report?"`,
+		`data-confirm="Remove key SHA256:k1?"`,
+		`data-confirm="Remove SFTP account v00006 and its keys?"`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("vhost page lacks %q", want)
+		}
+	}
+}
+
+func TestOwnerPageHasBreadcrumbsAndAPageHead(t *testing.T) {
+	h, b := adminOverviewHarness(t)
+	h.agent.on("owner.get", func(*api.Actor, string, json.RawMessage) (any, error) {
+		return ops.OwnerView{ID: 3, Name: "Acme Ltd"}, nil
+	})
+	body := b.do("GET", "/admin/owners/3", nil).Body.String()
+	for _, want := range []string{
+		`<nav class="crumbs" aria-label="Breadcrumb"><a href="/admin/owners">Owners</a> <span aria-current="page">Acme Ltd</span></nav>`,
+		`<div class="page-head">`, `<h1>Acme Ltd</h1>`, `<div class="actions"><form method="post" action="/admin/owners/3/impersonate"`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("owner page lacks %q", want)
+		}
+	}
+}
+
+func TestNewVhostPageHasBreadcrumbs(t *testing.T) {
+	h := newHarness(t)
+	h.user("alice", store.RoleOwner, 3)
+	h.agent.on("php.version.list", func(*api.Actor, string, json.RawMessage) (any, error) { return []string{"8.4"}, nil })
+	h.agent.on("owner.get", func(*api.Actor, string, json.RawMessage) (any, error) { return ops.OwnerView{ID: 3}, nil })
+	b := h.browser()
+	b.login("alice", ownerPassword)
+	want := `<nav class="crumbs" aria-label="Breadcrumb"><a href="/vhosts">Vhosts</a> <span aria-current="page">New vhost</span></nav>`
+	if body := b.do("GET", "/vhosts/new", nil).Body.String(); !strings.Contains(body, want) {
+		t.Errorf("new vhost page lacks breadcrumbs:\n%s", body)
+	}
+}
+
+func TestScriptAsksBeforeConfirmedSubmits(t *testing.T) {
+	h := newHarness(t)
+	if body := h.browser().do("GET", "/static/app.js", nil).Body.String(); !strings.Contains(body, `"data-confirm"`) || !strings.Contains(body, "window.confirm") {
+		t.Error("app.js does not ask before submitting a form with data-confirm")
+	}
+}
