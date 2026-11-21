@@ -9,7 +9,7 @@ Work through the tasks in part 2 in order. Tick a task's checkbox when every acc
 
 ## 1. Scope
 
-**In scope:** isolated vhosts, owners with limits, PHP version per vhost (switchable in place), MariaDB databases, SFTP and opt-in SSH, TLS per vhost, one web panel for admins and owners, in-app notifications, one-script install.
+**In scope:** isolated vhosts, owners with limits, PHP version per vhost (switchable in place), MariaDB databases, SFTP access (no shell), TLS per vhost, one web panel for admins and owners, in-app notifications, one-script install.
 
 **Out of scope:** DNS, email hosting, reseller accounts, containers.
 

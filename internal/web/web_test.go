@@ -871,3 +871,24 @@ func TestScriptAsksBeforeConfirmedSubmits(t *testing.T) {
 		t.Error("app.js does not ask before submitting a form with data-confirm")
 	}
 }
+
+func TestAdminDashboardDomainsOpenTheVhost(t *testing.T) {
+	_, b := adminOverviewHarness(t)
+	body := b.do("GET", "/dashboard", nil).Body.String()
+	for _, want := range []string{`<form method="post" action="/admin/owners/3/impersonate" class="inline">`,
+		`<input type="hidden" name="next" value="/vhosts/v00001"><button type="submit" class="link">shop.example.com</button></form>`} {
+		if !strings.Contains(body, want) {
+			t.Errorf("admin dashboard does not open the vhost from its domain, lacks %q", want)
+		}
+	}
+}
+
+func TestLockedAdminDashboardShowsDomainsAsText(t *testing.T) {
+	h, b := adminOverviewHarness(t)
+	h.agent.on("owner.list", func(*api.Actor, string, json.RawMessage) (any, error) {
+		return nil, api.Errorf(api.CodeTOTPRequired, "admin code required")
+	})
+	if body := b.do("GET", "/dashboard", nil).Body.String(); strings.Contains(body, `class="link">shop.example.com`) {
+		t.Error("locked admin dashboard offers a domain link that would need an admin code")
+	}
+}
