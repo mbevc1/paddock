@@ -20,7 +20,7 @@
 </section>
 <section>
   <h2>Vhosts</h2>
-  <ul class="items">{{range .Data.Vhosts}}<li><code>{{.ID}}</code> {{.Primary}} <span class="badge {{.Status}}">{{.Status}}</span></li>{{else}}<li class="muted">None.</li>{{end}}</ul>
+  <ul class="items">{{range .Data.Vhosts}}<li>{{.Primary}} <code class="muted">{{.ID}}</code> <span class="badge {{.Status}}">{{.Status}}</span></li>{{else}}<li class="muted">None.</li>{{end}}</ul>
 </section>
 {{if .Can "owner.manage"}}
 <section>

@@ -58,6 +58,11 @@ var funcs = template.FuncMap{
 		}
 		return false
 	},
+	// pdo returns the PHP line that opens a database as the vhost's own user. Database names
+	// hold only lowercase letters, digits and underscores, so they need no PHP escaping.
+	"pdo": func(db string) string {
+		return "$db = new PDO('mysql:unix_socket=' . getenv('DB_SOCKET') . ';dbname=" + db + "', getenv('DB_USER'));"
+	},
 	// suffix returns the part of a database or DB user name after "<vhost id>_".
 	"suffix": func(name, vhostID string) string { return strings.TrimPrefix(name, vhostID+"_") },
 }

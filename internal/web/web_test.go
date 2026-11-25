@@ -796,6 +796,12 @@ func TestOwnerDashboardVhostsTileLinksToVhosts(t *testing.T) {
 
 func vhostPage(t *testing.T) string {
 	t.Helper()
+	_, b := vhostBrowser(t)
+	return b.do("GET", "/vhosts/v00006", nil).Body.String()
+}
+
+func vhostBrowser(t *testing.T) (*harness, *browser) {
+	t.Helper()
 	h := newHarness(t)
 	h.user("alice", store.RoleOwner, 3)
 	h.agent.on("vhost.get", func(*api.Actor, string, json.RawMessage) (any, error) {
@@ -807,7 +813,7 @@ func vhostPage(t *testing.T) string {
 	h.agent.on("host.ssh.keys", func(*api.Actor, string, json.RawMessage) (any, error) { return []ops.HostKeyView{}, nil })
 	b := h.browser()
 	b.login("alice", ownerPassword)
-	return b.do("GET", "/vhosts/v00006", nil).Body.String()
+	return h, b
 }
 
 func TestVhostPageHasBreadcrumbsAndAPageHead(t *testing.T) {
@@ -938,5 +944,81 @@ func TestLockedAdminDashboardShowsDomainsAsText(t *testing.T) {
 	})
 	if body := b.do("GET", "/dashboard", nil).Body.String(); strings.Contains(body, `class="link">shop.example.com`) {
 		t.Error("locked admin dashboard offers a domain link that would need an admin code")
+	}
+}
+
+func TestVhostPageShowsHowToConnectToEachDatabase(t *testing.T) {
+	body := vhostPage(t)
+	for _, want := range []string{
+		`<code class="muted">mysql:unix_socket=/var/lib/mysql/mysql.sock;dbname=v00006_shop</code>`,
+		`user <code>v00006</code>`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("vhost page lacks %q", want)
+		}
+	}
+}
+
+func TestNewPasswordPageKeepsTheConnectionDetails(t *testing.T) {
+	h, b := vhostBrowser(t)
+	h.agent.on("dbuser.password.reset", func(*api.Actor, string, json.RawMessage) (any, error) {
+		return ops.DBCredentials{User: "v00006", Password: "s3cret-once"}, nil
+	})
+	body := b.do("POST", "/vhosts/v00006/dbpassword", url.Values{}).Body.String()
+	for _, want := range []string{"s3cret-once", "sftp v00006@panel.example.com", "mysql:unix_socket=/var/lib/mysql/mysql.sock;dbname=v00006_shop"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("new password page lacks %q", want)
+		}
+	}
+}
+
+func TestVhostListsShowTheDomainBeforeTheID(t *testing.T) {
+	h, admin := adminOverviewHarness(t)
+	h.agent.on("owner.get", func(*api.Actor, string, json.RawMessage) (any, error) {
+		return ops.OwnerView{ID: 3, Name: "Acme Ltd"}, nil
+	})
+	h.agent.on("server.health", func(*api.Actor, string, json.RawMessage) (any, error) {
+		return []ops.VhostHealth{{ID: "v00001", OwnerID: 3, Primary: "shop.example.com", Status: "active"}}, nil
+	})
+	h.user("alice", store.RoleOwner, 3)
+	owner := h.browser()
+	owner.login("alice", ownerPassword)
+	for _, tc := range []struct {
+		b    *browser
+		path string
+		want string
+	}{
+		{admin, "/dashboard", `shop.example.com</button></form> <code class="muted">v00001</code>`},
+		{admin, "/admin/owners/3", `shop.example.com <code class="muted">v00001</code>`},
+		{admin, "/admin/status", `shop.example.com <code class="muted">v00001</code>`},
+		{owner, "/dashboard", `shop.example.com</a> <code class="muted">v00001</code>`},
+		{owner, "/vhosts", `shop.example.com</a> <code class="muted">v00001</code>`},
+	} {
+		if body := tc.b.do("GET", tc.path, nil).Body.String(); !strings.Contains(body, tc.want) {
+			t.Errorf("%s lacks %q", tc.path, tc.want)
+		}
+	}
+}
+
+func TestVhostPageOffersPHPToCopy(t *testing.T) {
+	body := vhostPage(t)
+	php := `$db = new PDO(&#39;mysql:unix_socket=&#39; . getenv(&#39;DB_SOCKET&#39;) . &#39;;dbname=v00006_shop&#39;, getenv(&#39;DB_USER&#39;));`
+	for _, want := range []string{
+		`<button type="button" class="secondary small" data-copy="` + php + `" hidden>Copy PHP</button>`,
+		`<pre class="wrap"><code>` + php + `</code></pre>`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("vhost page lacks %q", want)
+		}
+	}
+}
+
+func TestScriptCopiesToTheClipboard(t *testing.T) {
+	h := newHarness(t)
+	body := h.browser().do("GET", "/static/app.js", nil).Body.String()
+	for _, want := range []string{"data-copy", "navigator.clipboard.writeText"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("app.js lacks %q", want)
+		}
 	}
 }

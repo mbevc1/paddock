@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/mbevc1/paddock/internal/mariadb"
 	"github.com/mbevc1/paddock/internal/validate"
 )
 
@@ -86,7 +87,9 @@ func FPM(v Vhost) (File, error) {
 	if err := v.valid(); err != nil {
 		return File{}, err
 	}
-	return file("/etc/paddock/fpm/"+v.id+".conf", "fpm.tmpl", v.data())
+	data := v.data()
+	data["DBSocket"] = mariadb.Socket
+	return file("/etc/paddock/fpm/"+v.id+".conf", "fpm.tmpl", data)
 }
 
 // TLS selects how the front vhost gets its certificate.

@@ -192,26 +192,33 @@ func (s *Server) createVhost(w http.ResponseWriter, r *http.Request) {
 	s.startJob(w, r, "vhost.create", args, "/vhosts/new", "/vhosts")
 }
 
-func (s *Server) vhostPage(w http.ResponseWriter, r *http.Request) {
-	vid := r.PathValue("id")
+// vhostPageData loads what the vhost page shows; on failure it has answered the request.
+func (s *Server) vhostPageData(w http.ResponseWriter, r *http.Request) (VhostPageData, bool) {
 	var d ops.VhostDetail
-	if err := s.agentCall(r, "vhost.get", ops.VhostIDArgs{VhostID: vid}, &d); err != nil {
+	if err := s.agentCall(r, "vhost.get", ops.VhostIDArgs{VhostID: r.PathValue("id")}, &d); err != nil {
 		s.agentFailed(w, r, "/vhosts", err)
-		return
+		return VhostPageData{}, false
 	}
 	var versions []string
 	if err := s.agentCall(r, "php.version.list", struct{}{}, &versions); err != nil {
 		s.agentFailed(w, r, "/vhosts", err)
-		return
+		return VhostPageData{}, false
 	}
-	data := VhostPageData{Vhost: d, PHPVersions: versions, SSHHost: s.cfg.Hostname}
+	data := VhostPageData{Vhost: d, PHPVersions: versions, SSHHost: s.cfg.Hostname, DBSocket: mariadb.Socket}
 	if d.Access != nil {
 		if err := s.agentCall(r, "host.ssh.keys", struct{}{}, &data.HostKeys); err != nil {
 			s.log.Warn("reading SSH host keys failed", "err", err)
 		}
 	}
-	page := Page{Title: d.Primary, Data: data, Error: r.URL.Query().Get("error")}
-	s.render(w, r, http.StatusOK, "vhost.html", page)
+	return data, true
+}
+
+func (s *Server) vhostPage(w http.ResponseWriter, r *http.Request) {
+	data, ok := s.vhostPageData(w, r)
+	if !ok {
+		return
+	}
+	s.render(w, r, http.StatusOK, "vhost.html", Page{Title: data.Vhost.Primary, Data: data, Error: r.URL.Query().Get("error")})
 }
 
 // VhostPageData is what the vhost page shows; Secret carries a password shown once.
@@ -222,6 +229,7 @@ type VhostPageData struct {
 	// SSHHost is where SFTP clients connect: the panel's hostname, which names this server.
 	SSHHost  string
 	HostKeys []ops.HostKeyView
+	DBSocket string
 }
 
 func vhostPath(r *http.Request) string { return "/vhosts/" + url.PathEscape(r.PathValue("id")) }
@@ -264,18 +272,12 @@ func (s *Server) deleteDBUser(w http.ResponseWriter, r *http.Request) {
 
 // showSecret renders the vhost page with a password the user sees only once.
 func (s *Server) showSecret(w http.ResponseWriter, r *http.Request, creds ops.DBCredentials, flash string) {
-	var d ops.VhostDetail
-	if err := s.agentCall(r, "vhost.get", ops.VhostIDArgs{VhostID: r.PathValue("id")}, &d); err != nil {
-		s.agentFailed(w, r, "/vhosts", err)
+	data, ok := s.vhostPageData(w, r)
+	if !ok {
 		return
 	}
-	var versions []string
-	if err := s.agentCall(r, "php.version.list", struct{}{}, &versions); err != nil {
-		s.agentFailed(w, r, "/vhosts", err)
-		return
-	}
-	s.render(w, r, http.StatusOK, "vhost.html", Page{Title: d.Primary, Flash: flash,
-		Data: VhostPageData{Vhost: d, PHPVersions: versions, Secret: &creds}})
+	data.Secret = &creds
+	s.render(w, r, http.StatusOK, "vhost.html", Page{Title: data.Vhost.Primary, Flash: flash, Data: data})
 }
 
 func (s *Server) createDBUser(w http.ResponseWriter, r *http.Request) {

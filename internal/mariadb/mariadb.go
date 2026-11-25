@@ -108,6 +108,10 @@ func NewPassword() (string, error) {
 	return b.String(), nil
 }
 
+// Socket is the server's Unix socket. Vhost PHP connects through it, where unix_socket
+// authentication lets each vhost user in as its own MariaDB user without a password.
+const Socket = "/var/lib/mysql/mysql.sock"
+
 // Client runs SQL as MariaDB's root over the unix socket.
 type Client struct {
 	Run system.Runner
