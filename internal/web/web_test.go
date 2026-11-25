@@ -971,3 +971,31 @@ func TestNewPasswordPageKeepsTheConnectionDetails(t *testing.T) {
 		}
 	}
 }
+
+func TestVhostListsShowTheDomainBeforeTheID(t *testing.T) {
+	h, admin := adminOverviewHarness(t)
+	h.agent.on("owner.get", func(*api.Actor, string, json.RawMessage) (any, error) {
+		return ops.OwnerView{ID: 3, Name: "Acme Ltd"}, nil
+	})
+	h.agent.on("server.health", func(*api.Actor, string, json.RawMessage) (any, error) {
+		return []ops.VhostHealth{{ID: "v00001", OwnerID: 3, Primary: "shop.example.com", Status: "active"}}, nil
+	})
+	h.user("alice", store.RoleOwner, 3)
+	owner := h.browser()
+	owner.login("alice", ownerPassword)
+	for _, tc := range []struct {
+		b    *browser
+		path string
+		want string
+	}{
+		{admin, "/dashboard", `shop.example.com</button></form> <code class="muted">v00001</code>`},
+		{admin, "/admin/owners/3", `shop.example.com <code class="muted">v00001</code>`},
+		{admin, "/admin/status", `shop.example.com <code class="muted">v00001</code>`},
+		{owner, "/dashboard", `shop.example.com</a> <code class="muted">v00001</code>`},
+		{owner, "/vhosts", `shop.example.com</a> <code class="muted">v00001</code>`},
+	} {
+		if body := tc.b.do("GET", tc.path, nil).Body.String(); !strings.Contains(body, tc.want) {
+			t.Errorf("%s lacks %q", tc.path, tc.want)
+		}
+	}
+}

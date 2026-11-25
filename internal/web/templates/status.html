@@ -14,7 +14,7 @@
   <table>
     <thead><tr><th>Domain</th><th>Owner</th><th>Certificate</th><th>Backend</th><th>PHP-FPM</th></tr></thead>
     <tbody>
-    {{range .}}<tr{{if .Problem}} class="problem"{{end}}><td><code>{{.ID}}</code> {{.Primary}}{{if ne .Status "active"}} <span class="badge {{.Status}}">{{.Status}}</span>{{end}}</td>
+    {{range .}}<tr{{if .Problem}} class="problem"{{end}}><td>{{.Primary}} <code class="muted">{{.ID}}</code>{{if ne .Status "active"}} <span class="badge {{.Status}}">{{.Status}}</span>{{end}}</td>
       <td>{{if .OwnerName}}<a href="/admin/owners/{{.OwnerID}}">{{.OwnerName}}</a>{{else}}<span class="muted">owner {{.OwnerID}}</span>{{end}}</td>
       <td><span class="badge{{with .CertClass}} {{.}}{{end}}">{{.CertLabel}}</span>{{with .Cert.Error}} <span class="muted">{{.}}</span>{{end}}</td>
       <td>{{template "unit" .Backend}}</td><td>{{template "unit" .FPM}} <span class="muted">{{.PHPVersion}}</span></td></tr>

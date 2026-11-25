@@ -33,7 +33,7 @@
   <table>
     <thead><tr><th>Domain</th><th>Owner</th><th>PHP</th><th>Status</th><th></th></tr></thead>
     <tbody>
-    {{range $v := .Data.Vhosts}}<tr><td><code>{{$v.ID}}</code> {{if and (not $a.Locked) ($.Can "impersonate")}}<form method="post" action="/admin/owners/{{$v.OwnerID}}/impersonate" class="inline"><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="next" value="/vhosts/{{$v.ID}}"><button type="submit" class="link">{{$v.Primary}}</button></form>{{else}}{{$v.Primary}}{{end}}</td>
+    {{range $v := .Data.Vhosts}}<tr><td>{{if and (not $a.Locked) ($.Can "impersonate")}}<form method="post" action="/admin/owners/{{$v.OwnerID}}/impersonate" class="inline"><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="next" value="/vhosts/{{$v.ID}}"><button type="submit" class="link">{{$v.Primary}}</button></form>{{else}}{{$v.Primary}}{{end}} <code class="muted">{{$v.ID}}</code></td>
       <td>{{with index $a.OwnerNames $v.OwnerID}}<a href="/admin/owners/{{$v.OwnerID}}">{{.}}</a>{{else}}<span class="muted">owner {{$v.OwnerID}}</span>{{end}}</td>
       <td>{{$v.PHPVersion}}</td><td><span class="badge {{$v.Status}}">{{$v.Status}}</span></td>
       <td class="row-actions">{{if and (not $a.Locked) ($.Can "impersonate")}}<form method="post" action="/admin/owners/{{$v.OwnerID}}/impersonate" class="inline">
@@ -63,7 +63,7 @@
 <section>
   <h2>Vhosts</h2>
   {{if .Data.Vhosts}}
-  <ul class="items">{{range .Data.Vhosts}}<li><a href="/vhosts/{{.ID}}">{{.Primary}}</a> <span class="muted">PHP {{.PHPVersion}}</span> <span class="badge {{.Status}}">{{.Status}}</span></li>{{end}}</ul>
+  <ul class="items">{{range .Data.Vhosts}}<li><a href="/vhosts/{{.ID}}">{{.Primary}}</a> <code class="muted">{{.ID}}</code> <span class="muted">PHP {{.PHPVersion}}</span> <span class="badge {{.Status}}">{{.Status}}</span></li>{{end}}</ul>
   {{else}}<p class="muted">No vhosts yet.</p>{{end}}
 </section>
 {{end}}
