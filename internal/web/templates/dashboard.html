@@ -8,9 +8,9 @@
   </div>
 </div>
 <div class="tiles">
-  <div class="tile"><span class="tile-label">Vhosts</span><span class="tile-value">{{len .Data.Vhosts}}</span></div>
-  <div class="tile"><span class="tile-label">Active</span><span class="tile-value">{{$a.Active}}</span></div>
-  <div class="tile"><span class="tile-label">Suspended</span><span class="tile-value">{{$a.Suspended}}</span></div>
+  <a class="tile" href="/vhosts"><span class="tile-label">Vhosts</span><span class="tile-value">{{len .Data.Vhosts}}</span></a>
+  <a class="tile" href="/vhosts?status=active"><span class="tile-label">Active</span><span class="tile-value">{{$a.Active}}</span></a>
+  <a class="tile" href="/vhosts?status=suspended"><span class="tile-label">Suspended</span><span class="tile-value">{{$a.Suspended}}</span></a>
   {{if not $a.Locked}}
   {{if .Can "owner.manage"}}<a class="tile" href="/admin/owners">{{else}}<div class="tile">{{end}}<span class="tile-label">Owners</span><span class="tile-value">{{len $a.OwnerNames}}</span>{{if .Can "owner.manage"}}</a>{{else}}</div>{{end}}
   {{if .Can "php.manage"}}<a class="tile" href="/admin/php">{{else}}<div class="tile">{{end}}<span class="tile-label">PHP</span><span class="tile-text">{{join $a.PHPVersions ", "}}</span>{{if .Can "php.manage"}}</a>{{else}}</div>{{end}}
