@@ -210,6 +210,9 @@ func (s *Server) vhostPageData(w http.ResponseWriter, r *http.Request) (VhostPag
 			s.log.Warn("reading SSH host keys failed", "err", err)
 		}
 	}
+	if err := s.agentCall(r, "db.server.version", struct{}{}, &data.DBServer); err != nil {
+		s.log.Warn("reading the MariaDB version failed", "err", err)
+	}
 	return data, true
 }
 
@@ -230,6 +233,8 @@ type VhostPageData struct {
 	SSHHost  string
 	HostKeys []ops.HostKeyView
 	DBSocket string
+	// DBServer is empty when the agent could not read it.
+	DBServer ops.DBServerView
 }
 
 func vhostPath(r *http.Request) string { return "/vhosts/" + url.PathEscape(r.PathValue("id")) }

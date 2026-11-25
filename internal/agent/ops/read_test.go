@@ -8,6 +8,7 @@ import (
 	"github.com/mbevc1/paddock/internal/api"
 	"github.com/mbevc1/paddock/internal/mariadb"
 	"github.com/mbevc1/paddock/internal/state"
+	"github.com/mbevc1/paddock/internal/system"
 )
 
 func TestReadOperations(t *testing.T) {
@@ -99,4 +100,14 @@ func TestVhostUpdateAliases(t *testing.T) {
 		t.Errorf("aliases after a failed update = %+v", d)
 	}
 	wantJobError(t, runJob(t, web, "vhost.update", owner, VhostUpdateArgs{VhostID: "v00001", Aliases: []string{"bad domain"}}), api.CodeInvalidArgument)
+}
+
+func TestDBServerVersion(t *testing.T) {
+	ctx := context.Background()
+	e, web, owner, _ := activeVhost(t)
+	e.run.On("/usr/bin/mariadb").Return(system.Result{Stdout: []byte("10.11.10-MariaDB\n")}, nil)
+	var v DBServerView
+	if err := web.Call(ctx, "db.server.version", owner, "", struct{}{}, &v); err != nil || v != (DBServerView{Product: "MariaDB", Version: "10.11.10"}) {
+		t.Errorf("db.server.version = %+v, %v", v, err)
+	}
 }

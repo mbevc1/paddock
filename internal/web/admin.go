@@ -361,6 +361,8 @@ type StatusData struct {
 	PHPVersions []string
 	Owners      int
 	Admins      int
+	// DBServer is empty when the agent could not read it.
+	DBServer ops.DBServerView
 	// HealthOK is false when the agent could not report Health.
 	HealthOK bool
 	Health   []HealthRow
@@ -442,6 +444,9 @@ func (s *Server) adminsPage(w http.ResponseWriter, r *http.Request) {
 func (s *Server) statusPage(w http.ResponseWriter, r *http.Request) {
 	d := StatusData{Version: Version}
 	d.AgentOK = s.adminCall(r, "php.version.list", struct{}{}, &d.PHPVersions) == nil
+	if err := s.adminCall(r, "db.server.version", struct{}{}, &d.DBServer); err != nil {
+		s.log.Warn("reading the MariaDB version failed", "err", err)
+	}
 	var owners []ops.OwnerView
 	if !s.adminRead(w, r, "owner.list", struct{}{}, &owners) {
 		return

@@ -132,3 +132,20 @@ func TestClient(t *testing.T) {
 		t.Error("access denied treated as done")
 	}
 }
+
+func TestVersion(t *testing.T) {
+	ctx := context.Background()
+	f := &system.Fake{}
+	f.On(clientBinary).Return(system.Result{Stdout: []byte("10.11.10-MariaDB-log\n")}, nil).Times(1)
+	c := Client{Run: f}
+	if v, err := c.Version(ctx); err != nil || v != "10.11.10" {
+		t.Errorf("Version = %q, %v", v, err)
+	}
+	if got := f.Calls()[0].Stdin; string(got) != "SELECT VERSION();\n" {
+		t.Errorf("stdin = %q", got)
+	}
+	f.On(clientBinary).Return(system.Result{Stdout: []byte("not a version\n")}, nil).Times(1)
+	if _, err := c.Version(ctx); err == nil {
+		t.Error("an unexpected reply passed as a version")
+	}
+}
