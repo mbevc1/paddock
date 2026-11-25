@@ -146,13 +146,28 @@ func (s *Server) dashboard(w http.ResponseWriter, r *http.Request) {
 	s.render(w, r, http.StatusOK, "dashboard.html", Page{Title: "Dashboard", Data: d, Error: r.URL.Query().Get("error")})
 }
 
+// VhostsData is the vhosts list; Status is the status it is filtered by, or empty.
+type VhostsData struct {
+	Vhosts []ops.VhostView
+	Status state.VhostStatus
+}
+
 func (s *Server) vhostsPage(w http.ResponseWriter, r *http.Request) {
 	var list []ops.VhostView
 	if err := s.agentCall(r, "vhost.list", ops.VhostListArgs{}, &list); err != nil {
 		s.agentFailed(w, r, "/dashboard", err)
 		return
 	}
-	s.render(w, r, http.StatusOK, "vhosts.html", Page{Title: "Vhosts", Data: list, Error: r.URL.Query().Get("error")})
+	d := VhostsData{Vhosts: list}
+	if st := state.VhostStatus(r.URL.Query().Get("status")); st == state.VhostActive || st == state.VhostSuspended {
+		d.Status, d.Vhosts = st, nil
+		for _, v := range list {
+			if v.Status == st {
+				d.Vhosts = append(d.Vhosts, v)
+			}
+		}
+	}
+	s.render(w, r, http.StatusOK, "vhosts.html", Page{Title: "Vhosts", Data: d, Error: r.URL.Query().Get("error")})
 }
 
 // NewVhostData is what the create form offers.

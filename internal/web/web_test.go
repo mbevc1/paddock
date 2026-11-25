@@ -1024,6 +1024,35 @@ func TestScriptCopiesToTheClipboard(t *testing.T) {
 	}
 }
 
+func TestAdminDashboardVhostTilesLink(t *testing.T) {
+	_, b := adminOverviewHarness(t)
+	body := b.do("GET", "/dashboard", nil).Body.String()
+	for _, want := range []string{
+		`<a class="tile" href="/vhosts"><span class="tile-label">Vhosts</span>`,
+		`<a class="tile" href="/vhosts?status=active"><span class="tile-label">Active</span>`,
+		`<a class="tile" href="/vhosts?status=suspended"><span class="tile-label">Suspended</span>`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("admin dashboard lacks %q", want)
+		}
+	}
+}
+
+func TestVhostsPageFiltersByStatus(t *testing.T) {
+	_, b := adminOverviewHarness(t)
+	body := b.do("GET", "/vhosts?status=suspended", nil).Body.String()
+	if !strings.Contains(body, "blog.example.org") || strings.Contains(body, "shop.example.com") {
+		t.Errorf("suspended filter shows the wrong vhosts:\n%s", body)
+	}
+	if !strings.Contains(body, `Showing suspended vhosts. <a href="/vhosts">Show all</a>`) {
+		t.Error("filtered page does not say so or link back to all vhosts")
+	}
+	body = b.do("GET", "/vhosts?status=bogus", nil).Body.String()
+	if !strings.Contains(body, "blog.example.org") || !strings.Contains(body, "shop.example.com") || strings.Contains(body, "Show all") {
+		t.Error("an unknown status filters the list")
+	}
+}
+
 func TestPagesShowTheMariaDBVersion(t *testing.T) {
 	h, b := vhostBrowser(t)
 	h.agent.on("db.server.version", func(*api.Actor, string, json.RawMessage) (any, error) {

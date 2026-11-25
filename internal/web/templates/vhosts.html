@@ -3,12 +3,13 @@
   <h1>Vhosts</h1>
   {{if .Can "vhost.manage"}}<div class="actions"><a class="button" href="/vhosts/new">New vhost</a></div>{{end}}
 </div>
+{{with .Data.Status}}<p class="muted">Showing {{.}} vhosts. <a href="/vhosts">Show all</a></p>{{end}}
 <section class="flush">
 <table>
   <thead><tr><th>Domain</th><th>PHP</th><th>Status</th></tr></thead>
   <tbody>
-  {{range .Data}}<tr><td><a href="/vhosts/{{.ID}}">{{.Primary}}</a> <code class="muted">{{.ID}}</code></td><td>{{.PHPVersion}}</td><td><span class="badge {{.Status}}">{{.Status}}</span></td></tr>
-  {{else}}<tr><td colspan="3" class="muted">No vhosts yet.</td></tr>{{end}}
+  {{range .Data.Vhosts}}<tr><td><a href="/vhosts/{{.ID}}">{{.Primary}}</a> <code class="muted">{{.ID}}</code></td><td>{{.PHPVersion}}</td><td><span class="badge {{.Status}}">{{.Status}}</span></td></tr>
+  {{else}}<tr><td colspan="3" class="muted">{{if .Data.Status}}No {{.Data.Status}} vhosts.{{else}}No vhosts yet.{{end}}</td></tr>{{end}}
   </tbody>
 </table>
 </section>
