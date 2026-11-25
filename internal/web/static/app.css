@@ -21,7 +21,8 @@ body { margin: 0; font: 16px/1.5 system-ui, sans-serif; color: var(--fg); backgr
 a { color: var(--accent); }
 h1 { font-size: 1.6rem; margin: .5rem 0 .25rem; }
 h2 { font-size: 1.15rem; margin: 0 0 .75rem; }
-h2 .muted { font-size: .85rem; font-weight: 400; margin-left: .25rem; }
+h2.with-badge { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; }
+.badge.server { font-weight: 500; background: var(--bg); color: var(--muted); border: 1px solid var(--line); }
 h3 { font-size: 1rem; margin: 1.25rem 0 .5rem; }
 h1 + p { color: var(--muted); margin-top: 0; }
 code { font-family: ui-monospace, monospace; font-size: .92em; word-break: break-all; }
