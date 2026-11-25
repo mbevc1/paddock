@@ -950,7 +950,8 @@ func TestLockedAdminDashboardShowsDomainsAsText(t *testing.T) {
 func TestVhostPageShowsHowToConnectToEachDatabase(t *testing.T) {
 	body := vhostPage(t)
 	for _, want := range []string{
-		`<code class="muted">mysql:unix_socket=/var/lib/mysql/mysql.sock;dbname=v00006_shop</code>`,
+		`<div class="item-main"><strong><code>v00006_shop</code></strong>` +
+			`<span class="item-detail"><span class="label">DSN</span> <code>mysql:unix_socket=/var/lib/mysql/mysql.sock;dbname=v00006_shop</code></span></div>`,
 		`user <code>v00006</code>`,
 	} {
 		if !strings.Contains(body, want) {

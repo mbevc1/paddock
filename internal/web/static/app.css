@@ -115,6 +115,9 @@ ul.items { list-style: none; padding: 0; margin: 0 0 .75rem; border-top: 1px sol
 ul.items > li { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; padding: .45rem 0; border-bottom: 1px solid var(--line); }
 ul.items > li > .actions { margin-left: auto; display: flex; gap: .5rem; }
 ul.items > li > .actions .inline { margin: 0; }
+.item-main { display: grid; gap: .1rem; min-width: 0; }
+.item-detail { font-size: .85rem; color: var(--muted); overflow-wrap: anywhere; }
+.item-detail .label { display: inline-block; font-size: .72rem; font-weight: 600; letter-spacing: .04em; padding: 0 .35rem; border: 1px solid var(--line); border-radius: .25rem; margin-right: .25rem; }
 .muted { color: var(--muted); }
 pre { margin: .5rem 0; padding: .5rem .75rem; background: var(--bg); border: 1px solid var(--line); border-radius: .35rem; overflow-x: auto; }
 pre code { word-break: normal; }
