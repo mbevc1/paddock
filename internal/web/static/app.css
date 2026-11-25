@@ -16,6 +16,7 @@
 }
 
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 body { margin: 0; font: 16px/1.5 system-ui, sans-serif; color: var(--fg); background: var(--bg); }
 a { color: var(--accent); }
 h1 { font-size: 1.6rem; margin: .5rem 0 .25rem; }
@@ -117,6 +118,7 @@ ul.items > li > .actions .inline { margin: 0; }
 .muted { color: var(--muted); }
 pre { margin: .5rem 0; padding: .5rem .75rem; background: var(--bg); border: 1px solid var(--line); border-radius: .35rem; overflow-x: auto; }
 pre code { word-break: normal; }
+pre.wrap { white-space: pre-wrap; overflow-wrap: anywhere; }
 .connect { margin-bottom: 1rem; }
 
 .flash { color: var(--ok); background: var(--ok-soft); padding: .5rem .75rem; border-radius: .35rem; }

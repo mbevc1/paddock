@@ -38,9 +38,12 @@
   <h2>Databases</h2>
   {{if $v.Databases}}<p>PHP on this vhost connects over the socket as user <code>{{$v.ID}}</code>, with no password; <code>DB_SOCKET</code> and <code>DB_USER</code> are set in its environment. Extra DB users log in with their password.</p>{{end}}
   <ul class="items">{{range $v.Databases}}<li><code>{{.}}</code> <code class="muted">mysql:unix_socket={{$p.Data.DBSocket}};dbname={{.}}</code>
-    {{if $p.Can "db.manage"}}<span class="actions"><form method="post" action="/vhosts/{{$v.ID}}/databases/{{suffix . $v.ID}}/delete" class="inline" data-confirm="Delete database {{.}} and all its data?">
-      <input type="hidden" name="csrf" value="{{$p.CSRF}}"><button type="submit" class="danger small">Delete</button></form></span>{{end}}
+    <span class="actions"><button type="button" class="secondary small" data-copy="{{pdo .}}" hidden>Copy PHP</button>
+    {{if $p.Can "db.manage"}}<form method="post" action="/vhosts/{{$v.ID}}/databases/{{suffix . $v.ID}}/delete" class="inline" data-confirm="Delete database {{.}} and all its data?">
+      <input type="hidden" name="csrf" value="{{$p.CSRF}}"><button type="submit" class="danger small">Delete</button></form>{{end}}</span>
   </li>{{else}}<li class="muted">None.</li>{{end}}</ul>
+  {{with $v.Databases}}<p class="muted">In PHP, for example:</p>
+  <pre class="wrap"><code>{{pdo (index . 0)}}</code></pre>{{end}}
   {{if .Can "db.manage"}}
   <form method="post" action="/vhosts/{{$v.ID}}/databases" class="inline">
     <input type="hidden" name="csrf" value="{{.CSRF}}">

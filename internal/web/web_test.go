@@ -999,3 +999,26 @@ func TestVhostListsShowTheDomainBeforeTheID(t *testing.T) {
 		}
 	}
 }
+
+func TestVhostPageOffersPHPToCopy(t *testing.T) {
+	body := vhostPage(t)
+	php := `$db = new PDO(&#39;mysql:unix_socket=&#39; . getenv(&#39;DB_SOCKET&#39;) . &#39;;dbname=v00006_shop&#39;, getenv(&#39;DB_USER&#39;));`
+	for _, want := range []string{
+		`<button type="button" class="secondary small" data-copy="` + php + `" hidden>Copy PHP</button>`,
+		`<pre class="wrap"><code>` + php + `</code></pre>`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("vhost page lacks %q", want)
+		}
+	}
+}
+
+func TestScriptCopiesToTheClipboard(t *testing.T) {
+	h := newHarness(t)
+	body := h.browser().do("GET", "/static/app.js", nil).Body.String()
+	for _, want := range []string{"data-copy", "navigator.clipboard.writeText"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("app.js lacks %q", want)
+		}
+	}
+}
