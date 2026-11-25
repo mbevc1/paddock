@@ -796,6 +796,12 @@ func TestOwnerDashboardVhostsTileLinksToVhosts(t *testing.T) {
 
 func vhostPage(t *testing.T) string {
 	t.Helper()
+	_, b := vhostBrowser(t)
+	return b.do("GET", "/vhosts/v00006", nil).Body.String()
+}
+
+func vhostBrowser(t *testing.T) (*harness, *browser) {
+	t.Helper()
 	h := newHarness(t)
 	h.user("alice", store.RoleOwner, 3)
 	h.agent.on("vhost.get", func(*api.Actor, string, json.RawMessage) (any, error) {
@@ -807,7 +813,7 @@ func vhostPage(t *testing.T) string {
 	h.agent.on("host.ssh.keys", func(*api.Actor, string, json.RawMessage) (any, error) { return []ops.HostKeyView{}, nil })
 	b := h.browser()
 	b.login("alice", ownerPassword)
-	return b.do("GET", "/vhosts/v00006", nil).Body.String()
+	return h, b
 }
 
 func TestVhostPageHasBreadcrumbsAndAPageHead(t *testing.T) {
@@ -938,5 +944,30 @@ func TestLockedAdminDashboardShowsDomainsAsText(t *testing.T) {
 	})
 	if body := b.do("GET", "/dashboard", nil).Body.String(); strings.Contains(body, `class="link">shop.example.com`) {
 		t.Error("locked admin dashboard offers a domain link that would need an admin code")
+	}
+}
+
+func TestVhostPageShowsHowToConnectToEachDatabase(t *testing.T) {
+	body := vhostPage(t)
+	for _, want := range []string{
+		`<code class="muted">mysql:unix_socket=/var/lib/mysql/mysql.sock;dbname=v00006_shop</code>`,
+		`user <code>v00006</code>`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("vhost page lacks %q", want)
+		}
+	}
+}
+
+func TestNewPasswordPageKeepsTheConnectionDetails(t *testing.T) {
+	h, b := vhostBrowser(t)
+	h.agent.on("dbuser.password.reset", func(*api.Actor, string, json.RawMessage) (any, error) {
+		return ops.DBCredentials{User: "v00006", Password: "s3cret-once"}, nil
+	})
+	body := b.do("POST", "/vhosts/v00006/dbpassword", url.Values{}).Body.String()
+	for _, want := range []string{"s3cret-once", "sftp v00006@panel.example.com", "mysql:unix_socket=/var/lib/mysql/mysql.sock;dbname=v00006_shop"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("new password page lacks %q", want)
+		}
 	}
 }
