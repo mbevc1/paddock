@@ -35,7 +35,7 @@
 </section>
 
 <section>
-  <h2>Databases</h2>
+  <h2>Databases{{with $p.Data.DBServer.Version}} <span class="muted">{{$p.Data.DBServer.Product}} {{.}}</span>{{end}}</h2>
   {{if $v.Databases}}<p>PHP on this vhost connects over the socket as user <code>{{$v.ID}}</code>, with no password; <code>DB_SOCKET</code> and <code>DB_USER</code> are set in its environment. Extra DB users log in with their password.</p>{{end}}
   <ul class="items">{{range $v.Databases}}<li><div class="item-main"><strong><code>{{.}}</code></strong><span class="item-detail"><span class="label">DSN</span> <code>mysql:unix_socket={{$p.Data.DBSocket}};dbname={{.}}</code></span></div>
     <span class="actions"><button type="button" class="secondary small" data-copy="{{pdo .}}" hidden>Copy PHP</button>

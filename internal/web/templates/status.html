@@ -3,6 +3,7 @@
 <div class="tiles">
   <div class="tile"><span class="tile-label">Paddock</span><span class="tile-text">{{.Data.Version}}</span></div>
   <div class="tile"><span class="tile-label">Agent</span><span class="tile-text">{{if .Data.AgentOK}}<span class="badge active">reachable</span>{{else}}<span class="badge failed">not reachable</span>{{end}}</span></div>
+  {{with .Data.DBServer.Version}}<div class="tile"><span class="tile-label">{{$.Data.DBServer.Product}}</span><span class="tile-text">{{.}}</span></div>{{end}}
   {{if .Can "php.manage"}}<a class="tile" href="/admin/php">{{else}}<div class="tile">{{end}}<span class="tile-label">PHP versions</span><span class="tile-text">{{join .Data.PHPVersions ", "}}</span>{{if .Can "php.manage"}}</a>{{else}}</div>{{end}}
   {{if .Can "owner.manage"}}<a class="tile" href="/admin/owners">{{else}}<div class="tile">{{end}}<span class="tile-label">Owners</span><span class="tile-value">{{.Data.Owners}}</span>{{if .Can "owner.manage"}}</a>{{else}}</div>{{end}}
   <a class="tile" href="/admin/admins"><span class="tile-label">Admins</span><span class="tile-value">{{.Data.Admins}}</span></a>

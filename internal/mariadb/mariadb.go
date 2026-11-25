@@ -162,6 +162,22 @@ func hasErrorCode(stderr string, codes []int) bool {
 	return false
 }
 
+var versionPattern = regexp.MustCompile(`^[0-9]+\.[0-9]+\.[0-9]+`)
+
+// Version returns the server's version number, such as "10.11.10", without the suffix
+// VERSION() adds ("-MariaDB", "-log").
+func (c Client) Version(ctx context.Context) (string, error) {
+	out, err := c.Exec(ctx, "SELECT VERSION();\n")
+	if err != nil {
+		return "", err
+	}
+	v := versionPattern.FindString(strings.TrimSpace(string(out)))
+	if v == "" {
+		return "", fmt.Errorf("unexpected VERSION() reply %q", strings.TrimSpace(string(out)))
+	}
+	return v, nil
+}
+
 // Query runs a statement and splits its batch output into rows of tab-separated fields.
 func (c Client) Query(ctx context.Context, sql string) ([][]string, error) {
 	out, err := c.Exec(ctx, sql)

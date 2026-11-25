@@ -1023,3 +1023,21 @@ func TestScriptCopiesToTheClipboard(t *testing.T) {
 		}
 	}
 }
+
+func TestPagesShowTheMariaDBVersion(t *testing.T) {
+	h, b := vhostBrowser(t)
+	h.agent.on("db.server.version", func(*api.Actor, string, json.RawMessage) (any, error) {
+		return ops.DBServerView{Product: "MariaDB", Version: "10.11.10"}, nil
+	})
+	if body := b.do("GET", "/vhosts/v00006", nil).Body.String(); !strings.Contains(body, `<h2>Databases <span class="muted">MariaDB 10.11.10</span></h2>`) {
+		t.Error("vhost page does not show the MariaDB version")
+	}
+
+	h2, admin := adminOverviewHarness(t)
+	h2.agent.on("db.server.version", func(*api.Actor, string, json.RawMessage) (any, error) {
+		return ops.DBServerView{Product: "MariaDB", Version: "10.11.10"}, nil
+	})
+	if body := admin.do("GET", "/admin/status", nil).Body.String(); !strings.Contains(body, `<span class="tile-label">MariaDB</span><span class="tile-text">10.11.10</span>`) {
+		t.Error("status page does not show the MariaDB version")
+	}
+}

@@ -21,6 +21,12 @@ type VhostView struct {
 	CreatedAt  time.Time         `json:"created_at"`
 }
 
+// DBServerView is the database server's product and version.
+type DBServerView struct {
+	Product string `json:"product"`
+	Version string `json:"version"`
+}
+
 // VhostDetail adds what the vhost detail page shows.
 type VhostDetail struct {
 	VhostView
@@ -188,6 +194,14 @@ func registerReads(r *agent.Registry, store *state.Store, h *Host) {
 			return nil, err
 		}
 		return d, nil
+	}})
+
+	r.Register(agent.Op{Name: "db.server.version", Class: agent.ClassOwner, Handler: func(ctx context.Context, _ *agent.Call) (any, error) {
+		v, err := h.db().Version(ctx)
+		if err != nil {
+			return nil, h.applyFailed("reading the MariaDB version", err)
+		}
+		return DBServerView{Product: "MariaDB", Version: v}, nil
 	}})
 
 	r.Register(agent.Op{Name: "php.version.list", Class: agent.ClassOwner, Handler: func(ctx context.Context, _ *agent.Call) (any, error) {
