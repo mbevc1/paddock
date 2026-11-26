@@ -2,13 +2,16 @@ package ops
 
 import (
 	"bufio"
+	"bytes"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/mbevc1/paddock/internal/validate"
@@ -250,4 +253,50 @@ func (f *HostFS) Symlink(base, rel, target string) error {
 		return err
 	}
 	return r.Symlink(target, rel)
+}
+
+// Tail returns up to the last limit bytes of base/rel, starting at a whole line, and whether
+// the file holds more. A missing file gives nil and no error. The file must be a regular file
+// with one link, owned by uid: the directory it sits in belongs to that user, who could
+// otherwise put a symlink or a hard link there in place of the log.
+func (f *HostFS) Tail(base, rel string, uid int, limit int64) ([]byte, bool, error) {
+	if err := checkRel(rel); err != nil {
+		return nil, false, err
+	}
+	r, err := f.open(base)
+	if err != nil {
+		return nil, false, err
+	}
+	defer r.Close()
+	// O_NONBLOCK keeps a FIFO in place of the log from stalling the open.
+	file, err := r.OpenFile(rel, os.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0)
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil, false, nil
+	}
+	if err != nil {
+		return nil, false, err
+	}
+	defer file.Close()
+	fi, err := file.Stat()
+	if err != nil {
+		return nil, false, err
+	}
+	st, ok := fi.Sys().(*syscall.Stat_t)
+	if !fi.Mode().IsRegular() || !ok || int(st.Uid) != uid || st.Nlink != 1 {
+		return nil, false, fmt.Errorf("%w: %s is not a regular file owned by uid %d with one link", validate.ErrInvalid, rel, uid)
+	}
+	size := fi.Size()
+	start := max(0, size-limit)
+	buf := make([]byte, size-start)
+	if _, err := file.ReadAt(buf, start); err != nil && !errors.Is(err, io.EOF) {
+		return nil, false, err
+	}
+	if start > 0 {
+		if i := bytes.IndexByte(buf, '\n'); i >= 0 {
+			buf = buf[i+1:]
+		} else {
+			buf = nil
+		}
+	}
+	return buf, start > 0, nil
 }

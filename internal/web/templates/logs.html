@@ -1,0 +1,17 @@
+{{define "content"}}
+{{$d := .Data}}{{$v := $d.Vhost}}
+<nav class="crumbs" aria-label="Breadcrumb"><a href="/vhosts">Vhosts</a> <a href="/vhosts/{{$v.ID}}">{{$v.Primary}}</a> <span aria-current="page">Logs</span></nav>
+<div class="page-head">
+  <h1>Logs</h1>
+  <div class="actions"><a class="button secondary" href="/vhosts/{{$v.ID}}/logs?log={{$d.Log}}&amp;lines={{$d.Lines}}">Refresh</a></div>
+</div>
+<nav class="tabs" aria-label="Logs">{{range $d.Choices}}<a href="/vhosts/{{$v.ID}}/logs?log={{.Name}}&amp;lines={{$d.Lines}}"{{if eq .Name $d.Log}} aria-current="page"{{end}}>{{.Label}}</a>{{end}}</nav>
+<section>
+  <p class="counts">Lines {{range $d.Counts}}<a href="/vhosts/{{$v.ID}}/logs?log={{$d.Log}}&amp;lines={{.}}"{{if eq . $d.Lines}} aria-current="page"{{end}}>{{.}}</a>{{end}}</p>
+  {{with $d.Entries.Lines}}
+  {{if $d.Entries.Truncated}}<p class="muted">Showing the last {{len .}} lines.</p>{{end}}
+  <pre class="log"><code>{{range .}}{{.}}
+{{end}}</code></pre>
+  {{else}}<p class="muted">No entries yet.</p>{{end}}
+</section>
+{{end}}

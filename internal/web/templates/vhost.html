@@ -1,7 +1,10 @@
 {{define "content"}}
 {{$v := .Data.Vhost}}{{$p := .}}
 <nav class="crumbs" aria-label="Breadcrumb"><a href="/vhosts">Vhosts</a> <span aria-current="page">{{$v.Primary}}</span></nav>
-<div class="page-head"><h1>{{$v.Primary}}</h1></div>
+<div class="page-head">
+  <h1>{{$v.Primary}}</h1>
+  <div class="actions"><a class="button secondary" href="/vhosts/{{$v.ID}}/logs">Logs</a></div>
+</div>
 <p class="meta"><code>{{$v.ID}}</code> · PHP {{$v.PHPVersion}} · <span class="badge {{$v.Status}}">{{$v.Status}}</span></p>
 
 {{with .Data.Secret}}

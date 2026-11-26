@@ -1070,3 +1070,39 @@ func TestPagesShowTheMariaDBVersion(t *testing.T) {
 		t.Error("status page does not show the MariaDB version")
 	}
 }
+
+func TestVhostLogsPage(t *testing.T) {
+	h, b := vhostBrowser(t)
+	var asked ops.VhostLogArgs
+	h.agent.on("vhost.log.tail", func(_ *api.Actor, _ string, raw json.RawMessage) (any, error) {
+		if err := json.Unmarshal(raw, &asked); err != nil {
+			return nil, err
+		}
+		return ops.VhostLog{Lines: []string{`[error] <script>alert(1)</script>`, "PHP Warning: x"}, Truncated: true}, nil
+	})
+	if body := b.do("GET", "/vhosts/v00006", nil).Body.String(); !strings.Contains(body, `<a class="button secondary" href="/vhosts/v00006/logs">Logs</a>`) {
+		t.Error("vhost page does not link to its logs")
+	}
+	body := b.do("GET", "/vhosts/v00006/logs?log=php&lines=500", nil).Body.String()
+	if asked != (ops.VhostLogArgs{VhostID: "v00006", Log: "php", Lines: 500}) {
+		t.Errorf("asked the agent for %+v", asked)
+	}
+	for _, want := range []string{
+		`<a href="/vhosts">Vhosts</a> <a href="/vhosts/v00006">shop.example.com</a> <span aria-current="page">Logs</span>`,
+		`<a href="/vhosts/v00006/logs?log=php&amp;lines=500" aria-current="page">PHP errors</a>`,
+		`&lt;script&gt;alert(1)&lt;/script&gt;`,
+		"Showing the last 2 lines.",
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("logs page lacks %q", want)
+		}
+	}
+	if strings.Contains(body, "<script>alert(1)") {
+		t.Error("a log line reached the page unescaped")
+	}
+
+	b.do("GET", "/vhosts/v00006/logs?log=bogus&lines=7", nil)
+	if asked.Log != "error" || asked.Lines != 200 {
+		t.Errorf("unknown values were passed on: %+v", asked)
+	}
+}

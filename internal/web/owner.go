@@ -23,6 +23,7 @@ func (s *Server) ownerRoutes(rt *Router) {
 	rt.Handle(Route{Method: "GET", Pattern: "/vhosts/new", Perm: PermVhosts, Handler: s.newVhostPage})
 	rt.Handle(Route{Method: "POST", Pattern: "/vhosts", Perm: PermVhosts, Handler: s.createVhost})
 	rt.Handle(Route{Method: "GET", Pattern: "/vhosts/{id}", Perm: PermVhosts, Handler: s.vhostPage})
+	rt.Handle(Route{Method: "GET", Pattern: "/vhosts/{id}/logs", Perm: PermVhosts, Handler: s.vhostLogsPage})
 	rt.Handle(Route{Method: "POST", Pattern: "/vhosts/{id}/aliases", Perm: PermVhosts, Handler: s.updateAliases})
 	rt.Handle(Route{Method: "POST", Pattern: "/vhosts/{id}/php", Perm: PermVhosts, Handler: s.switchPHP})
 	rt.Handle(Route{Method: "POST", Pattern: "/vhosts/{id}/delete", Perm: PermVhosts, StepUp: true, Handler: s.deleteVhost})

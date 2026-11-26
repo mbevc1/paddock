@@ -124,6 +124,14 @@ ul.items > li > .actions .inline { margin: 0; }
 pre { margin: .5rem 0; padding: .5rem .75rem; background: var(--bg); border: 1px solid var(--line); border-radius: .35rem; overflow-x: auto; }
 pre code { word-break: normal; }
 pre.wrap { white-space: pre-wrap; overflow-wrap: anywhere; }
+pre.log { max-height: 70vh; overflow: auto; font-size: .82rem; line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere; }
+.tabs { display: flex; flex-wrap: wrap; gap: .25rem 1rem; border-bottom: 1px solid var(--line); margin: 0 0 1rem; }
+.tabs a { text-decoration: none; color: var(--muted); padding: .35rem .1rem; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+.tabs a:hover { color: var(--fg); }
+.tabs a[aria-current=page] { color: var(--fg); font-weight: 600; border-bottom-color: var(--accent); }
+.counts { display: flex; flex-wrap: wrap; align-items: center; gap: .25rem .75rem; font-size: .9rem; color: var(--muted); margin-top: 0; }
+.counts a { text-decoration: none; }
+.counts a[aria-current=page] { color: var(--fg); font-weight: 600; }
 .connect { margin-bottom: 1rem; }
 
 .flash { color: var(--ok); background: var(--ok-soft); padding: .5rem .75rem; border-radius: .35rem; }
