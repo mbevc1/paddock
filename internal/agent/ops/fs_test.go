@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"syscall"
 	"testing"
 	"time"
 
@@ -165,5 +166,58 @@ func TestHostFSSymlink(t *testing.T) {
 	}
 	if err := f.Symlink(BaseJail, "v00001/etc", "/etc"); !errors.Is(err, validate.ErrInvalid) {
 		t.Errorf("replacing a directory = %v", err)
+	}
+}
+
+func writeLog(t *testing.T, f *HostFS, rel, body string) string {
+	t.Helper()
+	p := filepath.Join(f.Root, BaseWWW, rel)
+	if err := os.MkdirAll(filepath.Dir(p), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(p, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return p
+}
+
+func TestHostFSTail(t *testing.T) {
+	f, _ := testFS(t)
+	me := os.Getuid()
+	writeLog(t, f, "v00001/logs/error.log", "one\ntwo\nthree\n")
+	if got, cut, err := f.Tail(BaseWWW, "v00001/logs/error.log", me, 1024); err != nil || cut || string(got) != "one\ntwo\nthree\n" {
+		t.Errorf("whole file = %q, %v, %v", got, cut, err)
+	}
+	if got, cut, err := f.Tail(BaseWWW, "v00001/logs/error.log", me, 8); err != nil || !cut || string(got) != "three\n" {
+		t.Errorf("tail starts at a whole line: %q, %v, %v", got, cut, err)
+	}
+	if got, cut, err := f.Tail(BaseWWW, "v00001/logs/missing.log", me, 1024); err != nil || cut || got != nil {
+		t.Errorf("missing file = %q, %v, %v", got, cut, err)
+	}
+}
+
+func TestHostFSTailRefusals(t *testing.T) {
+	f, _ := testFS(t)
+	me := os.Getuid()
+	other := writeLog(t, f, "v00002/private/secret", "B's secret\n")
+	writeLog(t, f, "v00001/logs/access.log", "a\n")
+	logs := filepath.Join(f.Root, BaseWWW, "v00001/logs")
+
+	if err := os.Symlink("../../v00002/private/secret", filepath.Join(logs, "error.log")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Link(other, filepath.Join(logs, "php-error.log")); err != nil {
+		t.Fatal(err)
+	}
+	if err := syscall.Mkfifo(filepath.Join(logs, "php-fpm.log"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for _, rel := range []string{"v00001/logs/error.log", "v00001/logs/php-error.log", "v00001/logs/php-fpm.log"} {
+		if got, _, err := f.Tail(BaseWWW, rel, me, 1024); err == nil {
+			t.Errorf("%s was read: %q", rel, got)
+		}
+	}
+	if got, _, err := f.Tail(BaseWWW, "v00001/logs/access.log", me+1, 1024); err == nil {
+		t.Errorf("a file owned by another user was read: %q", got)
 	}
 }

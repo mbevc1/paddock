@@ -59,6 +59,7 @@ func RegisterVhosts(r *agent.Registry, store *state.Store, h *Host) {
 	registerReconcile(r, store, h)
 	registerReads(r, store, h)
 	registerHealth(r, store, h)
+	registerLogs(r, store, h)
 	r.Register(agent.Op{Name: "vhost.create", Class: agent.ClassOwner, Long: true,
 		Handler: func(ctx context.Context, c *agent.Call) (any, error) {
 			args, err := agent.DecodeArgs[VhostCreateArgs](c)

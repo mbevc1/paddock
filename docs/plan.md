@@ -79,6 +79,7 @@ Newline-delimited JSON over the Unix socket, one request and one response per li
 | `access.create`, `access.delete` | owner | vhost_id, password or keys |
 | `access.key.add`, `access.key.remove` | owner | account, public key |
 | `cert.status`, `cert.upload` | owner | vhost_id, PEM chain and key |
+| `vhost.log.tail` | owner | vhost_id, log (`access`, `error`, `php`, `fpm`), lines (1 to 1000); the end of that log, at most 256 KiB |
 | `pma.session.create` | owner | vhost_id, database |
 | `usage.get` | owner | vhost_id or owner_id |
 | `job.get` | owner | job_id |
@@ -714,7 +715,8 @@ Throwaway shell scripts in `poc/`, run as root on a disposable AlmaLinux 9.4+ VM
 - [x] **T1.21 Owner UI.** Pages from §11.4 for owners: dashboard, vhosts, PHP switch, databases, DB users, access accounts and keys, certificates, profile, security. Owner-scoped queries everywhere.
     - Acceptance: handler tests prove another owner's IDs return 404; templates use `.Can` for every action.
     - Done: tests run the panel against the agent's real operations with a fake host. A test maps every posting form to its route and fails unless the template checks that route's permission. New agent reads `vhost.list`, `vhost.get`, `php.version.list`, `owner.get` and `vhost.update` serve the pages.
-    - Deferred: vhost logs need an agent operation that reads them; the vhost page has no log view yet. PHP settings in `vhost.update` are not implemented.
+    - Done: a Logs page per vhost shows the end of its access, Apache error, PHP error and PHP-FPM logs through `vhost.log.tail`. The agent opens each log without following symlinks and reads it only when it is a regular file with one link, owned by the vhost user, because the vhost user owns the `logs/` directory.
+    - Deferred: PHP settings in `vhost.update` are not implemented.
 - [x] **T1.22 Admin UI.** Owners, limits, PHP versions, server status, audit log, impersonation with dual-identity audit and owner notification; admin actions prompt for TOTP and pass it to the agent.
     - Acceptance: impersonated actions record both identities; admin action without TOTP fails at the agent, not only in the UI.
     - Done: admin forms carry an optional TOTP field sent with the request's first admin call; an expired window shows an unlock form. Creating an owner also creates its first panel user with a one-time password.
