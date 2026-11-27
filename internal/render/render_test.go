@@ -271,6 +271,25 @@ func TestTimeoutsNest(t *testing.T) {
 	}
 }
 
+// The backend loads no httpd.conf, and Apache writes an undefined log nickname literally on
+// every line, so each nickname the backend logs with must be defined in its own config.
+func TestBackendLogFormatsAreDefined(t *testing.T) {
+	backend := string(goldenFiles(t)["backend-httpd"].Data)
+	defined := map[string]bool{}
+	for _, m := range regexp.MustCompile(`(?m)^LogFormat ".*" (\w+)$`).FindAllStringSubmatch(backend, -1) {
+		defined[m[1]] = true
+	}
+	used := regexp.MustCompile(`(?m)^CustomLog \S+ (\S+)$`).FindAllStringSubmatch(backend, -1)
+	if len(used) == 0 {
+		t.Fatal("the backend has no CustomLog")
+	}
+	for _, m := range used {
+		if !defined[m[1]] {
+			t.Errorf("CustomLog uses %q, which the backend config does not define", m[1])
+		}
+	}
+}
+
 // Each PHP version listens on its own socket, so a switch can start the new FPM master while
 // the old one still serves.
 func TestFPMSocketIsPerVersion(t *testing.T) {

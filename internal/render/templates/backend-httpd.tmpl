@@ -4,6 +4,7 @@ ServerRoot /etc/httpd
 Listen {{.Address}}:81
 PidFile /run/paddock-httpd/{{.ID}}/httpd.pid
 ErrorLog /srv/www/{{.ID}}/logs/error.log
+LogFormat "%a %l %u %t \"%r\" %>s %b \"%{Referer}i\" \"%{User-Agent}i\"" combined
 CustomLog /srv/www/{{.ID}}/logs/access.log combined
 TypesConfig /etc/mime.types
 ServerName {{.Primary}}
