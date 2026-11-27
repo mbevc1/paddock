@@ -133,15 +133,26 @@ func (s *Server) createOwner(w http.ResponseWriter, r *http.Request) {
 		s.serverError(w, r, err)
 		return
 	}
+	// A chosen password is checked before the owner exists, so a weak one creates nothing.
+	password := r.PostFormValue("password")
+	chosen := password != ""
+	if chosen {
+		if err := auth.CheckPasswordPolicy(password, username); err != nil {
+			redirectError(w, r, "/admin/owners", strings.TrimPrefix(err.Error(), auth.ErrWeakPassword.Error()+": "))
+			return
+		}
+	}
 	var created ops.OwnerCreated
 	if err := s.adminCall(r, "owner.create", ops.OwnerCreateArgs{Name: name}, &created); err != nil {
 		s.agentFailed(w, r, "/admin/owners", err)
 		return
 	}
-	password, err := auth.RandomPassword()
-	if err != nil {
-		s.serverError(w, r, err)
-		return
+	if !chosen {
+		var err error
+		if password, err = auth.RandomPassword(); err != nil {
+			s.serverError(w, r, err)
+			return
+		}
 	}
 	hash, err := auth.HashPassword(password)
 	if err != nil {
@@ -155,6 +166,11 @@ func (s *Server) createOwner(w http.ResponseWriter, r *http.Request) {
 	var owners []ops.OwnerView
 	if err := s.adminCall(r, "owner.list", struct{}{}, &owners); err != nil {
 		s.agentFailed(w, r, "/admin/owners", err)
+		return
+	}
+	if chosen {
+		s.render(w, r, http.StatusOK, "owners.html", Page{Title: "Owners", Flash: "Owner created. The user signs in with the password you chose.",
+			Data: OwnersData{Owners: owners}})
 		return
 	}
 	s.render(w, r, http.StatusOK, "owners.html", Page{Title: "Owners", Flash: "Owner created. Give the user this password; it is shown only once.",

@@ -1293,3 +1293,34 @@ func TestAdminResetsAnOwnerUsersPassword(t *testing.T) {
 	h.now = h.now.Add(stepUpWindow + time.Minute)
 	wantRedirect(t, admin.do("POST", fmt.Sprintf("/admin/owners/3/users/%d/password", alice.ID), url.Values{}), "/reauth")
 }
+
+func TestCreateOwnerWithAChosenPassword(t *testing.T) {
+	ctx := context.Background()
+	h, b := adminOverviewHarness(t)
+	created := 0
+	h.agent.on("owner.create", func(*api.Actor, string, json.RawMessage) (any, error) {
+		created++
+		return ops.OwnerCreated{OwnerID: 7}, nil
+	})
+	if body := b.do("GET", "/admin/owners", nil).Body.String(); !strings.Contains(body, `<input name="password" type="password" autocomplete="new-password" minlength="12">`) {
+		t.Error("the new owner form has no optional password field")
+	}
+
+	rec := b.do("POST", "/admin/owners", url.Values{"name": {"Carol Co"}, "username": {"carol"}, "password": {"short"}})
+	if rec.Code != http.StatusSeeOther || !strings.Contains(rec.Header().Get("Location"), "error=") || created != 0 {
+		t.Errorf("a weak chosen password = %d %q, owners created %d", rec.Code, rec.Header().Get("Location"), created)
+	}
+
+	const chosen = "Correct-Horse-7Battery"
+	body := b.do("POST", "/admin/owners", url.Values{"name": {"Carol Co"}, "username": {"carol"}, "password": {chosen}}).Body.String()
+	if strings.Contains(body, chosen) || !strings.Contains(body, "Owner created.") {
+		t.Errorf("a chosen password was shown back or the owner not created:\n%s", body)
+	}
+	u, err := h.store.GetUserByName(ctx, "carol")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ok, _, _ := auth.VerifyPassword(chosen, u.PasswordHash); !ok || u.OwnerID != 7 {
+		t.Errorf("carol = %+v, chosen password works: %v", u, ok)
+	}
+}
