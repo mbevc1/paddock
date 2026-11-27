@@ -1,6 +1,8 @@
 [global]
 error_log = /srv/www/{{.ID}}/logs/php-fpm.log
 systemd_interval = 10
+; A reload waits this long for requests in flight to finish before stopping their workers.
+process_control_timeout = 10s
 
 [{{.ID}}]
 listen = {{.FPMSocket}}

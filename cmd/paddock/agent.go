@@ -72,6 +72,11 @@ func runAgent(ctx context.Context, args []string, _, stderr io.Writer) error {
 		return err
 	}
 	log.Info("agent listening", "socket", *socket, "version", version)
+	go func() {
+		if err := ops.ReconcileOnVersionChange(ctx, store, host, version); err != nil {
+			log.Error("reconciling for a new version failed", "err", err)
+		}
+	}()
 	return srv.Serve(ctx, l)
 }
 

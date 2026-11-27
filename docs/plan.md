@@ -265,6 +265,8 @@ No `User` or `Group` directives; the unit already runs as the vhost user.
 [global]
 error_log = /srv/www/v00012/logs/php-fpm.log
 systemd_interval = 10
+; A reload waits this long for requests in flight to finish before stopping their workers.
+process_control_timeout = 10s
 
 [v00012]
 listen = /run/paddock/fpm/v00012/php83.sock
@@ -707,6 +709,9 @@ Throwaway shell scripts in `poc/`, run as root on a disposable AlmaLinux 9.4+ VM
     - Acceptance: deleting a vhost's rendered configs by hand and reconciling restores a working vhost.
     - Status: `Reconcile` rewrites PHP unit templates and, for every active or suspended vhost, its directories, configs, front vhost (by status and certificate source), and authorized keys; reloads systemd when anything changed; brings units to the state the vhost's status calls for, restarting those whose config changed; and reloads the front after `apachectl configtest`, restoring the front files if the check fails. A vhost it cannot repair is reported without stopping the rest. Admins call `reconcile.all` (a job); root calls `paddock reconcile -all`, served synchronously by the root operation `reconcile.run`. Fake-runner tests cover repair, an idle rerun, a suspended vhost with an SFTP account, and a failing check; `TestReconcileRestoresVhost` covers the VM half and has not run yet, so the task stays open.
     - Deferred: reconcile does not recreate Linux users, MariaDB users, or databases; it reports the vhost instead. Vhosts in status `creating`, `deleting`, or `failed` are reported for an admin to resolve.
+    - Done: the agent reconciles by itself once per version: at start it compares its version with the one `state.db` recorded after the last such reconcile (migration 7, `agent_meta`), so an RPM upgrade, which restarts the agent, brings every vhost to the new templates without `paddock reconcile --all`. It runs in the background while the agent serves; problems become an `apply_failed` event for admins and the version is recorded, while a reconcile that stops early records nothing and runs again at the next start.
+    - Done: a vhost picks up a changed backend or FPM config by a graceful reload after `httpd -t` or `php-fpm -t` passes (a failed check restores the file, so the running unit keeps the previous one); only a changed sandbox drop-in or PHP unit template restarts a unit. FPM's `process_control_timeout = 10s` lets a reload wait for requests in flight.
+    - Choice to confirm: 10 s bounds how long requests queue while FPM reloads; longer requests are stopped when it runs out.
 - [x] **T1.17 Web server base.** TLS on `:8443` with the self-signed certificate, `:8080` redirect, security headers from §11.3, router where every route declares a permission (startup fails otherwise), agent client, embedded templates and static files.
     - Acceptance: test asserts startup failure for a route without permission; header tests.
     - Done: routes declare one of the §11.1 permissions; `Build` refuses unknown or missing ones, handlers, or duplicates. Templates and static files (htmx 2.0.11, vendored with its 0BSD licence and verified npm integrity) are embedded. The web process refuses to run as root and reaches the host only through `DialAgent`, one connection per call. HSTS turns on once T1.20's certificate is trusted.
