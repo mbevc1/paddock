@@ -60,6 +60,7 @@ func RegisterVhosts(r *agent.Registry, store *state.Store, h *Host) {
 	registerReads(r, store, h)
 	registerHealth(r, store, h)
 	registerLogs(r, store, h)
+	registerPHPSettings(r, store, h)
 	r.Register(agent.Op{Name: "vhost.create", Class: agent.ClassOwner, Long: true,
 		Handler: func(ctx context.Context, c *agent.Call) (any, error) {
 			args, err := agent.DecodeArgs[VhostCreateArgs](c)
@@ -184,6 +185,14 @@ func vhostFiles(v render.Vhost, l render.Limits) ([]render.File, error) {
 
 func renderInputs(v state.Vhost, primary string, aliases []string, l state.Limits) (render.Vhost, render.Limits, error) {
 	rv, err := render.NewVhost(v.N, v.OwnerID, v.PHPVersion, primary, aliases, l.PMMaxChildren)
+	if err != nil {
+		return render.Vhost{}, render.Limits{}, err
+	}
+	// An owner's memory limit can drop below a vhost's PHP memory limit; the pool then gets
+	// the owner's limit instead of failing every later operation on the vhost.
+	memCap := phpMemoryCap(l)
+	rv, err = rv.WithPHP(render.PHPSettings{MemoryLimitMB: min(v.PHP.MemoryLimitMB, memCap),
+		UploadMaxMB: v.PHP.UploadMaxMB, MaxExecutionS: v.PHP.MaxExecutionS}, memCap)
 	if err != nil {
 		return render.Vhost{}, render.Limits{}, err
 	}

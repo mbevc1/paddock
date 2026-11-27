@@ -316,3 +316,35 @@ func TestCerts(t *testing.T) {
 		t.Errorf("after delete = %+v", c)
 	}
 }
+
+func TestVhostPHPSettings(t *testing.T) {
+	ctx := context.Background()
+	s, _ := openTemp(t)
+	o, err := s.CreateOwner(ctx, "acme", DefaultLimits())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.AddPHPVersion(ctx, "8.3"); err != nil {
+		t.Fatal(err)
+	}
+	v, err := s.CreateVhost(ctx, o.ID, "8.3", "a.example.com", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v.PHP != DefaultPHPSettings() || v.PHP != (PHPSettings{MemoryLimitMB: 128, UploadMaxMB: 2, MaxExecutionS: 30}) {
+		t.Errorf("new vhost settings = %+v", v.PHP)
+	}
+	if got, err := s.GetVhost(ctx, v.N); err != nil || got.PHP != DefaultPHPSettings() {
+		t.Errorf("the column defaults differ from DefaultPHPSettings: %+v, %v", got.PHP, err)
+	}
+	want := PHPSettings{MemoryLimitMB: 512, UploadMaxMB: 64, MaxExecutionS: 120}
+	if err := s.SetVhostPHPSettings(ctx, v.N, want); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := s.GetVhost(ctx, v.N); err != nil || got.PHP != want {
+		t.Errorf("stored settings = %+v, %v", got.PHP, err)
+	}
+	if err := s.SetVhostPHPSettings(ctx, 99, want); !errors.Is(err, ErrNotFound) {
+		t.Errorf("settings for a missing vhost: %v", err)
+	}
+}

@@ -89,6 +89,8 @@ func FPM(v Vhost) (File, error) {
 	}
 	data := v.data()
 	data["DBSocket"] = mariadb.Socket
+	data["PHP"] = v.phpSettings
+	data["PostMaxMB"] = max(v.phpSettings.UploadMaxMB, minPostMaxMB)
 	return file("/etc/paddock/fpm/"+v.id+".conf", "fpm.tmpl", data)
 }
 

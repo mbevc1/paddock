@@ -34,6 +34,17 @@
     <select name="php">{{range .Data.PHPVersions}}<option{{if eq . $v.PHPVersion}} selected{{end}}>{{.}}</option>{{end}}</select>
     <button type="submit">Switch PHP</button>
   </form>
+  {{with $v.PHP}}{{$b := $p.Data.PHPBounds}}
+  <h3>Limits</h3>
+  <form method="post" action="/vhosts/{{$v.ID}}/php/settings" class="grid">
+    <input type="hidden" name="csrf" value="{{$p.CSRF}}">
+    <label>Memory limit (MB) <input name="memory_limit_mb" type="number" min="{{$b.MinMemoryMB}}" max="{{.MemoryCapMB}}" value="{{.MemoryLimitMB}}" required></label>
+    <label>Upload size (MB) <input name="upload_max_mb" type="number" min="1" max="{{$b.MaxUploadMB}}" value="{{.UploadMaxMB}}" required></label>
+    <label>Max execution time (s) <input name="max_execution_s" type="number" min="1" max="{{$b.MaxExecutionS}}" value="{{.MaxExecutionS}}" required></label>
+    <button type="submit">Save limits</button>
+  </form>
+  <p class="muted">Set with <code>php_admin_value</code>, so code on the vhost cannot raise them. The POST size limit follows the upload size and never drops below 8 MB.</p>
+  {{end}}
   {{end}}
 </section>
 

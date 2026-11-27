@@ -70,7 +70,8 @@ Newline-delimited JSON over the Unix socket, one request and one response per li
 | `owner.limits.set` | admin | owner_id, limits |
 | `php.version.install`, `php.version.remove` | admin | version (`8.2`, `8.3`, `8.4`) |
 | `vhost.create` | owner | owner_id, primary domain, aliases, php version |
-| `vhost.update` | owner | vhost_id, aliases, php settings |
+| `vhost.update` | owner | vhost_id, aliases |
+| `vhost.php.settings` | owner | vhost_id, memory limit (32 MB to the owner's memory limit), upload size (1 to 512 MB), max execution time (1 to 300 s); rewrites the FPM pool, checks it, reloads a running master |
 | `vhost.php.switch` | owner | vhost_id, version |
 | `vhost.delete` | owner | vhost_id, confirm |
 | `vhost.suspend`, `vhost.resume` | admin | vhost_id |
@@ -278,6 +279,10 @@ php_admin_value[error_log] = /srv/www/v00012/logs/php-error.log
 php_admin_value[pdo_mysql.default_socket] = /var/lib/mysql/mysql.sock
 php_admin_value[mysqli.default_socket] = /var/lib/mysql/mysql.sock
 php_admin_value[opcache.jit] = off
+php_admin_value[memory_limit] = 128M
+php_admin_value[upload_max_filesize] = 2M
+php_admin_value[post_max_size] = 8M
+php_admin_value[max_execution_time] = 30
 env[DB_HOST] = localhost
 env[DB_SOCKET] = /var/lib/mysql/mysql.sock
 env[DB_USER] = v00012
@@ -716,7 +721,7 @@ Throwaway shell scripts in `poc/`, run as root on a disposable AlmaLinux 9.4+ VM
     - Acceptance: handler tests prove another owner's IDs return 404; templates use `.Can` for every action.
     - Done: tests run the panel against the agent's real operations with a fake host. A test maps every posting form to its route and fails unless the template checks that route's permission. New agent reads `vhost.list`, `vhost.get`, `php.version.list`, `owner.get` and `vhost.update` serve the pages.
     - Done: a Logs page per vhost shows the end of its access, Apache error, PHP error and PHP-FPM logs through `vhost.log.tail`. The agent opens each log without following symlinks and reads it only when it is a regular file with one link, owned by the vhost user, because the vhost user owns the `logs/` directory.
-    - Deferred: PHP settings in `vhost.update` are not implemented.
+    - Done: per-vhost PHP limits (`memory_limit`, `upload_max_filesize` with `post_max_size` following it, `max_execution_time`) through `vhost.php.settings`, set with `php_admin_value`. New and existing vhosts start at PHP's defaults (128 MB, 2 MB, 30 s). A vhost's memory limit renders no higher than its owner's memory limit, so lowering the owner limit cannot break the vhost.
 - [x] **T1.22 Admin UI.** Owners, limits, PHP versions, server status, audit log, impersonation with dual-identity audit and owner notification; admin actions prompt for TOTP and pass it to the agent.
     - Acceptance: impersonated actions record both identities; admin action without TOTP fails at the agent, not only in the UI.
     - Done: admin forms carry an optional TOTP field sent with the request's first admin call; an expired window shows an unlock form. Creating an owner also creates its first panel user with a one-time password.

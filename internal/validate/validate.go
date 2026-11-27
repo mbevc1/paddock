@@ -101,6 +101,29 @@ func PHPVersion(v string) error {
 	return nil
 }
 
+// PHP limit bounds. Uploads stay under Apache's default 1 GiB request body, and the
+// execution time under the 300 s request_terminate_timeout of every FPM pool.
+const (
+	MinPHPMemoryMB  = 32
+	MaxPHPUploadMB  = 512
+	MaxPHPExecution = 300
+)
+
+// PHPLimits checks a vhost's PHP memory limit (at most memoryCapMB, the owner's memory
+// limit), upload size, and execution time in seconds.
+func PHPLimits(memoryMB, uploadMB, executionS, memoryCapMB int) error {
+	if memoryMB < MinPHPMemoryMB || memoryMB > memoryCapMB {
+		return invalid("PHP memory limit %d MB must be between %d and %d", memoryMB, MinPHPMemoryMB, memoryCapMB)
+	}
+	if uploadMB < 1 || uploadMB > MaxPHPUploadMB {
+		return invalid("upload size %d MB must be between 1 and %d", uploadMB, MaxPHPUploadMB)
+	}
+	if executionS < 1 || executionS > MaxPHPExecution {
+		return invalid("execution time %d s must be between 1 and %d", executionS, MaxPHPExecution)
+	}
+	return nil
+}
+
 var usernamePattern = regexp.MustCompile(`^[a-z][a-z0-9._-]{2,31}$`)
 
 // Username checks a panel username: 3 to 32 characters, lowercase, starting with a letter.
