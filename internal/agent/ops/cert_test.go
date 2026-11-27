@@ -20,6 +20,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/mbevc1/paddock/internal/agent"
 	"github.com/mbevc1/paddock/internal/api"
 	"github.com/mbevc1/paddock/internal/state"
 )
@@ -218,5 +219,76 @@ func TestMDRenewed(t *testing.T) {
 	wantCode(t, root.Call(ctx, "front.md-renewed", nil, "", MDRenewedArgs{Domains: []string{"shop.example.com"}}, nil), api.CodeApplyFailed)
 	if got := e.run.Commands()[mark:]; !slices.Equal(got, []string{"/usr/sbin/apachectl configtest"}) {
 		t.Errorf("reloaded after a failed configtest: %q", got)
+	}
+}
+
+func uploadedVhost(t *testing.T) (*env, *agent.Client, *api.Actor) {
+	t.Helper()
+	ctx := context.Background()
+	e, web, owner, _ := activeVhost(t)
+	chain, key := testCert(t, e.now, "shop.example.com", "www.shop.example.com")
+	if err := web.Call(ctx, "cert.upload", owner, "", CertUploadArgs{VhostID: "v00001", ChainPEM: chain, KeyPEM: key}, nil); err != nil {
+		t.Fatal(err)
+	}
+	return e, web, owner
+}
+
+func TestCertBackToACME(t *testing.T) {
+	ctx := context.Background()
+	e, web, owner := uploadedVhost(t)
+	mark := len(e.run.Calls())
+
+	var status CertStatus
+	if err := web.Call(ctx, "cert.acme", owner, "", VhostIDArgs{VhostID: "v00001"}, &status); err != nil {
+		t.Fatal(err)
+	}
+	if status.Source != state.CertACME {
+		t.Errorf("status = %+v", status)
+	}
+	if front := frontConfig(t, e); !strings.Contains(front, "MDomain") || strings.Contains(front, "SSLCertificateFile") {
+		t.Errorf("front:\n%s", front)
+	}
+	if got, want := e.run.Commands()[mark:], []string{"/usr/sbin/apachectl configtest", "/usr/bin/systemctl reload httpd.service"}; !slices.Equal(got, want) {
+		t.Errorf("commands = %q", got)
+	}
+	for _, f := range []string{certFile, keyFile} {
+		if _, err := os.Stat(filepath.Join(e.root, f)); !errors.Is(err, fs.ErrNotExist) {
+			t.Errorf("%s left after switching to ACME", f)
+		}
+	}
+	if c, _ := e.store.GetCert(ctx, 1); c.Source != state.CertACME || c.Fingerprint != "" {
+		t.Errorf("state cert = %+v", c)
+	}
+
+	mark = len(e.run.Calls())
+	if err := web.Call(ctx, "cert.acme", owner, "", VhostIDArgs{VhostID: "v00001"}, nil); err != nil || len(e.run.Calls()) != mark {
+		t.Errorf("switching a vhost already on ACME ran commands: %v", err)
+	}
+
+	other, err := e.store.CreateOwner(ctx, "other", state.DefaultLimits())
+	if err != nil {
+		t.Fatal(err)
+	}
+	stranger := &api.Actor{UserID: 9, Role: api.RoleOwner, OwnerID: other.ID}
+	wantCode(t, web.Call(ctx, "cert.acme", stranger, "", VhostIDArgs{VhostID: "v00001"}, nil), api.CodeNotFound)
+}
+
+func TestCertBackToACMEConfigtestFailureKeepsUpload(t *testing.T) {
+	ctx := context.Background()
+	e, web, owner := uploadedVhost(t)
+	before := frontConfig(t, e)
+	e.run.On("/usr/sbin/apachectl", "configtest").Fail("AH00526: Syntax error").Times(1)
+
+	wantCode(t, web.Call(ctx, "cert.acme", owner, "", VhostIDArgs{VhostID: "v00001"}, nil), api.CodeApplyFailed)
+	if got := frontConfig(t, e); got != before {
+		t.Errorf("front not restored:\n%s", got)
+	}
+	for _, f := range []string{certFile, keyFile} {
+		if _, err := os.Stat(filepath.Join(e.root, f)); err != nil {
+			t.Errorf("%s removed after a failed switch: %v", f, err)
+		}
+	}
+	if c, _ := e.store.GetCert(ctx, 1); c.Source != state.CertUpload {
+		t.Errorf("cert source = %s", c.Source)
 	}
 }

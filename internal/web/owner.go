@@ -44,6 +44,7 @@ func (s *Server) ownerRoutes(rt *Router) {
 	rt.Handle(Route{Method: "POST", Pattern: "/vhosts/{id}/keys/remove", Perm: PermAccess, StepUp: true, Handler: s.removeKey})
 
 	rt.Handle(Route{Method: "POST", Pattern: "/vhosts/{id}/cert", Perm: PermCerts, Handler: s.uploadCert})
+	rt.Handle(Route{Method: "POST", Pattern: "/vhosts/{id}/cert/acme", Perm: PermCerts, Handler: s.useACME})
 }
 
 // agentFailed answers an agent error: not_found becomes a 404, so other owners' IDs look like
@@ -300,6 +301,11 @@ func (s *Server) simpleAction(w http.ResponseWriter, r *http.Request, op string,
 		return
 	}
 	redirectFlash(w, r, vhostPath(r), flash)
+}
+
+func (s *Server) useACME(w http.ResponseWriter, r *http.Request) {
+	s.simpleAction(w, r, "cert.acme", ops.VhostIDArgs{VhostID: r.PathValue("id")},
+		"Switched to Let's Encrypt. Until it issues a certificate, usually within minutes, browsers may warn visitors.")
 }
 
 func (s *Server) createDatabase(w http.ResponseWriter, r *http.Request) {
