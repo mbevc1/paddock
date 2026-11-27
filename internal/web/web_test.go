@@ -14,6 +14,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -1171,5 +1172,41 @@ func TestVhostPageSwitchesBackToLetsEncrypt(t *testing.T) {
 	rec := b.do("POST", "/vhosts/v00006/cert/acme", url.Values{})
 	if rec.Code != http.StatusSeeOther || asked.VhostID != "v00006" {
 		t.Errorf("POST = %d, asked for %+v", rec.Code, asked)
+	}
+}
+
+func TestAdminDashboardSuspendsAndResumesVhosts(t *testing.T) {
+	h, b := adminOverviewHarness(t)
+	body := b.do("GET", "/dashboard", nil).Body.String()
+	for _, want := range []string{
+		`action="/admin/vhosts/v00001/suspend" class="inline" data-confirm="Suspend shop.example.com?`,
+		`action="/admin/vhosts/v00002/resume" class="inline"`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("admin dashboard lacks %q", want)
+		}
+	}
+	if strings.Contains(body, "/admin/vhosts/v00001/resume") || strings.Contains(body, "/admin/vhosts/v00002/suspend") {
+		t.Error("a vhost offers the action matching the state it is already in")
+	}
+
+	var called []string
+	for _, op := range []string{"vhost.suspend", "vhost.resume"} {
+		h.agent.on(op, func(actor *api.Actor, _ string, raw json.RawMessage) (any, error) {
+			var args ops.VhostIDArgs
+			if err := json.Unmarshal(raw, &args); err != nil {
+				return nil, err
+			}
+			called = append(called, op+" "+args.VhostID+" "+string(actor.Role))
+			return api.JobResult{JobID: "0123456789abcdef0123456789abcdef"}, nil
+		})
+	}
+	for _, path := range []string{"/admin/vhosts/v00001/suspend", "/admin/vhosts/v00002/resume"} {
+		if rec := b.do("POST", path, url.Values{}); rec.Code != http.StatusSeeOther || !strings.HasPrefix(rec.Header().Get("Location"), "/jobs/") {
+			t.Errorf("POST %s = %d %q", path, rec.Code, rec.Header().Get("Location"))
+		}
+	}
+	if !slices.Equal(called, []string{"vhost.suspend v00001 admin", "vhost.resume v00002 admin"}) {
+		t.Errorf("agent calls = %q", called)
 	}
 }
