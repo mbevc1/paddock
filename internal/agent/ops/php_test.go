@@ -17,7 +17,9 @@ import (
 
 const (
 	php84Packages = "php84-php-fpm php84-php-cli php84-php-mysqlnd php84-php-opcache php84-php-gd " +
-		"php84-php-mbstring php84-php-xml php84-php-intl php84-php-pecl-zip"
+		"php84-php-mbstring php84-php-xml php84-php-intl php84-php-pecl-zip php84-php-bcmath php84-php-pecl-apcu"
+	php83Packages = "php83-php-fpm php83-php-cli php83-php-mysqlnd php83-php-opcache php83-php-gd " +
+		"php83-php-mbstring php83-php-xml php83-php-intl php83-php-pecl-zip php83-php-bcmath php83-php-pecl-apcu"
 	rpmQuery84   = "/usr/bin/rpm -q --quiet " + php84Packages
 	dnfInstall84 = "/usr/bin/dnf -y install " + php84Packages
 	dnfRemove84  = "/usr/bin/dnf -y remove " + php84Packages
@@ -237,5 +239,40 @@ func TestPHPArguments(t *testing.T) {
 	var apiErr *api.Error
 	if !errors.As(err, &apiErr) || apiErr.Code != api.CodeForbidden {
 		t.Errorf("owner install: %v", err)
+	}
+}
+
+// Re-running install on a version in use adds packages the list gained since, and reloads
+// the version's running FPM masters so they load the new extensions.
+func TestPHPReinstallAddsPackagesAndReloadsMasters(t *testing.T) {
+	e, web, _, _ := activeVhost(t)
+	admin := adminSession(t, e, web)
+	mark := len(e.run.Calls())
+	e.run.On("/usr/bin/rpm").Fail("package php83-php-pecl-apcu is not installed").Times(1)
+	if v := runJob(t, web, "php.version.install", admin, PHPVersionArgs{Version: "8.3"}); v.Status != state.JobSucceeded {
+		t.Fatalf("job = %+v", v)
+	}
+	want := []string{"/usr/bin/rpm -q --quiet " + php83Packages, "/usr/bin/dnf -y install " + php83Packages, daemonReload,
+		"/opt/remi/php83/root/usr/sbin/php-fpm -v", "/usr/bin/systemctl reload paddock-php83-fpm@v00001.service"}
+	if got := e.run.Commands()[mark:]; !slices.Equal(got, want) {
+		t.Errorf("commands:\n got %q\nwant %q", got, want)
+	}
+}
+
+// A failed re-run must not remove the packages that running vhosts use.
+func TestPHPReinstallFailureKeepsPackages(t *testing.T) {
+	e, web, _, _ := activeVhost(t)
+	admin := adminSession(t, e, web)
+	mark := len(e.run.Calls())
+	e.run.On("/usr/bin/rpm").Fail("package php83-php-pecl-apcu is not installed").Times(1)
+	e.run.On("/opt/remi/php83/root/usr/sbin/php-fpm", "-v").Fail("boom").Times(1)
+	wantJobError(t, runJob(t, web, "php.version.install", admin, PHPVersionArgs{Version: "8.3"}), api.CodeApplyFailed)
+	for _, c := range e.run.Commands()[mark:] {
+		if strings.Contains(c, "dnf -y remove") {
+			t.Errorf("a failed re-run removed packages: %q", c)
+		}
+	}
+	if got := installed(t, e); !slices.Contains(got, "8.3") {
+		t.Errorf("installed = %q, 8.3 was forgotten", got)
 	}
 }

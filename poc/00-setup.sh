@@ -42,7 +42,7 @@ packages=(httpd mod_ssl mod_md mariadb-server fail2ban nftables firewalld xfspro
 for v in "${PHP_VERSIONS[@]}"; do
 	t=$(php_tag "$v")
 	packages+=("php$t-php-fpm" "php$t-php-cli" "php$t-php-mysqlnd" "php$t-php-opcache"
-		"php$t-php-gd" "php$t-php-mbstring" "php$t-php-xml" "php$t-php-intl" "php$t-php-pecl-zip")
+		"php$t-php-gd" "php$t-php-mbstring" "php$t-php-xml" "php$t-php-intl" "php$t-php-pecl-zip" "php$t-php-bcmath" "php$t-php-pecl-apcu")
 done
 missing=()
 for p in "${packages[@]}"; do rpm -q "$p" >/dev/null 2>&1 || missing+=("$p"); done
