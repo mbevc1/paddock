@@ -36,11 +36,19 @@ func registerVhostState(r *agent.Registry, store *state.Store, h *Host) {
 			return VhostResult{VhostID: args.VhostID}, nil
 		}})
 
-	for name, fn := range map[string]func(context.Context, *state.Store, *Host, state.Vhost) error{
-		"vhost.suspend": suspendVhost,
-		"vhost.resume":  resumeVhost,
+	// Admins suspend and resume any vhost; owners disable and enable their own, and cannot
+	// lift a suspension an admin made.
+	for name, op := range map[string]struct {
+		class agent.Class
+		fn    func(context.Context, *state.Store, *Host, state.Vhost) error
+	}{
+		"vhost.suspend": {agent.ClassAdmin, suspendAs(state.SuspendedByAdmin)},
+		"vhost.resume":  {agent.ClassAdmin, resumeAs(state.SuspendedByAdmin)},
+		"vhost.disable": {agent.ClassOwner, suspendAs(state.SuspendedByOwner)},
+		"vhost.enable":  {agent.ClassOwner, resumeAs(state.SuspendedByOwner)},
 	} {
-		r.Register(agent.Op{Name: name, Class: agent.ClassAdmin, Long: true,
+		fn := op.fn
+		r.Register(agent.Op{Name: name, Class: op.class, Long: true,
 			Handler: func(ctx context.Context, c *agent.Call) (any, error) {
 				args, err := agent.DecodeArgs[VhostIDArgs](c)
 				if err != nil {
@@ -216,8 +224,22 @@ func switchPHP(ctx context.Context, store *state.Store, h *Host, actor *api.Acto
 	return nil
 }
 
-// suspendVhost makes the front answer 503, then stops and disables the vhost's units.
-func suspendVhost(ctx context.Context, store *state.Store, h *Host, sv state.Vhost) error {
+func suspendAs(by string) func(context.Context, *state.Store, *Host, state.Vhost) error {
+	return func(ctx context.Context, store *state.Store, h *Host, sv state.Vhost) error {
+		return suspendVhost(ctx, store, h, sv, by)
+	}
+}
+
+func resumeAs(by string) func(context.Context, *state.Store, *Host, state.Vhost) error {
+	return func(ctx context.Context, store *state.Store, h *Host, sv state.Vhost) error {
+		return resumeVhost(ctx, store, h, sv, by)
+	}
+}
+
+// suspendVhost makes the front answer 503, then stops and disables the vhost's units, and
+// records who suspended it. An admin suspending a vhost its owner disabled takes the
+// suspension over, so the owner can no longer lift it.
+func suspendVhost(ctx context.Context, store *state.Store, h *Host, sv state.Vhost, by string) error {
 	sv, err := lockedVhost(ctx, store, h, sv.N)
 	if err != nil {
 		return err
@@ -225,6 +247,9 @@ func suspendVhost(ctx context.Context, store *state.Store, h *Host, sv state.Vho
 	defer h.mu.Unlock()
 	switch sv.Status {
 	case state.VhostSuspended:
+		if by == state.SuspendedByAdmin && sv.SuspendedBy != state.SuspendedByAdmin {
+			return store.SetVhostSuspension(ctx, sv.N, state.SuspendedByAdmin)
+		}
 		return nil
 	case state.VhostActive:
 	default:
@@ -249,15 +274,16 @@ func suspendVhost(ctx context.Context, store *state.Store, h *Host, sv state.Vho
 			return h.applyFailed("stopping "+unit, err)
 		}
 	}
-	if err := store.SetVhostStatus(ctx, sv.N, state.VhostSuspended); err != nil {
+	if err := store.SetVhostSuspension(ctx, sv.N, by); err != nil {
 		undo.run(ctx)
 		return err
 	}
 	return nil
 }
 
-// resumeVhost starts the vhost's units again, then points the front back at the backend.
-func resumeVhost(ctx context.Context, store *state.Store, h *Host, sv state.Vhost) error {
+// resumeVhost starts the vhost's units again, then points the front back at the backend. An
+// owner may resume only a vhost they disabled themselves.
+func resumeVhost(ctx context.Context, store *state.Store, h *Host, sv state.Vhost, by string) error {
 	sv, err := lockedVhost(ctx, store, h, sv.N)
 	if err != nil {
 		return err
@@ -267,6 +293,9 @@ func resumeVhost(ctx context.Context, store *state.Store, h *Host, sv state.Vhos
 	case state.VhostActive:
 		return nil
 	case state.VhostSuspended:
+		if by == state.SuspendedByOwner && sv.SuspendedBy != state.SuspendedByOwner {
+			return api.Errorf(api.CodeForbidden, "vhost %s is suspended by an admin", sv.ID)
+		}
 	default:
 		return api.Errorf(api.CodeConflict, "vhost %s is %s", sv.ID, sv.Status)
 	}
@@ -313,7 +342,7 @@ func resumeVhost(ctx context.Context, store *state.Store, h *Host, sv state.Vhos
 		undo.run(ctx)
 		return err
 	}
-	if err := store.SetVhostStatus(ctx, sv.N, state.VhostActive); err != nil {
+	if err := store.SetVhostSuspension(ctx, sv.N, ""); err != nil {
 		undo.run(ctx)
 		return err
 	}

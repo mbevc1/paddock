@@ -16,9 +16,11 @@ type VhostView struct {
 	OwnerID    int64             `json:"owner_id"`
 	PHPVersion string            `json:"php_version"`
 	Status     state.VhostStatus `json:"status"`
-	Primary    string            `json:"primary"`
-	Aliases    []string          `json:"aliases"`
-	CreatedAt  time.Time         `json:"created_at"`
+	// SuspendedBy is "admin" or "owner" while Status is suspended.
+	SuspendedBy string    `json:"suspended_by,omitempty"`
+	Primary     string    `json:"primary"`
+	Aliases     []string  `json:"aliases"`
+	CreatedAt   time.Time `json:"created_at"`
 }
 
 // DBServerView is the database server's product and version.
@@ -109,7 +111,8 @@ func vhostView(ctx context.Context, store *state.Store, sv state.Vhost) (VhostVi
 	if err != nil {
 		return VhostView{}, err
 	}
-	v := VhostView{ID: sv.ID, OwnerID: sv.OwnerID, PHPVersion: sv.PHPVersion, Status: sv.Status, Aliases: []string{}, CreatedAt: sv.CreatedAt}
+	v := VhostView{ID: sv.ID, OwnerID: sv.OwnerID, PHPVersion: sv.PHPVersion, Status: sv.Status, SuspendedBy: sv.SuspendedBy,
+		Aliases: []string{}, CreatedAt: sv.CreatedAt}
 	for _, d := range domains {
 		if d.Primary {
 			v.Primary = d.Name

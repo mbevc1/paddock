@@ -3,9 +3,13 @@
 <nav class="crumbs" aria-label="Breadcrumb"><a href="/vhosts">Vhosts</a> <span aria-current="page">{{$v.Primary}}</span></nav>
 <div class="page-head">
   <h1>{{$v.Primary}}</h1>
-  <div class="actions"><a class="button secondary" href="/vhosts/{{$v.ID}}/logs">Logs</a></div>
+  <div class="actions"><a class="button secondary" href="/vhosts/{{$v.ID}}/logs">Logs</a>
+    {{if .Can "vhost.manage"}}{{if eq $v.Status "active"}}<form method="post" action="/vhosts/{{$v.ID}}/disable" class="inline" data-confirm="Disable {{$v.Primary}}? Its site answers 503 and its PHP stops until you enable it again.">
+      <input type="hidden" name="csrf" value="{{.CSRF}}"><button type="submit" class="secondary">Disable</button></form>
+    {{else if and (eq $v.Status "suspended") (eq $v.SuspendedBy "owner")}}<form method="post" action="/vhosts/{{$v.ID}}/enable" class="inline">
+      <input type="hidden" name="csrf" value="{{.CSRF}}"><button type="submit">Enable</button></form>{{end}}{{end}}</div>
 </div>
-<p class="meta"><code>{{$v.ID}}</code> · PHP {{$v.PHPVersion}} · <span class="badge {{$v.Status}}">{{$v.Status}}</span></p>
+<p class="meta"><code>{{$v.ID}}</code> · PHP {{$v.PHPVersion}} · {{if eq $v.SuspendedBy "owner"}}<span class="badge suspended">disabled</span>{{else}}<span class="badge {{$v.Status}}">{{$v.Status}}</span>{{end}}{{if eq $v.SuspendedBy "admin"}} <span class="muted">Suspended by an admin.</span>{{end}}</p>
 
 {{with .Data.Secret}}
 <section class="secret">

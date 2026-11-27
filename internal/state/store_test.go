@@ -386,3 +386,43 @@ func TestCreateRefusedOverDiskLimit(t *testing.T) {
 		t.Errorf("database after the limit cleared: %v", err)
 	}
 }
+
+func TestVhostSuspendedBy(t *testing.T) {
+	ctx := context.Background()
+	s, _ := openTemp(t)
+	o, err := s.CreateOwner(ctx, "acme", DefaultLimits())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.AddPHPVersion(ctx, "8.3"); err != nil {
+		t.Fatal(err)
+	}
+	v, err := s.CreateVhost(ctx, o.ID, "8.3", "a.example.com", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := s.GetVhost(ctx, v.N); got.SuspendedBy != "" {
+		t.Errorf("new vhost suspended by %q", got.SuspendedBy)
+	}
+	if err := s.SetVhostSuspension(ctx, v.N, SuspendedByOwner); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := s.GetVhost(ctx, v.N); got.Status != VhostSuspended || got.SuspendedBy != SuspendedByOwner {
+		t.Errorf("after owner disable = %s by %q", got.Status, got.SuspendedBy)
+	}
+	if err := s.SetVhostSuspension(ctx, v.N, SuspendedByAdmin); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := s.GetVhost(ctx, v.N); got.SuspendedBy != SuspendedByAdmin {
+		t.Errorf("admin takeover = %q", got.SuspendedBy)
+	}
+	if err := s.SetVhostSuspension(ctx, v.N, ""); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := s.GetVhost(ctx, v.N); got.Status != VhostActive || got.SuspendedBy != "" {
+		t.Errorf("after resume = %s by %q", got.Status, got.SuspendedBy)
+	}
+	if err := s.SetVhostSuspension(ctx, v.N, "someone"); err == nil {
+		t.Error("an unknown suspender was stored")
+	}
+}

@@ -1175,6 +1175,44 @@ func TestVhostPageSwitchesBackToLetsEncrypt(t *testing.T) {
 	}
 }
 
+func TestOwnerDisablesAndEnablesFromTheVhostPage(t *testing.T) {
+	h, b := vhostBrowser(t)
+	page := func(status, by string) string {
+		h.agent.on("vhost.get", func(*api.Actor, string, json.RawMessage) (any, error) {
+			return ops.VhostDetail{VhostView: ops.VhostView{ID: "v00006", OwnerID: 3, PHPVersion: "8.4", Status: state.VhostStatus(status),
+				SuspendedBy: by, Primary: "shop.example.com"}}, nil
+		})
+		return b.do("GET", "/vhosts/v00006", nil).Body.String()
+	}
+	if body := page("active", ""); !strings.Contains(body, `action="/vhosts/v00006/disable" class="inline" data-confirm="Disable shop.example.com?`) {
+		t.Error("an active vhost offers no Disable")
+	}
+	body := page("suspended", "owner")
+	if !strings.Contains(body, `action="/vhosts/v00006/enable"`) || !strings.Contains(body, `<span class="badge suspended">disabled</span>`) {
+		t.Error("a vhost its owner disabled offers no Enable or is not shown as disabled")
+	}
+	body = page("suspended", "admin")
+	if strings.Contains(body, "/vhosts/v00006/enable") || !strings.Contains(body, "Suspended by an admin.") {
+		t.Error("an admin suspension offers the owner an Enable")
+	}
+
+	var called []string
+	for _, op := range []string{"vhost.disable", "vhost.enable"} {
+		h.agent.on(op, func(_ *api.Actor, _ string, raw json.RawMessage) (any, error) {
+			called = append(called, op+" "+string(raw))
+			return api.JobResult{JobID: "0123456789abcdef0123456789abcdef"}, nil
+		})
+	}
+	for _, path := range []string{"/vhosts/v00006/disable", "/vhosts/v00006/enable"} {
+		if rec := b.do("POST", path, url.Values{}); rec.Code != http.StatusSeeOther {
+			t.Errorf("POST %s = %d", path, rec.Code)
+		}
+	}
+	if !slices.Equal(called, []string{`vhost.disable {"vhost_id":"v00006"}`, `vhost.enable {"vhost_id":"v00006"}`}) {
+		t.Errorf("agent calls = %q", called)
+	}
+}
+
 func TestAdminDashboardSuspendsAndResumesVhosts(t *testing.T) {
 	h, b := adminOverviewHarness(t)
 	body := b.do("GET", "/dashboard", nil).Body.String()
