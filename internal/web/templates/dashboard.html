@@ -38,7 +38,10 @@
       <td>{{$v.PHPVersion}}</td><td><span class="badge {{$v.Status}}">{{$v.Status}}</span></td>
       <td class="row-actions">{{if and (not $a.Locked) ($.Can "impersonate")}}<form method="post" action="/admin/owners/{{$v.OwnerID}}/impersonate" class="inline">
         <input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="next" value="/vhosts/{{$v.ID}}">
-        <button type="submit" class="secondary small">Manage</button></form>{{end}}</td></tr>
+        <button type="submit" class="secondary small">Manage</button></form>{{end}}
+        {{if and (not $a.Locked) ($.Can "owner.manage")}}{{if eq $v.Status "active"}}<form method="post" action="/admin/vhosts/{{$v.ID}}/suspend" class="inline" data-confirm="Suspend {{$v.Primary}}? Its site answers 503 and its PHP stops until an admin resumes it.">
+        <input type="hidden" name="csrf" value="{{$.CSRF}}"><button type="submit" class="danger small">Suspend</button></form>{{else if eq $v.Status "suspended"}}<form method="post" action="/admin/vhosts/{{$v.ID}}/resume" class="inline">
+        <input type="hidden" name="csrf" value="{{$.CSRF}}"><button type="submit" class="secondary small">Resume</button></form>{{end}}{{end}}</td></tr>
     {{else}}<tr><td colspan="5" class="muted">No vhosts yet. Create an owner, then act as them to add one.</td></tr>{{end}}
     </tbody>
   </table>

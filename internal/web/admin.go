@@ -3,6 +3,7 @@ package web
 import (
 	"errors"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -28,6 +29,8 @@ func (s *Server) adminRoutes(rt *Router) {
 	rt.Handle(Route{Method: "POST", Pattern: "/admin/owners/{id}/delete", Perm: PermOwners, StepUp: true, Handler: s.deleteOwner})
 	rt.Handle(Route{Method: "POST", Pattern: "/admin/owners/{id}/impersonate", Perm: PermImpersonate, Handler: s.impersonate})
 	rt.Handle(Route{Method: "POST", Pattern: "/admin/impersonate/stop", Perm: PermImpersonate, Handler: s.stopImpersonating})
+	rt.Handle(Route{Method: "POST", Pattern: "/admin/vhosts/{id}/suspend", Perm: PermOwners, Handler: s.suspendVhost})
+	rt.Handle(Route{Method: "POST", Pattern: "/admin/vhosts/{id}/resume", Perm: PermOwners, Handler: s.resumeVhost})
 	rt.Handle(Route{Method: "GET", Pattern: "/admin/php", Perm: PermPHP, Handler: s.phpPage})
 	rt.Handle(Route{Method: "POST", Pattern: "/admin/php", Perm: PermPHP, Handler: s.changePHP})
 	rt.Handle(Route{Method: "GET", Pattern: "/admin/status", Perm: PermServer, Handler: s.statusPage})
@@ -341,17 +344,30 @@ func (s *Server) phpPage(w http.ResponseWriter, r *http.Request) {
 	s.render(w, r, http.StatusOK, "php.html", Page{Title: "PHP versions", Data: versions})
 }
 
+func (s *Server) suspendVhost(w http.ResponseWriter, r *http.Request) {
+	s.adminJob(w, r, "vhost.suspend", ops.VhostIDArgs{VhostID: r.PathValue("id")}, "/dashboard")
+}
+
+func (s *Server) resumeVhost(w http.ResponseWriter, r *http.Request) {
+	s.adminJob(w, r, "vhost.resume", ops.VhostIDArgs{VhostID: r.PathValue("id")}, "/dashboard")
+}
+
+// adminJob starts a long admin operation and shows its progress page, which returns to back.
+func (s *Server) adminJob(w http.ResponseWriter, r *http.Request, op string, args any, back string) {
+	var job api.JobResult
+	if err := s.adminCall(r, op, args, &job); err != nil {
+		s.agentFailed(w, r, back, err)
+		return
+	}
+	http.Redirect(w, r, "/jobs/"+job.JobID+"?next="+url.QueryEscape(back), http.StatusSeeOther)
+}
+
 func (s *Server) changePHP(w http.ResponseWriter, r *http.Request) {
 	op := "php.version.install"
 	if r.PostFormValue("action") == "remove" {
 		op = "php.version.remove"
 	}
-	var job api.JobResult
-	if err := s.adminCall(r, op, ops.PHPVersionArgs{Version: r.PostFormValue("version")}, &job); err != nil {
-		s.agentFailed(w, r, "/admin/php", err)
-		return
-	}
-	http.Redirect(w, r, "/jobs/"+job.JobID+"?next=/admin/php", http.StatusSeeOther)
+	s.adminJob(w, r, op, ops.PHPVersionArgs{Version: r.PostFormValue("version")}, "/admin/php")
 }
 
 // StatusData is what the server status page shows.
