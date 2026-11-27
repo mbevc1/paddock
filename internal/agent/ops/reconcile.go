@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/mbevc1/paddock/internal/agent"
@@ -44,16 +44,24 @@ type reconciler struct {
 	changed []*render.Change
 }
 
-func (r *reconciler) write(f render.File) (bool, error) {
+func (r *reconciler) write(f render.File) (*render.Change, error) {
 	c, err := r.h.Files.Write(f)
 	if err != nil {
-		return false, err
+		return nil, err
 	}
 	if c.Changed() {
 		r.changed = append(r.changed, c)
 		r.res.Changed = append(r.res.Changed, f.Path)
 	}
-	return c.Changed(), nil
+	return c, nil
+}
+
+// unitRefresh is how a running vhost picks up rewritten files: a changed config is checked
+// and reloaded gracefully, so requests in flight finish; a changed unit or drop-in needs a
+// restart. A nil config change means the file is unchanged.
+type unitRefresh struct {
+	httpdConf, fpmConf       *render.Change
+	restartHTTPD, restartFPM bool
 }
 
 // Reconcile re-renders and re-applies everything in state.db. It repairs files,
@@ -73,6 +81,7 @@ func Reconcile(ctx context.Context, store *state.Store, h *Host) (ReconcileResul
 	if err != nil {
 		return res, err
 	}
+	fpmUnitChanged := map[string]bool{}
 	for _, ver := range versions {
 		p, err := render.NewPHP(ver)
 		if err != nil {
@@ -82,9 +91,12 @@ func Reconcile(ctx context.Context, store *state.Store, h *Host) (ReconcileResul
 		if err != nil {
 			return res, err
 		}
-		if _, err := rc.write(unit); err != nil {
+		c, err := rc.write(unit)
+		if err != nil {
 			fail("writing "+unit.Path, err)
+			continue
 		}
+		fpmUnitChanged[ver] = c.Changed()
 	}
 
 	vhosts, err := store.ListVhosts(ctx, 0)
@@ -94,7 +106,7 @@ func Reconcile(ctx context.Context, store *state.Store, h *Host) (ReconcileResul
 	type plan struct {
 		sv      state.Vhost
 		v       render.Vhost
-		restart bool
+		refresh unitRefresh
 	}
 	var plans []plan
 	frontStart := 0
@@ -105,7 +117,7 @@ func Reconcile(ctx context.Context, store *state.Store, h *Host) (ReconcileResul
 			continue
 		}
 		res.Vhosts++
-		v, restart, err := reconcileVhostFiles(ctx, store, rc, sv)
+		v, refresh, err := reconcileVhostFiles(ctx, store, rc, sv)
 		if err != nil {
 			fail("vhost "+sv.ID, err)
 			continue
@@ -126,7 +138,8 @@ func Reconcile(ctx context.Context, store *state.Store, h *Host) (ReconcileResul
 			continue
 		}
 		frontChanges = append(frontChanges, rc.changed[frontStart:]...)
-		plans = append(plans, plan{sv: sv, v: v, restart: restart})
+		refresh.restartFPM = refresh.restartFPM || fpmUnitChanged[sv.PHPVersion]
+		plans = append(plans, plan{sv: sv, v: v, refresh: refresh})
 	}
 
 	if len(rc.changed) > 0 {
@@ -145,7 +158,7 @@ func Reconcile(ctx context.Context, store *state.Store, h *Host) (ReconcileResul
 	}
 
 	for _, p := range plans {
-		if err := reconcileUnits(ctx, h, p.sv, p.v, p.restart); err != nil {
+		if err := reconcileUnits(ctx, h, p.sv, p.v, p.refresh); err != nil {
 			fail("units of "+p.sv.ID, err)
 		}
 	}
@@ -165,61 +178,72 @@ func Reconcile(ctx context.Context, store *state.Store, h *Host) (ReconcileResul
 	return res, nil
 }
 
-// reconcileVhostFiles restores a vhost's directories and files. restart reports a changed
-// backend or FPM config, which running units must pick up.
-func reconcileVhostFiles(ctx context.Context, store *state.Store, rc *reconciler, sv state.Vhost) (render.Vhost, bool, error) {
+// reconcileVhostFiles restores a vhost's directories and files, and reports what its running
+// units must do to pick them up.
+func reconcileVhostFiles(ctx context.Context, store *state.Store, rc *reconciler, sv state.Vhost) (render.Vhost, unitRefresh, error) {
 	h := rc.h
 	limits, err := store.GetLimits(ctx, sv.OwnerID)
 	if err != nil {
-		return render.Vhost{}, false, err
+		return render.Vhost{}, unitRefresh{}, err
 	}
 	v, err := renderedVhost(ctx, store, sv)
 	if err != nil {
-		return render.Vhost{}, false, err
+		return render.Vhost{}, unitRefresh{}, err
 	}
 	l, err := render.NewLimits(sv.OwnerID, limits.MemoryMaxMB, limits.CPUQuotaPct, limits.TasksMax)
 	if err != nil {
-		return render.Vhost{}, false, err
+		return render.Vhost{}, unitRefresh{}, err
 	}
 
 	if err := h.FS.Mkdir(BaseWWW, sv.ID, 0o700, sv.UID, sv.UID); err != nil {
-		return v, false, err
+		return v, unitRefresh{}, err
 	}
 	for _, d := range vhostSubdirs {
 		if err := h.FS.Mkdir(BaseWWW, sv.ID+"/"+d.name, d.mode, sv.UID, sv.UID); err != nil {
-			return v, false, err
+			return v, unitRefresh{}, err
 		}
 	}
 	for _, rel := range []string{sv.ID, sv.ID + "/site"} {
 		if err := h.FS.Mkdir(BaseJail, rel, 0o755, 0, 0); err != nil {
-			return v, false, err
+			return v, unitRefresh{}, err
 		}
 	}
 
 	files, err := vhostFiles(v, l)
 	if err != nil {
-		return v, false, err
+		return v, unitRefresh{}, err
 	}
-	restartOn := []string{"/etc/paddock/httpd/" + sv.ID + ".conf", "/etc/paddock/fpm/" + sv.ID + ".conf"}
-	restart := false
+	var ref unitRefresh
 	for _, f := range files {
-		changed, err := rc.write(f)
+		c, err := rc.write(f)
 		if err != nil {
-			return v, false, err
+			return v, unitRefresh{}, err
 		}
-		restart = restart || changed && (slices.Contains(restartOn, f.Path) || strings.HasSuffix(f.Path, "/10-sandbox.conf"))
+		if !c.Changed() {
+			continue
+		}
+		switch f.Path {
+		case "/etc/paddock/httpd/" + sv.ID + ".conf":
+			ref.httpdConf = c
+		case "/etc/paddock/fpm/" + sv.ID + ".conf":
+			ref.fpmConf = c
+		case dropInPath(v.HTTPDUnit()):
+			ref.restartHTTPD = true
+		case dropInPath(v.FPMUnit()):
+			ref.restartFPM = true
+		}
 	}
 
 	acct, err := store.AccessAccountOf(ctx, sv.N)
 	if errors.Is(err, state.ErrNotFound) {
-		return v, restart, nil
+		return v, ref, nil
 	}
 	if err != nil {
-		return v, restart, err
+		return v, ref, err
 	}
 	keys, err := store.ListSSHKeys(ctx, acct.Name)
 	if err != nil {
-		return v, restart, err
+		return v, ref, err
 	}
 	lines := make([]string, len(keys))
 	for i, k := range keys {
@@ -227,16 +251,19 @@ func reconcileVhostFiles(ctx context.Context, store *state.Store, rc *reconciler
 	}
 	ak, err := render.AuthorizedKeys(v, lines)
 	if err != nil {
-		return v, restart, err
+		return v, ref, err
 	}
 	if _, err := rc.write(ak); err != nil {
-		return v, restart, err
+		return v, ref, err
 	}
-	return v, restart, nil
+	return v, ref, nil
 }
 
-// reconcileUnits brings a vhost's units to the state its status calls for.
-func reconcileUnits(ctx context.Context, h *Host, sv state.Vhost, v render.Vhost, restart bool) error {
+func dropInPath(unit string) string { return "/etc/systemd/system/" + unit + ".d/10-sandbox.conf" }
+
+// reconcileUnits brings a vhost's units to the state its status calls for. A rewritten config
+// that fails its check is restored, so the running unit keeps serving the previous one.
+func reconcileUnits(ctx context.Context, h *Host, sv state.Vhost, v render.Vhost, ref unitRefresh) error {
 	if err := h.run(ctx, systemctl, "enable", "--now", render.MountUnitName(BaseJail+"/"+sv.ID+"/site")); err != nil {
 		return err
 	}
@@ -248,15 +275,82 @@ func reconcileUnits(ctx context.Context, h *Host, sv state.Vhost, v render.Vhost
 		}
 		return nil
 	}
-	for _, u := range []string{v.FPMUnit(), v.HTTPDUnit()} {
-		if err := h.run(ctx, systemctl, "enable", "--now", u); err != nil {
+	var problems []error
+	if ref.fpmConf != nil {
+		fpm, err := h.Platform.PHPFPMBinary(sv.PHPVersion)
+		if err != nil {
 			return err
 		}
-		if restart {
-			if err := h.run(ctx, systemctl, "restart", u); err != nil {
-				return err
-			}
+		uid := strconv.Itoa(sv.UID)
+		// php-fpm -t refuses to test a pool without a user when run as root.
+		if err := h.run(ctx, setpriv, "--reuid="+uid, "--regid="+uid, "--clear-groups", "--",
+			fpm, "-t", "--fpm-config", "/etc/paddock/fpm/"+sv.ID+".conf"); err != nil {
+			problems = append(problems, restoreConfig(h, ref.fpmConf, "checking the FPM config of "+sv.ID, err))
+			ref.fpmConf = nil
 		}
 	}
-	return nil
+	if ref.httpdConf != nil {
+		if err := h.run(ctx, httpd, "-t", "-f", "/etc/paddock/httpd/"+sv.ID+".conf"); err != nil {
+			problems = append(problems, restoreConfig(h, ref.httpdConf, "checking the backend config of "+sv.ID, err))
+			ref.httpdConf = nil
+		}
+	}
+	for _, u := range []struct {
+		unit    string
+		conf    *render.Change
+		restart bool
+	}{
+		{v.FPMUnit(), ref.fpmConf, ref.restartFPM},
+		{v.HTTPDUnit(), ref.httpdConf, ref.restartHTTPD},
+	} {
+		if err := h.run(ctx, systemctl, "enable", "--now", u.unit); err != nil {
+			return errors.Join(append(problems, err)...)
+		}
+		var err error
+		switch {
+		case u.restart:
+			err = h.run(ctx, systemctl, "restart", u.unit)
+		case u.conf != nil:
+			err = h.run(ctx, systemctl, "reload", u.unit)
+		}
+		if err != nil {
+			return errors.Join(append(problems, err)...)
+		}
+	}
+	return errors.Join(problems...)
+}
+
+// restoreConfig puts back a config that failed its check and returns the check's error.
+func restoreConfig(h *Host, c *render.Change, what string, err error) error {
+	if rerr := c.Restore(); rerr != nil {
+		h.logger().Error("restoring a config that failed its check failed", "err", rerr)
+	}
+	return h.applyFailed(what, err)
+}
+
+// ReconcileOnVersionChange reconciles once per agent version, so files a new release renders
+// differently reach every vhost after an upgrade. Problems become an event for admins; a
+// reconcile that stops early is retried at the next start.
+func ReconcileOnVersionChange(ctx context.Context, store *state.Store, h *Host, version string) error {
+	last, err := store.ReconciledVersion(ctx)
+	if err != nil || last == version {
+		return err
+	}
+	res, err := Reconcile(ctx, store, h)
+	if err != nil {
+		msg := fmt.Sprintf("Reconciling vhosts for version %s stopped: %v. The agent retries at its next start.", version, err)
+		if _, eerr := store.AppendEvent(ctx, state.Event{Kind: state.EventApplyFailed, Message: msg}); eerr != nil {
+			return errors.Join(err, eerr)
+		}
+		return err
+	}
+	if len(res.Errors) > 0 {
+		msg := fmt.Sprintf("Reconciling vhosts for version %s left %d problems: %s", version, len(res.Errors), strings.Join(res.Errors, "; "))
+		if _, err := store.AppendEvent(ctx, state.Event{Kind: state.EventApplyFailed, Message: msg}); err != nil {
+			return err
+		}
+	}
+	h.logger().Info("reconciled for a new version", "version", version, "previous", last,
+		"vhosts", res.Vhosts, "changed", len(res.Changed), "problems", len(res.Errors))
+	return store.SetReconciledVersion(ctx, version)
 }

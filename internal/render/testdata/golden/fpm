@@ -2,6 +2,8 @@
 [global]
 error_log = /srv/www/v00012/logs/php-fpm.log
 systemd_interval = 10
+; A reload waits this long for requests in flight to finish before stopping their workers.
+process_control_timeout = 10s
 
 [v00012]
 listen = /run/paddock/fpm/v00012/php83.sock
