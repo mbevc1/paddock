@@ -42,6 +42,14 @@ func TestEvents(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if err := s.AddPHPVersion(ctx, "8.3"); err != nil {
+		t.Fatal(err)
+	}
+	v, err := s.CreateVhost(ctx, o.ID, "8.3", "a.example.com", []string{"b.example.com"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	if q, err := s.GetQuotaState(ctx, o.ID); err != nil || q.Warned || q.Enforced {
 		t.Errorf("initial quota state = %+v, %v", q, err)
 	}
@@ -50,14 +58,6 @@ func TestEvents(t *testing.T) {
 	}
 	if q, _ := s.GetQuotaState(ctx, o.ID); !q.Warned || !q.Enforced {
 		t.Errorf("quota state = %+v", q)
-	}
-
-	if err := s.AddPHPVersion(ctx, "8.3"); err != nil {
-		t.Fatal(err)
-	}
-	v, err := s.CreateVhost(ctx, o.ID, "8.3", "a.example.com", []string{"b.example.com"})
-	if err != nil {
-		t.Fatal(err)
 	}
 	if got, err := s.VhostByDomain(ctx, "b.example.com"); err != nil || got.N != v.N {
 		t.Errorf("VhostByDomain = %+v, %v", got, err)

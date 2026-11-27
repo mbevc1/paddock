@@ -348,3 +348,41 @@ func TestVhostPHPSettings(t *testing.T) {
 		t.Errorf("settings for a missing vhost: %v", err)
 	}
 }
+
+func TestCreateRefusedOverDiskLimit(t *testing.T) {
+	ctx := context.Background()
+	s, _ := openTemp(t)
+	o, err := s.CreateOwner(ctx, "acme", DefaultLimits())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.AddPHPVersion(ctx, "8.3"); err != nil {
+		t.Fatal(err)
+	}
+	v, err := s.CreateVhost(ctx, o.ID, "8.3", "a.example.com", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SetQuotaState(ctx, o.ID, QuotaState{Warned: true, Enforced: true}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.CreateVhost(ctx, o.ID, "8.3", "b.example.com", nil); !errors.Is(err, ErrDiskLimit) {
+		t.Errorf("vhost over the disk limit: %v", err)
+	}
+	if err := s.CreateDatabase(ctx, v.N, "v00001_app"); !errors.Is(err, ErrDiskLimit) {
+		t.Errorf("database over the disk limit: %v", err)
+	}
+	if err := s.CreateDBUser(ctx, v.N, "v00001_ro", "read"); !errors.Is(err, ErrDiskLimit) {
+		t.Errorf("DB user over the disk limit: %v", err)
+	}
+	if err := s.CreateAccessAccount(ctx, v.N, "v00001"); err != nil {
+		t.Errorf("an access account stores nothing and stays allowed: %v", err)
+	}
+
+	if err := s.SetQuotaState(ctx, o.ID, QuotaState{Warned: true}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.CreateDatabase(ctx, v.N, "v00001_app"); err != nil {
+		t.Errorf("database after the limit cleared: %v", err)
+	}
+}
