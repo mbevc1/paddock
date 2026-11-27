@@ -229,6 +229,7 @@ ServerRoot /etc/httpd
 Listen 127.64.0.12:81
 PidFile /run/paddock-httpd/v00012/httpd.pid
 ErrorLog /srv/www/v00012/logs/error.log
+LogFormat "%a %l %u %t \"%r\" %>s %b \"%{Referer}i\" \"%{User-Agent}i\"" combined
 CustomLog /srv/www/v00012/logs/access.log combined
 TypesConfig /etc/mime.types
 ServerName shop.example.com
