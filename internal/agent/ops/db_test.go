@@ -187,3 +187,20 @@ func TestVhostCreateWithDatabase(t *testing.T) {
 		t.Errorf("primary DB user not dropped: %q", lastSQL(t, e))
 	}
 }
+
+func TestDatabaseRefusedOverDiskLimit(t *testing.T) {
+	ctx := context.Background()
+	e, web, owner, _ := activeVhost(t)
+	if err := e.store.SetQuotaState(ctx, owner.OwnerID, state.QuotaState{Warned: true, Enforced: true}); err != nil {
+		t.Fatal(err)
+	}
+	mark := len(e.run.Calls())
+	err := web.Call(ctx, "db.create", owner, "", DBArgs{VhostID: "v00001", Suffix: "app"}, nil)
+	wantCode(t, err, api.CodeLimitExceeded)
+	if err != nil && !strings.Contains(err.Error(), "disk limit reached") {
+		t.Errorf("error = %v, want the disk limit explained", err)
+	}
+	if calls := e.run.Calls()[mark:]; len(calls) != 0 {
+		t.Errorf("commands ran for a refused database: %v", calls)
+	}
+}

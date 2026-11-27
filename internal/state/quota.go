@@ -58,6 +58,28 @@ func checkQuota(ctx context.Context, tx *sql.Tx, ownerID int64, r Resource) erro
 	return nil
 }
 
+// ErrDiskLimit reports an owner whose disk use the usage scan found at or over the limit.
+// New vhosts, databases and DB users would get write access that the scan revoked from the
+// rest, so they wait until a scan finds the owner back under the limit.
+var ErrDiskLimit = errors.New("disk limit reached: free space first; the next usage scan, within 10 minutes, lifts this")
+
+// checkDiskLimit fails with ErrDiskLimit while the owner's quota is enforced. Like checkQuota,
+// it runs inside the transaction that adds the resource.
+func checkDiskLimit(ctx context.Context, tx *sql.Tx, ownerID int64) error {
+	var enforced bool
+	err := tx.QueryRowContext(ctx, `SELECT enforced FROM quota_state WHERE owner_id = ?`, ownerID).Scan(&enforced)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if enforced {
+		return ErrDiskLimit
+	}
+	return nil
+}
+
 // Usage counts an owner's resources.
 func (s *Store) Usage(ctx context.Context, ownerID int64) (map[Resource]int, error) {
 	out := map[Resource]int{}
@@ -90,6 +112,9 @@ func (s *Store) CreateDatabase(ctx context.Context, n int, name string) error {
 		if err := checkQuota(ctx, tx, owner, ResourceDatabases); err != nil {
 			return err
 		}
+		if err := checkDiskLimit(ctx, tx, owner); err != nil {
+			return err
+		}
 		_, err = tx.ExecContext(ctx, `INSERT INTO databases (name, vhost_n, created_at) VALUES (?, ?, ?)`, name, n, s.timestamp())
 		if isConstraint(err) {
 			return fmt.Errorf("%w: database %s exists", ErrConflict, name)
@@ -106,6 +131,9 @@ func (s *Store) CreateDBUser(ctx context.Context, n int, name, grants string) er
 			return err
 		}
 		if err := checkQuota(ctx, tx, owner, ResourceDBUsers); err != nil {
+			return err
+		}
+		if err := checkDiskLimit(ctx, tx, owner); err != nil {
 			return err
 		}
 		_, err = tx.ExecContext(ctx, `INSERT INTO db_users (name, vhost_n, grants, created_at) VALUES (?, ?, ?, ?)`,

@@ -67,6 +67,9 @@ func (s *Store) CreateVhost(ctx context.Context, ownerID int64, php, primary str
 		if err := checkQuota(ctx, tx, ownerID, ResourceVhosts); err != nil {
 			return err
 		}
+		if err := checkDiskLimit(ctx, tx, ownerID); err != nil {
+			return err
+		}
 		var seq sql.NullInt64
 		err := tx.QueryRowContext(ctx, `SELECT seq FROM sqlite_sequence WHERE name = 'vhosts'`).Scan(&seq)
 		if err != nil && !errors.Is(err, sql.ErrNoRows) {
