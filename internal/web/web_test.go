@@ -1294,6 +1294,41 @@ func TestAdminResetsAnOwnerUsersPassword(t *testing.T) {
 	wantRedirect(t, admin.do("POST", fmt.Sprintf("/admin/owners/3/users/%d/password", alice.ID), url.Values{}), "/reauth")
 }
 
+func TestAdminResetsToAChosenPassword(t *testing.T) {
+	ctx := context.Background()
+	h, admin := adminOverviewHarness(t)
+	h.agent.on("owner.get", func(*api.Actor, string, json.RawMessage) (any, error) {
+		return ops.OwnerView{ID: 3, Name: "Acme Ltd"}, nil
+	})
+	alice := h.user("alice", store.RoleOwner, 3)
+	path := fmt.Sprintf("/admin/owners/3/users/%d/password", alice.ID)
+
+	if page := admin.do("GET", "/admin/owners/3", nil).Body.String(); !strings.Contains(page, `<input name="password" type="password" autocomplete="new-password" minlength="12"`) {
+		t.Error("the reset form has no optional password field")
+	}
+
+	rec := admin.do("POST", path, url.Values{"password": {"short"}})
+	if rec.Code != http.StatusSeeOther || !strings.HasPrefix(rec.Header().Get("Location"), "/admin/owners/3?error=") {
+		t.Errorf("a weak chosen password = %d %q", rec.Code, rec.Header().Get("Location"))
+	}
+	if got, _ := h.store.GetUser(ctx, alice.ID); got.PasswordHash != alice.PasswordHash || got.MustChangePassword {
+		t.Error("a refused password changed the user")
+	}
+
+	const chosen = "Correct-Horse-7Battery"
+	body := admin.do("POST", path, url.Values{"password": {chosen}}).Body.String()
+	if strings.Contains(body, chosen) || !strings.Contains(body, "Password set for alice.") {
+		t.Errorf("a chosen password was shown back or not confirmed:\n%s", body)
+	}
+	got, err := h.store.GetUser(ctx, alice.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ok, _, _ := auth.VerifyPassword(chosen, got.PasswordHash); !ok || !got.MustChangePassword {
+		t.Errorf("chosen password works: %v, must change: %v", ok, got.MustChangePassword)
+	}
+}
+
 func TestCreateOwnerWithAChosenPassword(t *testing.T) {
 	ctx := context.Background()
 	h, b := adminOverviewHarness(t)

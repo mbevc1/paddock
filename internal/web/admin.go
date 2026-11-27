@@ -230,8 +230,8 @@ func (s *Server) ownerPage(w http.ResponseWriter, r *http.Request) {
 	s.render(w, r, http.StatusOK, "owner.html", Page{Title: d.Owner.Name, Data: d})
 }
 
-// resetUserPassword gives one of the owner's users a random password, shown once on the page,
-// and ends all of that user's sessions. Admins' passwords are reset on the server instead.
+// resetUserPassword gives one of the owner's users the password the admin chose, or a random
+// one shown once, and ends all of that user's sessions. Admins' passwords are reset on the server.
 func (s *Server) resetUserPassword(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	oid, ok := pathID(r)
@@ -245,14 +245,23 @@ func (s *Server) resetUserPassword(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
+	password := r.PostFormValue("password")
+	chosen := password != ""
+	if chosen {
+		if err := auth.CheckPasswordPolicy(password, u.Username); err != nil {
+			redirectError(w, r, ownerPath(oid), strings.TrimPrefix(err.Error(), auth.ErrWeakPassword.Error()+": "))
+			return
+		}
+	}
 	d, ok := s.ownerData(w, r, oid)
 	if !ok {
 		return
 	}
-	password, err := auth.RandomPassword()
-	if err != nil {
-		s.serverError(w, r, err)
-		return
+	if !chosen {
+		if password, err = auth.RandomPassword(); err != nil {
+			s.serverError(w, r, err)
+			return
+		}
 	}
 	hash, err := auth.HashPassword(password)
 	if err != nil {
@@ -272,6 +281,11 @@ func (s *Server) resetUserPassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.log.Info("password reset by an admin", "admin", identityFrom(r).User.Username, "user", u.Username)
+	if chosen {
+		s.render(w, r, http.StatusOK, "owner.html", Page{Title: d.Owner.Name, Data: d,
+			Flash: "Password set for " + u.Username + ". Their sessions were ended, and they must change it at the next sign-in."})
+		return
+	}
 	d.Reset = &PasswordReset{Username: u.Username, Password: password}
 	s.render(w, r, http.StatusOK, "owner.html", Page{Title: d.Owner.Name, Data: d})
 }
