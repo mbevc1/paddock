@@ -159,7 +159,12 @@ func (s *Server) createOwner(w http.ResponseWriter, r *http.Request) {
 		s.serverError(w, r, err)
 		return
 	}
-	if _, err := s.store.CreateUser(ctx, username, store.RoleOwner, created.OwnerID, hash); err != nil {
+	user, err := s.store.CreateUser(ctx, username, store.RoleOwner, created.OwnerID, hash)
+	if err != nil {
+		s.serverError(w, r, err)
+		return
+	}
+	if err := s.store.SetMustChangePassword(ctx, user.ID, true); err != nil {
 		s.serverError(w, r, err)
 		return
 	}
@@ -255,6 +260,10 @@ func (s *Server) resetUserPassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := s.store.SetPasswordHash(ctx, u.ID, hash); err != nil {
+		s.serverError(w, r, err)
+		return
+	}
+	if err := s.store.SetMustChangePassword(ctx, u.ID, true); err != nil {
 		s.serverError(w, r, err)
 		return
 	}

@@ -41,6 +41,8 @@ type Identity struct {
 	Pending bool
 	// MustEnroll means an admin requires TOTP for this owner and none is enrolled yet.
 	MustEnroll bool
+	// MustChangePassword means an admin chose or reset the password, which the user must replace.
+	MustChangePassword bool
 }
 
 // Admin reports whether the user is an admin.
@@ -157,6 +159,7 @@ func (s *Server) startSession(w http.ResponseWriter, r *http.Request, u store.Us
 func newIdentity(se store.Session, u store.User) *Identity {
 	id := &Identity{User: u, Session: se, Pending: se.MFAAt.IsZero()}
 	id.MustEnroll = !id.Pending && u.Role == store.RoleOwner && u.TOTPRequired && u.TOTPSecret == nil
+	id.MustChangePassword = !id.Pending && u.MustChangePassword
 	return id
 }
 
@@ -240,7 +243,7 @@ func (s *Server) guard(rt Route) http.Handler {
 				http.NotFound(w, r)
 				return
 			}
-			if id.MustEnroll && !strings.HasPrefix(r.URL.Path, "/security") && r.URL.Path != "/logout" {
+			if (id.MustEnroll || id.MustChangePassword) && !strings.HasPrefix(r.URL.Path, "/security") && r.URL.Path != "/logout" {
 				http.Redirect(w, r, "/security", http.StatusSeeOther)
 				return
 			}

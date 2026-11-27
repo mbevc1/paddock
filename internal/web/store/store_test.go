@@ -212,3 +212,33 @@ func TestSessionsAndNotifications(t *testing.T) {
 		t.Errorf("meta = %q", v)
 	}
 }
+
+func TestMustChangePassword(t *testing.T) {
+	ctx := context.Background()
+	s := openTemp(t)
+	u, err := s.CreateUser(ctx, "alice", RoleOwner, 3, "hash")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if u.MustChangePassword {
+		t.Error("a new user must change their password before anyone asked")
+	}
+	if err := s.SetMustChangePassword(ctx, u.ID, true); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := s.GetUser(ctx, u.ID); !got.MustChangePassword {
+		t.Error("flag not stored")
+	}
+	if err := s.SetPasswordHash(ctx, u.ID, "rehashed"); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := s.GetUser(ctx, u.ID); !got.MustChangePassword {
+		t.Error("storing a new hash cleared the flag; a login-time rehash must not")
+	}
+	if err := s.SetMustChangePassword(ctx, u.ID, false); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := s.GetUser(ctx, u.ID); got.MustChangePassword {
+		t.Error("flag not cleared")
+	}
+}

@@ -71,6 +71,9 @@ func TestResetPasswordEndsSessions(t *testing.T) {
 	}
 	defer s.Close()
 	got, _ := s.GetUser(ctx, u.ID)
+	if !got.MustChangePassword {
+		t.Error("a reset password does not have to be changed at the next sign-in")
+	}
 	if ok, _, _ := auth.VerifyPassword(m[1], got.PasswordHash); !ok {
 		t.Error("printed password does not work")
 	}

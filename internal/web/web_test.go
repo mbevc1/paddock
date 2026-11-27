@@ -1324,3 +1324,41 @@ func TestCreateOwnerWithAChosenPassword(t *testing.T) {
 		t.Errorf("carol = %+v, chosen password works: %v", u, ok)
 	}
 }
+
+func TestAdminSetPasswordMustBeChanged(t *testing.T) {
+	ctx := context.Background()
+	h, admin := adminOverviewHarness(t)
+	h.agent.on("owner.get", func(*api.Actor, string, json.RawMessage) (any, error) {
+		return ops.OwnerView{ID: 3, Name: "Acme Ltd"}, nil
+	})
+	h.agent.on("owner.create", func(*api.Actor, string, json.RawMessage) (any, error) {
+		return ops.OwnerCreated{OwnerID: 7}, nil
+	})
+	alice := h.user("alice", store.RoleOwner, 3)
+
+	admin.do("POST", "/admin/owners", url.Values{"name": {"Carol Co"}, "username": {"carol"}, "password": {"Correct-Horse-7Battery"}})
+	if carol, err := h.store.GetUserByName(ctx, "carol"); err != nil || !carol.MustChangePassword {
+		t.Errorf("a new owner's chosen password need not be changed: %+v, %v", carol, err)
+	}
+
+	body := admin.do("POST", fmt.Sprintf("/admin/owners/3/users/%d/password", alice.ID), url.Values{}).Body.String()
+	m := regexp.MustCompile(`new password <code>([^<]+)</code>`).FindStringSubmatch(body)
+	if m == nil {
+		t.Fatal("no new password shown")
+	}
+	b := h.browser()
+	wantRedirect(t, b.login("alice", m[1]), "/dashboard")
+	wantRedirect(t, b.do("GET", "/dashboard", nil), "/security")
+	if page := b.do("GET", "/security", nil).Body.String(); !strings.Contains(page, "An admin set your password. Choose a new one to continue.") {
+		t.Error("the security page does not say why")
+	}
+
+	const own = "Alice-Picked-This-9"
+	wantRedirect(t, b.do("POST", "/security/password", url.Values{"current": {m[1]}, "new": {own}, "confirm": {own}}), "/security")
+	if got, _ := h.store.GetUser(ctx, alice.ID); got.MustChangePassword {
+		t.Error("changing the password did not clear the flag")
+	}
+	if rec := b.do("GET", "/dashboard", nil); rec.Code != http.StatusOK {
+		t.Errorf("dashboard after the change = %d", rec.Code)
+	}
+}

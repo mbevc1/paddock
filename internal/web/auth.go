@@ -331,7 +331,10 @@ func (s *Server) securityPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	page := Page{Title: "Security", Data: d}
-	if identityFrom(r).MustEnroll {
+	switch id := identityFrom(r); {
+	case id.MustChangePassword:
+		page.Error = "An admin set your password. Choose a new one to continue."
+	case id.MustEnroll:
 		page.Error = "Your account requires a second factor. Set one up to continue."
 	}
 	s.render(w, r, http.StatusOK, "security.html", page)
@@ -368,6 +371,10 @@ func (s *Server) changePassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := s.store.SetPasswordHash(ctx, id.User.ID, h); err != nil {
+		s.serverError(w, r, err)
+		return
+	}
+	if err := s.store.SetMustChangePassword(ctx, id.User.ID, false); err != nil {
 		s.serverError(w, r, err)
 		return
 	}
