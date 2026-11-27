@@ -30,6 +30,8 @@ func (s *Server) ownerRoutes(rt *Router) {
 	rt.Handle(Route{Method: "POST", Pattern: "/vhosts/{id}/php", Perm: PermVhosts, Handler: s.switchPHP})
 	rt.Handle(Route{Method: "POST", Pattern: "/vhosts/{id}/php/settings", Perm: PermVhosts, Handler: s.setPHPSettings})
 	rt.Handle(Route{Method: "POST", Pattern: "/vhosts/{id}/delete", Perm: PermVhosts, StepUp: true, Handler: s.deleteVhost})
+	rt.Handle(Route{Method: "POST", Pattern: "/vhosts/{id}/disable", Perm: PermVhosts, Handler: s.disableVhost})
+	rt.Handle(Route{Method: "POST", Pattern: "/vhosts/{id}/enable", Perm: PermVhosts, Handler: s.enableVhost})
 
 	rt.Handle(Route{Method: "POST", Pattern: "/vhosts/{id}/databases", Perm: PermDatabases, Handler: s.createDatabase})
 	rt.Handle(Route{Method: "POST", Pattern: "/vhosts/{id}/databases/{suffix}/delete", Perm: PermDatabases, StepUp: true, Handler: s.deleteDatabase})
@@ -287,6 +289,14 @@ func (s *Server) setPHPSettings(w http.ResponseWriter, r *http.Request) {
 	args := ops.VhostPHPSettingsArgs{VhostID: r.PathValue("id"), MemoryLimitMB: num("memory_limit_mb"),
 		UploadMaxMB: num("upload_max_mb"), MaxExecutionS: num("max_execution_s")}
 	s.startJob(w, r, "vhost.php.settings", args, vhostPath(r), vhostPath(r))
+}
+
+func (s *Server) disableVhost(w http.ResponseWriter, r *http.Request) {
+	s.startJob(w, r, "vhost.disable", ops.VhostIDArgs{VhostID: r.PathValue("id")}, vhostPath(r), vhostPath(r))
+}
+
+func (s *Server) enableVhost(w http.ResponseWriter, r *http.Request) {
+	s.startJob(w, r, "vhost.enable", ops.VhostIDArgs{VhostID: r.PathValue("id")}, vhostPath(r), vhostPath(r))
 }
 
 func (s *Server) deleteVhost(w http.ResponseWriter, r *http.Request) {

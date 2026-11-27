@@ -38,7 +38,15 @@ type Vhost struct {
 	Status     VhostStatus
 	CreatedAt  time.Time
 	PHP        PHPSettings
+	// SuspendedBy is SuspendedByAdmin or SuspendedByOwner while Status is suspended, else "".
+	SuspendedBy string
 }
+
+// Who suspended a vhost.
+const (
+	SuspendedByAdmin = "admin"
+	SuspendedByOwner = "owner"
+)
 
 // PHPSettings are the PHP limits a vhost's FPM pool sets.
 type PHPSettings struct {
@@ -157,15 +165,18 @@ func (s *Store) Domains(ctx context.Context, n int) ([]Domain, error) {
 	return out, rows.Err()
 }
 
-const vhostColumns = `n, id, owner_id, uid, php_version, status, created_at, php_memory_mb, php_upload_mb, php_exec_s`
+const vhostColumns = `n, id, owner_id, uid, php_version, status, created_at, php_memory_mb, php_upload_mb, php_exec_s,
+	suspended_by`
 
 func scanVhost(row interface{ Scan(...any) error }) (Vhost, error) {
 	var v Vhost
 	var created string
+	var suspendedBy sql.NullString
 	if err := row.Scan(&v.N, &v.ID, &v.OwnerID, &v.UID, &v.PHPVersion, &v.Status, &created,
-		&v.PHP.MemoryLimitMB, &v.PHP.UploadMaxMB, &v.PHP.MaxExecutionS); err != nil {
+		&v.PHP.MemoryLimitMB, &v.PHP.UploadMaxMB, &v.PHP.MaxExecutionS, &suspendedBy); err != nil {
 		return Vhost{}, err
 	}
+	v.SuspendedBy = suspendedBy.String
 	var err error
 	v.CreatedAt, err = parseTime(created)
 	return v, err
@@ -228,6 +239,21 @@ func (s *Store) SetVhostPHP(ctx context.Context, n int, php string) error {
 	if isConstraint(err) {
 		return fmt.Errorf("%w: PHP %s is not installed", ErrConflict, php)
 	}
+	return affectedOne(res, err, fmt.Sprintf("vhost %d", n))
+}
+
+// SetVhostSuspension marks a vhost suspended by SuspendedByAdmin or SuspendedByOwner, or
+// active again when by is empty.
+func (s *Store) SetVhostSuspension(ctx context.Context, n int, by string) error {
+	status, who := VhostSuspended, sql.NullString{String: by, Valid: true}
+	switch by {
+	case SuspendedByAdmin, SuspendedByOwner:
+	case "":
+		status, who = VhostActive, sql.NullString{}
+	default:
+		return fmt.Errorf("%w: suspended by %q", ErrConflict, by)
+	}
+	res, err := s.db.ExecContext(ctx, `UPDATE vhosts SET status = ?, suspended_by = ? WHERE n = ?`, status, who, n)
 	return affectedOne(res, err, fmt.Sprintf("vhost %d", n))
 }
 

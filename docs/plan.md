@@ -75,6 +75,7 @@ Newline-delimited JSON over the Unix socket, one request and one response per li
 | `vhost.php.switch` | owner | vhost_id, version |
 | `vhost.delete` | owner | vhost_id, confirm |
 | `vhost.suspend`, `vhost.resume` | admin | vhost_id |
+| `vhost.disable`, `vhost.enable` | owner | vhost_id; the owner's own suspension (front answers 503, units stopped). `state.db` records who suspended a vhost; an owner cannot enable a vhost an admin suspended, and an admin suspending an owner-disabled vhost takes the suspension over |
 | `db.create`, `db.delete` | owner | vhost_id, suffix |
 | `dbuser.create`, `dbuser.delete`, `dbuser.password.reset` | owner | vhost_id, name suffix, grants |
 | `access.create`, `access.delete` | owner | vhost_id, password or keys |
