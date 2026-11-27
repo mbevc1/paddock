@@ -26,6 +26,7 @@ func (s *Server) adminRoutes(rt *Router) {
 	rt.Handle(Route{Method: "GET", Pattern: "/admin/owners/{id}", Perm: PermOwners, Handler: s.ownerPage})
 	rt.Handle(Route{Method: "POST", Pattern: "/admin/owners/{id}/limits", Perm: PermOwners, Handler: s.setLimits})
 	rt.Handle(Route{Method: "POST", Pattern: "/admin/owners/{id}/totp", Perm: PermOwners, Handler: s.requireTOTP})
+	rt.Handle(Route{Method: "POST", Pattern: "/admin/owners/{id}/users/{uid}/password", Perm: PermOwners, StepUp: true, Handler: s.resetUserPassword})
 	rt.Handle(Route{Method: "POST", Pattern: "/admin/owners/{id}/delete", Perm: PermOwners, StepUp: true, Handler: s.deleteOwner})
 	rt.Handle(Route{Method: "POST", Pattern: "/admin/owners/{id}/impersonate", Perm: PermImpersonate, Handler: s.impersonate})
 	rt.Handle(Route{Method: "POST", Pattern: "/admin/impersonate/stop", Perm: PermImpersonate, Handler: s.stopImpersonating})
@@ -160,12 +161,39 @@ func (s *Server) createOwner(w http.ResponseWriter, r *http.Request) {
 		Data: OwnersData{Owners: owners, NewUser: username, NewPassword: password}})
 }
 
-// OwnerData is what the owner page shows.
+// OwnerData is what the owner page shows; Reset is a password an admin just reset.
 type OwnerData struct {
 	Owner       ops.OwnerView
 	Users       []store.User
 	Vhosts      []ops.VhostView
 	PHPVersions []string
+	Reset       *PasswordReset
+}
+
+// PasswordReset is a user's new password, shown once.
+type PasswordReset struct {
+	Username, Password string
+}
+
+// ownerData loads what the owner page shows; on failure it has answered the request.
+func (s *Server) ownerData(w http.ResponseWriter, r *http.Request, oid int64) (OwnerData, bool) {
+	var d OwnerData
+	if !s.adminRead(w, r, "owner.get", ops.OwnerIDArgs{OwnerID: oid}, &d.Owner) {
+		return d, false
+	}
+	if !s.adminRead(w, r, "vhost.list", ops.VhostListArgs{OwnerID: oid}, &d.Vhosts) {
+		return d, false
+	}
+	if !s.adminRead(w, r, "php.version.list", struct{}{}, &d.PHPVersions) {
+		return d, false
+	}
+	users, err := s.store.ListUsers(r.Context(), oid)
+	if err != nil {
+		s.serverError(w, r, err)
+		return d, false
+	}
+	d.Users = users
+	return d, true
 }
 
 func (s *Server) ownerPage(w http.ResponseWriter, r *http.Request) {
@@ -174,22 +202,52 @@ func (s *Server) ownerPage(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	var d OwnerData
-	if !s.adminRead(w, r, "owner.get", ops.OwnerIDArgs{OwnerID: oid}, &d.Owner) {
+	d, ok := s.ownerData(w, r, oid)
+	if !ok {
 		return
 	}
-	if !s.adminRead(w, r, "vhost.list", ops.VhostListArgs{OwnerID: oid}, &d.Vhosts) {
+	s.render(w, r, http.StatusOK, "owner.html", Page{Title: d.Owner.Name, Data: d})
+}
+
+// resetUserPassword gives one of the owner's users a random password, shown once on the page,
+// and ends all of that user's sessions. Admins' passwords are reset on the server instead.
+func (s *Server) resetUserPassword(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	oid, ok := pathID(r)
+	uid, err := strconv.ParseInt(r.PathValue("uid"), 10, 64)
+	if !ok || err != nil || uid <= 0 {
+		http.NotFound(w, r)
 		return
 	}
-	if !s.adminRead(w, r, "php.version.list", struct{}{}, &d.PHPVersions) {
+	u, err := s.store.GetUser(ctx, uid)
+	if err != nil || u.Role != store.RoleOwner || u.OwnerID != oid {
+		http.NotFound(w, r)
 		return
 	}
-	users, err := s.store.ListUsers(r.Context(), oid)
+	d, ok := s.ownerData(w, r, oid)
+	if !ok {
+		return
+	}
+	password, err := auth.RandomPassword()
 	if err != nil {
 		s.serverError(w, r, err)
 		return
 	}
-	d.Users = users
+	hash, err := auth.HashPassword(password)
+	if err != nil {
+		s.serverError(w, r, err)
+		return
+	}
+	if err := s.store.SetPasswordHash(ctx, u.ID, hash); err != nil {
+		s.serverError(w, r, err)
+		return
+	}
+	if err := s.store.DeleteUserSessions(ctx, u.ID, ""); err != nil {
+		s.serverError(w, r, err)
+		return
+	}
+	s.log.Info("password reset by an admin", "admin", identityFrom(r).User.Username, "user", u.Username)
+	d.Reset = &PasswordReset{Username: u.Username, Password: password}
 	s.render(w, r, http.StatusOK, "owner.html", Page{Title: d.Owner.Name, Data: d})
 }
 

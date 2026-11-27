@@ -14,6 +14,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 	"sync"
@@ -1247,4 +1248,48 @@ func TestAdminDashboardSuspendsAndResumesVhosts(t *testing.T) {
 	if !slices.Equal(called, []string{"vhost.suspend v00001 admin", "vhost.resume v00002 admin"}) {
 		t.Errorf("agent calls = %q", called)
 	}
+}
+
+func TestAdminResetsAnOwnerUsersPassword(t *testing.T) {
+	ctx := context.Background()
+	h, admin := adminOverviewHarness(t)
+	h.agent.on("owner.get", func(*api.Actor, string, json.RawMessage) (any, error) {
+		return ops.OwnerView{ID: 3, Name: "Acme Ltd"}, nil
+	})
+	alice := h.user("alice", store.RoleOwner, 3)
+	bob := h.user("bob", store.RoleOwner, 4)
+	owner := h.browser()
+	owner.login("alice", ownerPassword)
+
+	page := admin.do("GET", "/admin/owners/3", nil).Body.String()
+	want := fmt.Sprintf(`action="/admin/owners/3/users/%d/password" class="inline" data-confirm="Reset the password of alice?`, alice.ID)
+	if !strings.Contains(page, want) {
+		t.Errorf("owner page lacks %q", want)
+	}
+
+	body := admin.do("POST", fmt.Sprintf("/admin/owners/3/users/%d/password", alice.ID), url.Values{}).Body.String()
+	m := regexp.MustCompile(`User <code>alice</code>, new password <code>([^<]+)</code>`).FindStringSubmatch(body)
+	if m == nil {
+		t.Fatalf("the new password is not shown once:\n%s", body)
+	}
+	got, err := h.store.GetUser(ctx, alice.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ok, _, _ := auth.VerifyPassword(m[1], got.PasswordHash); !ok {
+		t.Error("the shown password does not match the stored hash")
+	}
+	if ok, _, _ := auth.VerifyPassword(ownerPassword, got.PasswordHash); ok {
+		t.Error("the old password still works")
+	}
+	if se, err := h.store.GetSession(ctx, hashToken(owner.cookie)); err == nil {
+		t.Errorf("alice's session survived the reset: %+v", se)
+	}
+
+	if rec := admin.do("POST", fmt.Sprintf("/admin/owners/3/users/%d/password", bob.ID), url.Values{}); rec.Code != http.StatusNotFound {
+		t.Errorf("resetting another owner's user = %d", rec.Code)
+	}
+
+	h.now = h.now.Add(stepUpWindow + time.Minute)
+	wantRedirect(t, admin.do("POST", fmt.Sprintf("/admin/owners/3/users/%d/password", alice.ID), url.Values{}), "/reauth")
 }
