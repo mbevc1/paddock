@@ -294,10 +294,13 @@ func (e adminEnv) resetPassword(ctx context.Context, username string) error {
 		if err := s.SetPasswordHash(ctx, u.ID, hash); err != nil {
 			return err
 		}
+		if err := s.SetMustChangePassword(ctx, u.ID, true); err != nil {
+			return err
+		}
 		if err := s.DeleteUserSessions(ctx, u.ID, ""); err != nil {
 			return err
 		}
-		_, err = fmt.Fprintf(e.out, "New password for %s, shown only now: %s\nAll of the user's sessions were ended.\n", username, password)
+		_, err = fmt.Fprintf(e.out, "New password for %s, shown only now: %s\nAll of the user's sessions were ended; they must choose a new password at the next sign-in.\n", username, password)
 		return err
 	})
 }

@@ -31,17 +31,20 @@ type User struct {
 	// AdminLoginTOTP is whether an admin's login asks for a TOTP code; always true for owners.
 	AdminLoginTOTP bool
 	Disabled       bool
-	CreatedAt      time.Time
+	// MustChangePassword is set while the user's password is one an admin chose or reset.
+	MustChangePassword bool
+	CreatedAt          time.Time
 }
 
-const userColumns = `id, username, role, owner_id, password_hash, totp_secret, totp_last_step, totp_required, admin_login_totp, disabled, created_at`
+const userColumns = `id, username, role, owner_id, password_hash, totp_secret, totp_last_step, totp_required, admin_login_totp, disabled,
+	must_change_password, created_at`
 
 func scanUser(row interface{ Scan(...any) error }) (User, error) {
 	var u User
 	var owner sql.NullInt64
 	var created sql.NullString
 	if err := row.Scan(&u.ID, &u.Username, &u.Role, &owner, &u.PasswordHash, &u.TOTPSecret, &u.TOTPLastStep,
-		&u.TOTPRequired, &u.AdminLoginTOTP, &u.Disabled, &created); err != nil {
+		&u.TOTPRequired, &u.AdminLoginTOTP, &u.Disabled, &u.MustChangePassword, &created); err != nil {
 		return User{}, err
 	}
 	u.OwnerID = owner.Int64
@@ -106,6 +109,13 @@ func (s *Store) ListUsers(ctx context.Context, ownerID int64) ([]User, error) {
 		out = append(out, u)
 	}
 	return out, rows.Err()
+}
+
+// SetMustChangePassword sets whether the user must choose a new password before anything else.
+// SetPasswordHash leaves it alone, since a login-time rehash keeps the same password.
+func (s *Store) SetMustChangePassword(ctx context.Context, id int64, must bool) error {
+	res, err := s.db.ExecContext(ctx, `UPDATE users SET must_change_password = ? WHERE id = ?`, must, id)
+	return affectedOne(res, err, fmt.Sprintf("user %d", id))
 }
 
 // SetPasswordHash replaces a user's password hash.
