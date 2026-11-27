@@ -7,9 +7,15 @@
     <input type="hidden" name="csrf" value="{{.CSRF}}"><button type="submit">Act as owner</button>
   </form></div>{{end}}
 </div>
+{{with .Data.Reset}}
+<section class="secret"><p>User <code>{{.Username}}</code>, new password <code>{{.Password}}</code>. Shown only once; the user's sessions were ended.</p></section>
+{{end}}
 <section>
   <h2>Users</h2>
-  <ul class="items">{{range .Data.Users}}<li>{{.Username}}{{if .TOTPSecret}} <span class="badge">second factor set</span>{{end}}{{if .TOTPRequired}} <span class="badge">second factor required</span>{{end}}</li>{{else}}<li class="muted">None.</li>{{end}}</ul>
+  <ul class="items">{{range .Data.Users}}<li>{{.Username}}{{if .TOTPSecret}} <span class="badge">second factor set</span>{{end}}{{if .TOTPRequired}} <span class="badge">second factor required</span>{{end}}
+    {{if $.Can "owner.manage"}}<span class="actions"><form method="post" action="/admin/owners/{{$o.ID}}/users/{{.ID}}/password" class="inline" data-confirm="Reset the password of {{.Username}}? They are signed out everywhere and need the new password, shown once.">
+      <input type="hidden" name="csrf" value="{{$.CSRF}}"><button type="submit" class="secondary small">Reset password</button></form></span>{{end}}
+  </li>{{else}}<li class="muted">None.</li>{{end}}</ul>
   {{if .Can "owner.manage"}}
   <form method="post" action="/admin/owners/{{$o.ID}}/totp" class="inline">
     <input type="hidden" name="csrf" value="{{.CSRF}}">
