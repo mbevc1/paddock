@@ -139,6 +139,12 @@
     <label>Private key (PEM) <textarea name="key" rows="4" required></textarea></label>
     <button type="submit">Upload certificate</button>
   </form>
+  {{if eq $v.Cert.Source "upload"}}
+  <form method="post" action="/vhosts/{{$v.ID}}/cert/acme" class="inline" data-confirm="Switch {{$v.Primary}} to Let's Encrypt? Browsers may warn visitors for a few minutes until it issues a certificate, and the uploaded certificate is deleted.">
+    <input type="hidden" name="csrf" value="{{.CSRF}}">
+    <button type="submit" class="secondary">Switch to Let's Encrypt</button>
+  </form>
+  {{end}}
   {{end}}
 </section>
 

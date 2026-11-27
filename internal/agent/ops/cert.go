@@ -56,7 +56,7 @@ type MDDomain struct {
 	RenewalRun string
 }
 
-// registerCerts adds cert.upload and cert.status (owner) and front.md-renewed (root, for
+// registerCerts adds cert.upload, cert.acme and cert.status (owner) and front.md-renewed (root, for
 // paddock agent-notify run by hand; the usage scan activates renewals on its own).
 func registerCerts(r *agent.Registry, store *state.Store, h *Host) {
 	r.Register(agent.Op{Name: "cert.upload", Class: agent.ClassOwner, Secrets: []string{"key_pem"},
@@ -66,6 +66,15 @@ func registerCerts(r *agent.Registry, store *state.Store, h *Host) {
 				return nil, err
 			}
 			return uploadCert(ctx, store, h, c.Actor, args)
+		}})
+
+	r.Register(agent.Op{Name: "cert.acme", Class: agent.ClassOwner,
+		Handler: func(ctx context.Context, c *agent.Call) (any, error) {
+			args, err := agent.DecodeArgs[VhostIDArgs](c)
+			if err != nil {
+				return nil, err
+			}
+			return useACME(ctx, store, h, c.Actor, args.VhostID)
 		}})
 
 	r.Register(agent.Op{Name: "cert.status", Class: agent.ClassOwner,
@@ -209,6 +218,52 @@ func uploadCert(ctx context.Context, store *state.Store, h *Host, actor *api.Act
 	}
 	notAfter := bundle.NotAfter
 	return CertStatus{Source: state.CertUpload, NotAfter: &notAfter}, nil
+}
+
+// useACME moves a vhost from an uploaded certificate back to mod_md. Until Let's Encrypt
+// issues one, mod_md serves a temporary self-signed certificate; the usage scan activates the
+// issued one. The uploaded files go last, once the front no longer names them.
+func useACME(ctx context.Context, store *state.Store, h *Host, actor *api.Actor, vhostID string) (any, error) {
+	sv, err := loadVhost(ctx, store, actor, vhostID)
+	if err != nil {
+		return nil, err
+	}
+	sv, err = lockedVhost(ctx, store, h, sv.N)
+	if err != nil {
+		return nil, err
+	}
+	defer h.mu.Unlock()
+	if sv.Status != state.VhostActive && sv.Status != state.VhostSuspended {
+		return nil, api.Errorf(api.CodeConflict, "vhost %s is %s", sv.ID, sv.Status)
+	}
+	c, err := store.GetCert(ctx, sv.N)
+	if err != nil {
+		return nil, err
+	}
+	if c.Source == state.CertACME {
+		return CertStatus{Source: state.CertACME}, nil
+	}
+	v, err := renderedVhost(ctx, store, sv)
+	if err != nil {
+		return nil, err
+	}
+	undo := &rollback{h: h}
+	opts := render.FrontOptions{TLS: render.TLSACME, Suspended: sv.Status == state.VhostSuspended}
+	if err := applyFront(ctx, h, undo, v, opts); err != nil {
+		undo.run(ctx)
+		return nil, err
+	}
+	if err := store.SetCert(ctx, sv.N, state.Cert{Source: state.CertACME}); err != nil {
+		undo.run(ctx)
+		return nil, err
+	}
+	chainPath, keyPath := render.CertPaths(v)
+	for _, f := range []string{chainPath, keyPath} {
+		if _, err := h.Files.Remove(f); err != nil {
+			h.logger().Warn("removing an uploaded certificate file failed", "vhost", sv.ID, "file", f, "err", err)
+		}
+	}
+	return CertStatus{Source: state.CertACME}, nil
 }
 
 func certStatus(ctx context.Context, store *state.Store, h *Host, actor *api.Actor, vhostID string) (any, error) {

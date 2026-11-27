@@ -80,6 +80,7 @@ Newline-delimited JSON over the Unix socket, one request and one response per li
 | `access.create`, `access.delete` | owner | vhost_id, password or keys |
 | `access.key.add`, `access.key.remove` | owner | account, public key |
 | `cert.status`, `cert.upload` | owner | vhost_id, PEM chain and key |
+| `cert.acme` | owner | vhost_id; moves a vhost from an uploaded certificate back to `mod_md` and deletes the uploaded files |
 | `vhost.log.tail` | owner | vhost_id, log (`access`, `error`, `php`, `fpm`), lines (1 to 1000); the end of that log, at most 256 KiB |
 | `pma.session.create` | owner | vhost_id, database |
 | `usage.get` | owner | vhost_id or owner_id |
@@ -687,7 +688,7 @@ Throwaway shell scripts in `poc/`, run as root on a disposable AlmaLinux 9.4+ VM
     - Done: `cert.upload` validates the chain and key (key matches the leaf, valid now, covers every domain, RSA of 2048 bits or more or ECDSA P-256/P-384), stores them re-encoded under `/etc/pki/paddock/` (key `0600`), and switches the front to them; `cert.status` merges the stored record with `md-status`; `paddock agent-notify md-renewed` calls the root-only `front.md-renewed`, which runs `configtest` and a graceful reload. Uploaded certificates survive suspend and resume.
     - To verify on the VM (added to `docs/poc-results.md`): the `md-status` JSON layout, and whether tenant PHP can read `md-status` on loopback.
     - Changed after a real host: mod_md runs `MDNotifyCmd` as `apache`, so `front.md-renewed` refused it and renewed certificates stayed staged until a reload. `MDNotifyCmd` is gone; the usage scan activates finished renewals (`renewal.finished` in `md-status`) once each. `paddock agent-notify md-renewed` remains for root.
-    - Deferred: returning from an uploaded certificate to ACME has no operation yet.
+    - Done: `cert.acme` returns a vhost from an uploaded certificate to `mod_md`. It rewrites the front for ACME (`configtest`, graceful reload, restored on failure), records the source, then deletes the uploaded chain and key. Until Let's Encrypt issues a certificate, `mod_md` serves its temporary self-signed one; the usage scan activates the issued certificate.
 - [ ] **T1.13 MariaDB.** `internal/mariadb`: identifier quoting, grant escaping with the 64-character check, `db.*` and `dbuser.*` ops, usage query, quota enforcement per §9.
     - Acceptance: unit tests for escaping; integration test proves cross-vhost access is denied and quota revocation works.
     - Status: `internal/mariadb` quotes identifiers and string literals, escapes `_` in grants with the 64-character check, and runs SQL through the `mariadb` client on stdin (no driver is an allowed module), so passwords never reach argv. Operations: `db.create`, `db.delete`, `dbuser.create`, `dbuser.delete`, `dbuser.password.reset`; `vhost.create` now creates the primary DB user and `vhost.delete` drops the vhost's databases and DB users. `test/integration/vhost_test.go` checks cross-vhost access on the VM; quota revocation comes with T1.15. Neither has run yet, so the task stays open.

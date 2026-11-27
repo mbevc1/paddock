@@ -22,6 +22,7 @@ import (
 	"github.com/mbevc1/paddock/internal/agent/ops"
 	"github.com/mbevc1/paddock/internal/api"
 	"github.com/mbevc1/paddock/internal/auth"
+	"github.com/mbevc1/paddock/internal/state"
 	"github.com/mbevc1/paddock/internal/web/store"
 )
 
@@ -1138,5 +1139,37 @@ func TestVhostPHPSettingsForm(t *testing.T) {
 	}
 	if asked != (ops.VhostPHPSettingsArgs{VhostID: "v00006", MemoryLimitMB: 512, UploadMaxMB: 64, MaxExecutionS: 120}) {
 		t.Errorf("asked the agent for %+v", asked)
+	}
+}
+
+func TestVhostPageSwitchesBackToLetsEncrypt(t *testing.T) {
+	h, b := vhostBrowser(t)
+	detail := func(source string) func(*api.Actor, string, json.RawMessage) (any, error) {
+		return func(*api.Actor, string, json.RawMessage) (any, error) {
+			return ops.VhostDetail{VhostView: ops.VhostView{ID: "v00006", OwnerID: 3, PHPVersion: "8.4", Status: "active", Primary: "shop.example.com"},
+				Cert: ops.CertStatus{Source: state.CertSource(source)}}, nil
+		}
+	}
+	const form = `action="/vhosts/v00006/cert/acme"`
+	h.agent.on("vhost.get", detail("acme"))
+	if body := b.do("GET", "/vhosts/v00006", nil).Body.String(); strings.Contains(body, form) {
+		t.Error("a vhost already on Let's Encrypt offers to switch to it")
+	}
+	h.agent.on("vhost.get", detail("upload"))
+	body := b.do("GET", "/vhosts/v00006", nil).Body.String()
+	if !strings.Contains(body, form) || !strings.Contains(body, `data-confirm="Switch shop.example.com to Let's Encrypt?`) {
+		t.Errorf("an uploaded certificate has no way back to Let's Encrypt:\n%s", body)
+	}
+
+	var asked ops.VhostIDArgs
+	h.agent.on("cert.acme", func(_ *api.Actor, _ string, raw json.RawMessage) (any, error) {
+		if err := json.Unmarshal(raw, &asked); err != nil {
+			return nil, err
+		}
+		return ops.CertStatus{Source: state.CertACME}, nil
+	})
+	rec := b.do("POST", "/vhosts/v00006/cert/acme", url.Values{})
+	if rec.Code != http.StatusSeeOther || asked.VhostID != "v00006" {
+		t.Errorf("POST = %d, asked for %+v", rec.Code, asked)
 	}
 }
