@@ -3,6 +3,7 @@ package ops
 import (
 	"context"
 	"errors"
+	"slices"
 
 	"github.com/mbevc1/paddock/internal/agent"
 	"github.com/mbevc1/paddock/internal/api"
@@ -65,9 +66,16 @@ func RegisterPHP(r *agent.Registry, store *state.Store, h *Host) {
 }
 
 // installPHP installs the Remi packages, writes the FPM unit template, checks the binary,
-// and records the version. Rerunning it repairs a partial install. On failure it undoes what
-// it changed, including packages it installed itself.
+// and records the version. Rerunning it repairs a partial install and adds packages the list
+// gained since; it then reloads the version's running FPM masters, which load extensions only
+// at start. On failure it undoes what it changed, including packages it installed itself,
+// except on a version already recorded, whose packages running vhosts may use.
 func installPHP(ctx context.Context, store *state.Store, h *Host, p render.PHP) error {
+	versions, err := store.ListPHPVersions(ctx)
+	if err != nil {
+		return err
+	}
+	recorded := slices.Contains(versions, p.Version())
 	pkgs, err := h.Platform.PHPPackages(p.Version())
 	if err != nil {
 		return err
@@ -86,11 +94,15 @@ func installPHP(ctx context.Context, store *state.Store, h *Host, p render.PHP) 
 		return h.applyFailed(what, err)
 	}
 
+	added := false
 	if err := h.run(ctx, h.Platform.InstalledArgv(pkgs)...); err != nil {
 		if err := h.run(ctx, h.Platform.InstallArgv(pkgs)...); err != nil {
 			return h.applyFailed("installing PHP "+p.Version(), err)
 		}
-		undo.add(func(ctx context.Context) error { return h.run(ctx, h.Platform.RemoveArgv(pkgs)...) })
+		added = true
+		if !recorded {
+			undo.add(func(ctx context.Context) error { return h.run(ctx, h.Platform.RemoveArgv(pkgs)...) })
+		}
 	}
 
 	change, err := h.Files.Write(unit)
@@ -113,7 +125,33 @@ func installPHP(ctx context.Context, store *state.Store, h *Host, p render.PHP) 
 		undo.run(ctx)
 		return err
 	}
+	if added && recorded {
+		return reloadPHPMasters(ctx, store, h, p)
+	}
 	return nil
+}
+
+// reloadPHPMasters gracefully reloads the FPM master of every active vhost on the version, so
+// it loads newly installed extensions. It tries every master before reporting a failure.
+func reloadPHPMasters(ctx context.Context, store *state.Store, h *Host, p render.PHP) error {
+	vhosts, err := store.ListVhosts(ctx, 0)
+	if err != nil {
+		return err
+	}
+	var failed error
+	for _, sv := range vhosts {
+		if sv.Status != state.VhostActive || sv.PHPVersion != p.Version() {
+			continue
+		}
+		v, err := renderedVhost(ctx, store, sv)
+		if err != nil {
+			return err
+		}
+		if err := h.run(ctx, systemctl, "reload", v.FPMUnit()); err != nil && failed == nil {
+			failed = h.applyFailed("reloading "+v.FPMUnit(), err)
+		}
+	}
+	return failed
 }
 
 // removePHP forgets the version, then removes its unit template and packages. The state row

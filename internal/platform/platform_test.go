@@ -71,8 +71,10 @@ func TestEL9(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !slices.Contains(pkgs, "php83-php-fpm") {
-		t.Errorf("PHPPackages(8.3) = %q, want php83-php-fpm", pkgs)
+	for _, want := range []string{"php83-php-fpm", "php83-php-bcmath", "php83-php-pecl-apcu"} {
+		if !slices.Contains(pkgs, want) {
+			t.Errorf("PHPPackages(8.3) = %q, want %s", pkgs, want)
+		}
 	}
 	if got := p.InstallArgv([]string{"a", "b"}); !slices.Equal(got, []string{"/usr/bin/dnf", "-y", "install", "a", "b"}) {
 		t.Errorf("InstallArgv = %q", got)

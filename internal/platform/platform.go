@@ -32,7 +32,7 @@ type Platform struct {
 	BasePackages []string
 }
 
-var phpExtensions = []string{"fpm", "cli", "mysqlnd", "opcache", "gd", "mbstring", "xml", "intl", "pecl-zip"}
+var phpExtensions = []string{"fpm", "cli", "mysqlnd", "opcache", "gd", "mbstring", "xml", "intl", "pecl-zip", "bcmath", "pecl-apcu"}
 
 var supportedPHP = map[string]bool{"8.2": true, "8.3": true, "8.4": true}
 
