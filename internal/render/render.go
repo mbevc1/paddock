@@ -80,7 +80,22 @@ type Vhost struct {
 	php           PHP
 	domains       []string
 	pmMaxChildren int
+	phpSettings   PHPSettings
 }
+
+// PHPSettings are the PHP limits a vhost's FPM pool sets with php_admin_value, so the
+// vhost's code cannot raise them.
+type PHPSettings struct {
+	MemoryLimitMB int
+	UploadMaxMB   int
+	MaxExecutionS int
+}
+
+// DefaultPHPSettings are PHP's own defaults, which NewVhost starts from.
+var DefaultPHPSettings = PHPSettings{MemoryLimitMB: 128, UploadMaxMB: 2, MaxExecutionS: 30}
+
+// minPostMaxMB is PHP's default post_max_size, which a small upload size does not lower.
+const minPostMaxMB = 8
 
 // NewVhost validates everything a vhost's files are rendered from. Aliases must not repeat
 // the primary domain or each other.
@@ -112,8 +127,22 @@ func NewVhost(n int, ownerID int64, php, primary string, aliases []string, pmMax
 		seen[canon] = true
 		domains = append(domains, canon)
 	}
-	return Vhost{n: n, id: id, ownerID: ownerID, php: p, domains: domains, pmMaxChildren: pmMaxChildren}, nil
+	return Vhost{n: n, id: id, ownerID: ownerID, php: p, domains: domains, pmMaxChildren: pmMaxChildren,
+		phpSettings: DefaultPHPSettings}, nil
 }
+
+// WithPHP returns the vhost with its PHP limits replaced; memoryCapMB is the owner's memory
+// limit, which the PHP memory limit may not exceed.
+func (v Vhost) WithPHP(s PHPSettings, memoryCapMB int) (Vhost, error) {
+	if err := validate.PHPLimits(s.MemoryLimitMB, s.UploadMaxMB, s.MaxExecutionS, memoryCapMB); err != nil {
+		return Vhost{}, err
+	}
+	v.phpSettings = s
+	return v, nil
+}
+
+// PHPSettings returns the vhost's PHP limits.
+func (v Vhost) PHPSettings() PHPSettings { return v.phpSettings }
 
 func (v Vhost) valid() error {
 	if v.id == "" {

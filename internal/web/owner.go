@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/mbevc1/paddock/internal/agent"
@@ -11,6 +12,7 @@ import (
 	"github.com/mbevc1/paddock/internal/api"
 	"github.com/mbevc1/paddock/internal/mariadb"
 	"github.com/mbevc1/paddock/internal/state"
+	"github.com/mbevc1/paddock/internal/validate"
 )
 
 var jobIDPattern = regexp.MustCompile(`^[0-9a-f]{32}$`)
@@ -26,6 +28,7 @@ func (s *Server) ownerRoutes(rt *Router) {
 	rt.Handle(Route{Method: "GET", Pattern: "/vhosts/{id}/logs", Perm: PermVhosts, Handler: s.vhostLogsPage})
 	rt.Handle(Route{Method: "POST", Pattern: "/vhosts/{id}/aliases", Perm: PermVhosts, Handler: s.updateAliases})
 	rt.Handle(Route{Method: "POST", Pattern: "/vhosts/{id}/php", Perm: PermVhosts, Handler: s.switchPHP})
+	rt.Handle(Route{Method: "POST", Pattern: "/vhosts/{id}/php/settings", Perm: PermVhosts, Handler: s.setPHPSettings})
 	rt.Handle(Route{Method: "POST", Pattern: "/vhosts/{id}/delete", Perm: PermVhosts, StepUp: true, Handler: s.deleteVhost})
 
 	rt.Handle(Route{Method: "POST", Pattern: "/vhosts/{id}/databases", Perm: PermDatabases, Handler: s.createDatabase})
@@ -220,7 +223,7 @@ func (s *Server) vhostPageData(w http.ResponseWriter, r *http.Request) (VhostPag
 		s.agentFailed(w, r, "/vhosts", err)
 		return VhostPageData{}, false
 	}
-	data := VhostPageData{Vhost: d, PHPVersions: versions, SSHHost: s.cfg.Hostname, DBSocket: mariadb.Socket}
+	data := VhostPageData{Vhost: d, PHPVersions: versions, SSHHost: s.cfg.Hostname, DBSocket: mariadb.Socket, PHPBounds: phpBounds}
 	if d.Access != nil {
 		if err := s.agentCall(r, "host.ssh.keys", struct{}{}, &data.HostKeys); err != nil {
 			s.log.Warn("reading SSH host keys failed", "err", err)
@@ -250,8 +253,16 @@ type VhostPageData struct {
 	HostKeys []ops.HostKeyView
 	DBSocket string
 	// DBServer is empty when the agent could not read it.
-	DBServer ops.DBServerView
+	DBServer  ops.DBServerView
+	PHPBounds PHPBounds
 }
+
+// PHPBounds are the limits the PHP settings form offers, which the agent enforces.
+type PHPBounds struct {
+	MinMemoryMB, MaxUploadMB, MaxExecutionS int
+}
+
+var phpBounds = PHPBounds{validate.MinPHPMemoryMB, validate.MaxPHPUploadMB, validate.MaxPHPExecution}
 
 func vhostPath(r *http.Request) string { return "/vhosts/" + url.PathEscape(r.PathValue("id")) }
 
@@ -263,6 +274,18 @@ func (s *Server) updateAliases(w http.ResponseWriter, r *http.Request) {
 func (s *Server) switchPHP(w http.ResponseWriter, r *http.Request) {
 	args := ops.VhostPHPSwitchArgs{VhostID: r.PathValue("id"), Version: r.PostFormValue("php")}
 	s.startJob(w, r, "vhost.php.switch", args, vhostPath(r), vhostPath(r))
+}
+
+// setPHPSettings passes the form's numbers on as they are; a field that is not a number
+// becomes 0, which the agent rejects with the field's allowed range.
+func (s *Server) setPHPSettings(w http.ResponseWriter, r *http.Request) {
+	num := func(name string) int {
+		n, _ := strconv.Atoi(strings.TrimSpace(r.PostFormValue(name)))
+		return n
+	}
+	args := ops.VhostPHPSettingsArgs{VhostID: r.PathValue("id"), MemoryLimitMB: num("memory_limit_mb"),
+		UploadMaxMB: num("upload_max_mb"), MaxExecutionS: num("max_execution_s")}
+	s.startJob(w, r, "vhost.php.settings", args, vhostPath(r), vhostPath(r))
 }
 
 func (s *Server) deleteVhost(w http.ResponseWriter, r *http.Request) {

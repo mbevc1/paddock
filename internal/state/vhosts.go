@@ -37,6 +37,19 @@ type Vhost struct {
 	PHPVersion string
 	Status     VhostStatus
 	CreatedAt  time.Time
+	PHP        PHPSettings
+}
+
+// PHPSettings are the PHP limits a vhost's FPM pool sets.
+type PHPSettings struct {
+	MemoryLimitMB int
+	UploadMaxMB   int
+	MaxExecutionS int
+}
+
+// DefaultPHPSettings returns PHP's own defaults, which new vhosts start with.
+func DefaultPHPSettings() PHPSettings {
+	return PHPSettings{MemoryLimitMB: 128, UploadMaxMB: 2, MaxExecutionS: 30}
 }
 
 // Domain is a host name served by a vhost.
@@ -77,7 +90,8 @@ func (s *Store) CreateVhost(ctx context.Context, ownerID int64, php, primary str
 			return err
 		}
 		created, err := parseTime(now)
-		v = Vhost{N: n, ID: id, OwnerID: ownerID, UID: UIDBase + n, PHPVersion: php, Status: VhostCreating, CreatedAt: created}
+		v = Vhost{N: n, ID: id, OwnerID: ownerID, UID: UIDBase + n, PHPVersion: php, Status: VhostCreating, CreatedAt: created,
+			PHP: DefaultPHPSettings()}
 		return err
 	})
 	return v, err
@@ -140,12 +154,13 @@ func (s *Store) Domains(ctx context.Context, n int) ([]Domain, error) {
 	return out, rows.Err()
 }
 
-const vhostColumns = `n, id, owner_id, uid, php_version, status, created_at`
+const vhostColumns = `n, id, owner_id, uid, php_version, status, created_at, php_memory_mb, php_upload_mb, php_exec_s`
 
 func scanVhost(row interface{ Scan(...any) error }) (Vhost, error) {
 	var v Vhost
 	var created string
-	if err := row.Scan(&v.N, &v.ID, &v.OwnerID, &v.UID, &v.PHPVersion, &v.Status, &created); err != nil {
+	if err := row.Scan(&v.N, &v.ID, &v.OwnerID, &v.UID, &v.PHPVersion, &v.Status, &created,
+		&v.PHP.MemoryLimitMB, &v.PHP.UploadMaxMB, &v.PHP.MaxExecutionS); err != nil {
 		return Vhost{}, err
 	}
 	var err error
@@ -210,6 +225,13 @@ func (s *Store) SetVhostPHP(ctx context.Context, n int, php string) error {
 	if isConstraint(err) {
 		return fmt.Errorf("%w: PHP %s is not installed", ErrConflict, php)
 	}
+	return affectedOne(res, err, fmt.Sprintf("vhost %d", n))
+}
+
+// SetVhostPHPSettings replaces a vhost's PHP limits.
+func (s *Store) SetVhostPHPSettings(ctx context.Context, n int, p PHPSettings) error {
+	res, err := s.db.ExecContext(ctx, `UPDATE vhosts SET php_memory_mb = ?, php_upload_mb = ?, php_exec_s = ? WHERE n = ?`,
+		p.MemoryLimitMB, p.UploadMaxMB, p.MaxExecutionS, n)
 	return affectedOne(res, err, fmt.Sprintf("vhost %d", n))
 }
 

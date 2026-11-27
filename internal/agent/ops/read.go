@@ -30,10 +30,11 @@ type DBServerView struct {
 // VhostDetail adds what the vhost detail page shows.
 type VhostDetail struct {
 	VhostView
-	Cert      CertStatus   `json:"cert"`
-	Access    *AccessView  `json:"access,omitempty"`
-	Databases []string     `json:"databases"`
-	DBUsers   []DBUserView `json:"db_users"`
+	Cert      CertStatus      `json:"cert"`
+	Access    *AccessView     `json:"access,omitempty"`
+	PHP       PHPSettingsView `json:"php"`
+	Databases []string        `json:"databases"`
+	DBUsers   []DBUserView    `json:"db_users"`
 }
 
 // AccessView is a vhost's SFTP account.
@@ -157,7 +158,11 @@ func registerReads(r *agent.Registry, store *state.Store, h *Host) {
 		if err != nil {
 			return nil, err
 		}
-		d := VhostDetail{VhostView: view, Databases: []string{}, DBUsers: []DBUserView{}}
+		limits, err := store.GetLimits(ctx, sv.OwnerID)
+		if err != nil {
+			return nil, err
+		}
+		d := VhostDetail{VhostView: view, PHP: phpSettingsView(sv, limits), Databases: []string{}, DBUsers: []DBUserView{}}
 		cert, err := store.GetCert(ctx, sv.N)
 		if err != nil {
 			return nil, err

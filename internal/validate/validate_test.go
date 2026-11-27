@@ -166,3 +166,15 @@ func TestAccessPassword(t *testing.T) {
 		}
 	}
 }
+
+func TestPHPLimits(t *testing.T) {
+	for _, c := range [][4]int{{128, 2, 30, 2048}, {32, 1, 1, 32}, {2048, 512, 300, 2048}} {
+		if err := PHPLimits(c[0], c[1], c[2], c[3]); err != nil {
+			t.Errorf("PHPLimits%v: %v", c, err)
+		}
+	}
+	for _, c := range [][4]int{{31, 2, 30, 2048}, {4096, 2, 30, 2048}, {128, 0, 30, 2048}, {128, 513, 30, 2048},
+		{128, 2, 0, 2048}, {128, 2, 301, 2048}, {-1, 2, 30, 2048}} {
+		assertInvalid(t, PHPLimits(c[0], c[1], c[2], c[3]))
+	}
+}

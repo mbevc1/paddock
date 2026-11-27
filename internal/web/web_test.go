@@ -1106,3 +1106,37 @@ func TestVhostLogsPage(t *testing.T) {
 		t.Errorf("unknown values were passed on: %+v", asked)
 	}
 }
+
+func TestVhostPHPSettingsForm(t *testing.T) {
+	h, b := vhostBrowser(t)
+	h.agent.on("vhost.get", func(*api.Actor, string, json.RawMessage) (any, error) {
+		return ops.VhostDetail{VhostView: ops.VhostView{ID: "v00006", OwnerID: 3, PHPVersion: "8.4", Status: "active", Primary: "shop.example.com"},
+			PHP: ops.PHPSettingsView{MemoryLimitMB: 256, UploadMaxMB: 32, MaxExecutionS: 60, MemoryCapMB: 2048}}, nil
+	})
+	body := b.do("GET", "/vhosts/v00006", nil).Body.String()
+	for _, want := range []string{
+		`action="/vhosts/v00006/php/settings"`,
+		`<input name="memory_limit_mb" type="number" min="32" max="2048" value="256" required>`,
+		`<input name="upload_max_mb" type="number" min="1" max="512" value="32" required>`,
+		`<input name="max_execution_s" type="number" min="1" max="300" value="60" required>`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("vhost page lacks %q", want)
+		}
+	}
+
+	var asked ops.VhostPHPSettingsArgs
+	h.agent.on("vhost.php.settings", func(_ *api.Actor, _ string, raw json.RawMessage) (any, error) {
+		if err := json.Unmarshal(raw, &asked); err != nil {
+			return nil, err
+		}
+		return api.JobResult{JobID: "0123456789abcdef0123456789abcdef"}, nil
+	})
+	rec := b.do("POST", "/vhosts/v00006/php/settings", url.Values{"memory_limit_mb": {"512"}, "upload_max_mb": {"64"}, "max_execution_s": {"120"}})
+	if rec.Code != http.StatusSeeOther || !strings.HasPrefix(rec.Header().Get("Location"), "/jobs/") {
+		t.Errorf("POST = %d %q", rec.Code, rec.Header().Get("Location"))
+	}
+	if asked != (ops.VhostPHPSettingsArgs{VhostID: "v00006", MemoryLimitMB: 512, UploadMaxMB: 64, MaxExecutionS: 120}) {
+		t.Errorf("asked the agent for %+v", asked)
+	}
+}

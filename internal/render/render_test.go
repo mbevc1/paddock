@@ -301,3 +301,41 @@ func TestFPMSocketIsPerVersion(t *testing.T) {
 		}
 	}
 }
+
+func TestFPMPHPSettings(t *testing.T) {
+	v, _ := reference(t)
+	f, err := FPM(v)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defaults := string(f.Data)
+	for _, want := range []string{
+		"php_admin_value[memory_limit] = 128M\n", "php_admin_value[upload_max_filesize] = 2M\n",
+		"php_admin_value[post_max_size] = 8M\n", "php_admin_value[max_execution_time] = 30\n",
+	} {
+		if !strings.Contains(defaults, want) {
+			t.Errorf("default FPM config lacks %q", want)
+		}
+	}
+
+	raised, err := v.WithPHP(PHPSettings{MemoryLimitMB: 512, UploadMaxMB: 64, MaxExecutionS: 120}, 2048)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if f, err = FPM(raised); err != nil {
+		t.Fatal(err)
+	}
+	got := string(f.Data)
+	for _, want := range []string{
+		"php_admin_value[memory_limit] = 512M\n", "php_admin_value[upload_max_filesize] = 64M\n",
+		"php_admin_value[post_max_size] = 64M\n", "php_admin_value[max_execution_time] = 120\n",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("raised FPM config lacks %q", want)
+		}
+	}
+
+	if _, err := v.WithPHP(PHPSettings{MemoryLimitMB: 4096, UploadMaxMB: 2, MaxExecutionS: 30}, 2048); !errors.Is(err, validate.ErrInvalid) {
+		t.Errorf("memory above the owner's limit: %v", err)
+	}
+}
