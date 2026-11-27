@@ -107,7 +107,7 @@ button:hover, .button:hover { filter: brightness(1.08); }
 button.secondary, .button.secondary { background: transparent; color: var(--accent); }
 button.secondary:hover { background: var(--accent-soft); filter: none; }
 button.danger, .danger button { background: var(--err); border-color: var(--err); color: var(--err-fg); }
-button.small { padding: .15rem .6rem; font-size: .88rem; }
+button.small, input.small { padding: .15rem .6rem; font-size: .88rem; }
 button.link { background: none; border: 0; padding: 0; color: var(--accent); text-decoration: underline; line-height: inherit; }
 button.link:hover { filter: none; color: var(--fg); }
 td .inline:has(> button.link) { margin: 0; vertical-align: baseline; }
