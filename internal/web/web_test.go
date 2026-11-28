@@ -1316,7 +1316,7 @@ func TestAdminResetsToAChosenPassword(t *testing.T) {
 	}
 
 	const chosen = "Correct-Horse-7Battery"
-	body := admin.do("POST", path, url.Values{"password": {chosen}}).Body.String()
+	body := admin.do("POST", path, url.Values{"password": {chosen}, "request_reset": {"on"}}).Body.String()
 	if strings.Contains(body, chosen) || !strings.Contains(body, "Password set for alice.") {
 		t.Errorf("a chosen password was shown back or not confirmed:\n%s", body)
 	}
@@ -1326,6 +1326,36 @@ func TestAdminResetsToAChosenPassword(t *testing.T) {
 	}
 	if ok, _, _ := auth.VerifyPassword(chosen, got.PasswordHash); !ok || !got.MustChangePassword {
 		t.Errorf("chosen password works: %v, must change: %v", ok, got.MustChangePassword)
+	}
+}
+
+func TestAdminChoosesWhetherToRequestANewPassword(t *testing.T) {
+	ctx := context.Background()
+	h, admin := adminOverviewHarness(t)
+	h.agent.on("owner.get", func(*api.Actor, string, json.RawMessage) (any, error) {
+		return ops.OwnerView{ID: 3, Name: "Acme Ltd"}, nil
+	})
+	h.agent.on("owner.create", func(*api.Actor, string, json.RawMessage) (any, error) {
+		return ops.OwnerCreated{OwnerID: 7}, nil
+	})
+	alice := h.user("alice", store.RoleOwner, 3)
+	const box = `<input type="checkbox" name="request_reset" checked>`
+	for _, path := range []string{"/admin/owners", "/admin/owners/3"} {
+		if page := admin.do("GET", path, nil).Body.String(); !strings.Contains(page, box) {
+			t.Errorf("%s lacks a ticked request-reset box", path)
+		}
+	}
+
+	if err := h.store.SetMustChangePassword(ctx, alice.ID, true); err != nil {
+		t.Fatal(err)
+	}
+	admin.do("POST", fmt.Sprintf("/admin/owners/3/users/%d/password", alice.ID), url.Values{})
+	if got, _ := h.store.GetUser(ctx, alice.ID); got.MustChangePassword {
+		t.Error("a reset with the box unticked still asks for a new password")
+	}
+	admin.do("POST", "/admin/owners", url.Values{"name": {"Carol Co"}, "username": {"carol"}})
+	if carol, err := h.store.GetUserByName(ctx, "carol"); err != nil || carol.MustChangePassword {
+		t.Errorf("a new owner with the box unticked = %+v, %v", carol, err)
 	}
 }
 
@@ -1371,12 +1401,12 @@ func TestAdminSetPasswordMustBeChanged(t *testing.T) {
 	})
 	alice := h.user("alice", store.RoleOwner, 3)
 
-	admin.do("POST", "/admin/owners", url.Values{"name": {"Carol Co"}, "username": {"carol"}, "password": {"Correct-Horse-7Battery"}})
+	admin.do("POST", "/admin/owners", url.Values{"name": {"Carol Co"}, "username": {"carol"}, "password": {"Correct-Horse-7Battery"}, "request_reset": {"on"}})
 	if carol, err := h.store.GetUserByName(ctx, "carol"); err != nil || !carol.MustChangePassword {
 		t.Errorf("a new owner's chosen password need not be changed: %+v, %v", carol, err)
 	}
 
-	body := admin.do("POST", fmt.Sprintf("/admin/owners/3/users/%d/password", alice.ID), url.Values{}).Body.String()
+	body := admin.do("POST", fmt.Sprintf("/admin/owners/3/users/%d/password", alice.ID), url.Values{"request_reset": {"on"}}).Body.String()
 	m := regexp.MustCompile(`new password <code>([^<]+)</code>`).FindStringSubmatch(body)
 	if m == nil {
 		t.Fatal("no new password shown")

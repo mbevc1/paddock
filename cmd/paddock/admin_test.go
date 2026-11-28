@@ -58,7 +58,7 @@ func TestResetPasswordEndsSessions(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := env.resetPassword(ctx, "alice"); err != nil {
+	if err := env.resetPassword(ctx, "alice", true); err != nil {
 		t.Fatal(err)
 	}
 	m := regexp.MustCompile(`shown only now: (\S+)`).FindStringSubmatch(out.String())
@@ -85,8 +85,19 @@ func TestResetPasswordEndsSessions(t *testing.T) {
 	if len(*chowns) == 0 || (*chowns)[0] != "web.db" {
 		t.Errorf("web.db not handed back to the web user: %v", *chowns)
 	}
-	if err := env.resetPassword(ctx, "nobody"); !errors.Is(err, store.ErrNotFound) {
+	if err := env.resetPassword(ctx, "nobody", false); !errors.Is(err, store.ErrNotFound) {
 		t.Errorf("unknown user: %v", err)
+	}
+
+	out.Reset()
+	if err := env.resetPassword(ctx, "alice", false); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(out.String(), "must choose") {
+		t.Errorf("output without -request-reset = %q", out.String())
+	}
+	if got, _ := s.GetUser(ctx, u.ID); got.MustChangePassword {
+		t.Error("a reset without -request-reset left the user having to change it")
 	}
 }
 

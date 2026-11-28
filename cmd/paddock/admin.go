@@ -21,7 +21,7 @@ import (
 
 const agentCallTimeout = 30 * time.Minute
 
-var errAdminUsage = errors.New("usage: paddock admin add|remove|disable|enable|totp-reset|reset-password|login-totp-off|login-totp-on|lock USERNAME\n       paddock admin unlock -for DURATION USERNAME")
+var errAdminUsage = errors.New("usage: paddock admin add|remove|disable|enable|totp-reset|login-totp-off|login-totp-on|lock USERNAME\n       paddock admin reset-password [-request-reset] USERNAME\n       paddock admin unlock -for DURATION USERNAME")
 
 // adminEnv is what the admin commands touch; tests replace the web user and chown.
 type adminEnv struct {
@@ -41,6 +41,7 @@ func runAdmin(ctx context.Context, args []string, stdout, stderr io.Writer) erro
 	socket := fs.String("socket", agent.SocketPath, "agent socket path")
 	webDir := fs.String("web-dir", setup.WebDir, "directory holding web.db")
 	window := fs.Duration("for", 0, "unlock only: how long the admin may act without a TOTP code (at most 24h)")
+	requestReset := fs.Bool("request-reset", false, "reset-password only: make the user choose a new password at the next sign-in")
 	if err := fs.Parse(args[1:]); err != nil {
 		return err
 	}
@@ -68,7 +69,7 @@ func runAdmin(ctx context.Context, args []string, stdout, stderr io.Writer) erro
 	case "totp-reset":
 		return env.totpReset(ctx, username)
 	case "reset-password":
-		return env.resetPassword(ctx, username)
+		return env.resetPassword(ctx, username, *requestReset)
 	case "login-totp-off":
 		return env.setLoginTOTP(ctx, username, false)
 	case "login-totp-on":
@@ -276,8 +277,9 @@ func (e adminEnv) setLoginTOTP(ctx context.Context, username string, on bool) er
 	})
 }
 
-// resetPassword sets a random password for any user and ends all their sessions.
-func (e adminEnv) resetPassword(ctx context.Context, username string) error {
+// resetPassword sets a random password for any user and ends all their sessions. With
+// requestReset the user must choose a new password at the next sign-in.
+func (e adminEnv) resetPassword(ctx context.Context, username string, requestReset bool) error {
 	return e.withWebStore(ctx, func(s *store.Store) error {
 		u, err := s.GetUserByName(ctx, username)
 		if err != nil {
@@ -294,13 +296,17 @@ func (e adminEnv) resetPassword(ctx context.Context, username string) error {
 		if err := s.SetPasswordHash(ctx, u.ID, hash); err != nil {
 			return err
 		}
-		if err := s.SetMustChangePassword(ctx, u.ID, true); err != nil {
+		if err := s.SetMustChangePassword(ctx, u.ID, requestReset); err != nil {
 			return err
 		}
 		if err := s.DeleteUserSessions(ctx, u.ID, ""); err != nil {
 			return err
 		}
-		_, err = fmt.Fprintf(e.out, "New password for %s, shown only now: %s\nAll of the user's sessions were ended; they must choose a new password at the next sign-in.\n", username, password)
+		next := ".\n"
+		if requestReset {
+			next = "; they must choose a new password at the next sign-in.\n"
+		}
+		_, err = fmt.Fprintf(e.out, "New password for %s, shown only now: %s\nAll of the user's sessions were ended%s", username, password, next)
 		return err
 	})
 }
