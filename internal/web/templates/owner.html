@@ -15,6 +15,7 @@
   <ul class="items">{{range .Data.Users}}<li>{{.Username}}{{if .TOTPSecret}} <span class="badge">second factor set</span>{{end}}{{if .TOTPRequired}} <span class="badge">second factor required</span>{{end}}
     {{if $.Can "owner.manage"}}<span class="actions"><form method="post" action="/admin/owners/{{$o.ID}}/users/{{.ID}}/password" class="inline" data-confirm="Reset the password of {{.Username}}? They are signed out everywhere and must sign in with the new password.">
       <input type="hidden" name="csrf" value="{{$.CSRF}}"><input name="password" type="password" autocomplete="new-password" minlength="12" class="small" placeholder="Leave empty to generate" aria-label="New password for {{.Username}}">
+      <label><input type="checkbox" name="request_reset" checked> Request reset</label>
       <button type="submit" class="secondary small">Reset password</button></form></span>{{end}}
   </li>{{else}}<li class="muted">None.</li>{{end}}</ul>
   {{if .Can "owner.manage"}}

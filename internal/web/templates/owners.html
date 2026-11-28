@@ -17,7 +17,8 @@
   <input type="hidden" name="csrf" value="{{.CSRF}}">
   <label>Name <input name="name" required></label>
   <label>Username of their first user <input name="username" required pattern="[a-z][a-z0-9._-]{2,31}"></label>
-  <label>Password (optional; leave empty to generate one) <input name="password" type="password" autocomplete="new-password" minlength="12"></label>
+  <label>Password (optional, generated if empty) <input name="password" type="password" autocomplete="new-password" minlength="12"></label>
+  <label><input type="checkbox" name="request_reset" checked> Request reset at first sign-in</label>
   <label>Your TOTP code (unless you confirmed one in the last 10 minutes) <input name="totp" inputmode="numeric" pattern="[0-9]{6}" autocomplete="one-time-code"></label>
   <button type="submit">Create owner</button>
 </form>

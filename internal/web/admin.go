@@ -164,7 +164,7 @@ func (s *Server) createOwner(w http.ResponseWriter, r *http.Request) {
 		s.serverError(w, r, err)
 		return
 	}
-	if err := s.store.SetMustChangePassword(ctx, user.ID, true); err != nil {
+	if err := s.store.SetMustChangePassword(ctx, user.ID, requestReset(r)); err != nil {
 		s.serverError(w, r, err)
 		return
 	}
@@ -272,7 +272,7 @@ func (s *Server) resetUserPassword(w http.ResponseWriter, r *http.Request) {
 		s.serverError(w, r, err)
 		return
 	}
-	if err := s.store.SetMustChangePassword(ctx, u.ID, true); err != nil {
+	if err := s.store.SetMustChangePassword(ctx, u.ID, requestReset(r)); err != nil {
 		s.serverError(w, r, err)
 		return
 	}
@@ -283,12 +283,16 @@ func (s *Server) resetUserPassword(w http.ResponseWriter, r *http.Request) {
 	s.log.Info("password reset by an admin", "admin", identityFrom(r).User.Username, "user", u.Username)
 	if chosen {
 		s.render(w, r, http.StatusOK, "owner.html", Page{Title: d.Owner.Name, Data: d,
-			Flash: "Password set for " + u.Username + ". Their sessions were ended, and they must change it at the next sign-in."})
+			Flash: "Password set for " + u.Username + ". Their sessions were ended."})
 		return
 	}
 	d.Reset = &PasswordReset{Username: u.Username, Password: password}
 	s.render(w, r, http.StatusOK, "owner.html", Page{Title: d.Owner.Name, Data: d})
 }
+
+// requestReset reports whether the admin asked the user to choose a new password at the next
+// sign-in.
+func requestReset(r *http.Request) bool { return r.PostFormValue("request_reset") != "" }
 
 func ownerPath(oid int64) string { return "/admin/owners/" + strconv.FormatInt(oid, 10) }
 
